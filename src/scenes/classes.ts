@@ -1,0 +1,25 @@
+export const CLASSES: Record<number, { name: string; color: [number, number, number] }> = {
+  0: { name: 'unlabelled', color: [140, 140, 150] },
+  1: { name: 'floor', color: [120, 144, 156] },
+  2: { name: 'wall', color: [176, 190, 197] },
+  3: { name: 'ceiling', color: [207, 216, 220] },
+  4: { name: 'table', color: [255, 167, 38] },
+  5: { name: 'chair', color: [66, 165, 245] },
+  6: { name: 'box', color: [239, 83, 80] },
+  7: { name: 'door frame', color: [141, 110, 99] },
+  8: { name: 'pillar', color: [171, 71, 188] },
+  9: { name: 'machine', color: [255, 112, 67] },
+  10: { name: 'shelf', color: [38, 166, 154] },
+  11: { name: 'pipe', color: [255, 238, 88] },
+  12: { name: 'obstacle', color: [255, 82, 82] },
+  13: { name: 'road', color: [96, 125, 139] },
+  14: { name: 'pavement', color: [144, 164, 174] },
+  15: { name: 'vehicle', color: [92, 107, 192] },
+  16: { name: 'tree', color: [102, 187, 106] },
+  17: { name: 'building', color: [188, 170, 164] },
+  18: { name: 'pole', color: [255, 213, 79] },
+  19: { name: 'bollard', color: [255, 138, 101] },
+  20: { name: 'object', color: [129, 199, 132] },
+};
+export const className = (id: number) => CLASSES[id]?.name ?? `class ${id}`;
+export const classColor = (id: number): [number, number, number] => CLASSES[id]?.color ?? [200, 200, 200];
