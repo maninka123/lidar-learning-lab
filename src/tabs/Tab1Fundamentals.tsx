@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Crosshair, Play, Plus, Trash2 } from '../ui/icons';
 import { useLab } from '../state/store';
 import { getScene } from '../scenes';
@@ -8,10 +8,40 @@ import { Btn, Callout, Eq, NumberField, Section, Select, Seg, Slider, Toggle, Ba
 import { DisplaySection, KindLegend } from '../ui/shared';
 import { SceneFromStore, CloudFromStore, PickLayer, targetOf, countInstance, useSpacing } from './common';
 import { SensorMarker, RayLines } from '../ui/three';
-import { PRESETS, getPreset, raysPerSweep, pointsPerSecond } from '../sensor/presets';
+import { PRESETS, getPreset, raysPerSweep, pointsPerSecond, isSteered } from '../sensor/presets';
+import { sweepDirections } from '../sensor/simulate';
 import { runScan } from '../state/actions';
 import { Plan2D } from '../ui/Plan2D';
 import { D2R } from '../core/math';
+
+function PatternPreview({ sensor }: { sensor: import("../sensor/presets").SensorConfig }) {
+  const [sweeps, setSweeps] = useState(1);
+  const ref = useRef<HTMLCanvasElement>(null);
+  useEffect(() => {
+    const cv = ref.current; if (!cv) return;
+    const W = 340, H = 190, dpr = window.devicePixelRatio || 1;
+    cv.width = W * dpr; cv.height = H * dpr;
+    const g = cv.getContext('2d')!; g.scale(dpr, dpr);
+    g.fillStyle = '#11131a'; g.fillRect(0, 0, W, H);
+    const hh = Math.min(180, sensor.hFov / 2), v0 = Math.min(sensor.vMin, sensor.vMax - 1), v1 = Math.max(sensor.vMax, sensor.vMin + 1);
+    const X = (a: number) => 10 + ((a * 180 / Math.PI + hh) / (2 * hh)) * (W - 20), Y = (e: number) => H - 14 - ((e * 180 / Math.PI - v0) / (v1 - v0)) * (H - 28);
+    const cols = ['#64d2ff', '#ff9f0a', '#30d158', '#bf5af2', '#ff453a'];
+    for (let sw = 0; sw < sweeps; sw++) {
+      const d = sweepDirections(sensor, sw, Math.max(1, Math.ceil(raysPerSweep(sensor) / 5000)));
+      g.fillStyle = cols[sw % cols.length];
+      for (let k = 0; k < d.n; k++) g.fillRect(X(d.az[k]) - 0.7, Y(d.el[k]) - 0.7, 1.5, 1.5);
+    }
+    g.fillStyle = '#9aa'; g.font = '12px -apple-system, sans-serif';
+    g.fillText(`azimuth ±${hh.toFixed(0)}°`, 10, H - 2); g.fillText(`elevation ${v0.toFixed(0)}…${v1.toFixed(0)}°`, W - 130, 12);
+  }, [sensor, sweeps]);
+  return (
+    <div className="field">
+      <label>Scan-pattern preview (beam directions)</label>
+      <canvas ref={ref} style={{ width: '100%', height: 190, borderRadius: 12 }} aria-label="Scan pattern preview" />
+      <Slider label="Sweeps overlaid" value={sweeps} min={1} max={5} step={1} onChange={setSweeps} hint="Prism scanners fill in as sweeps accumulate; arrays and rotating heads repeat the same pattern." />
+    </div>
+  );
+}
 
 export default function Tab1() {
   const s = useLab();
@@ -27,7 +57,7 @@ export default function Tab1() {
   const sensor = s.sensor;
   const b = scene.bounds;
   const rps = raysPerSweep(sensor);
-  const solid = sensor.pattern === 'solidstate';
+  const solid = isSteered(sensor.pattern);
 
   const stats = [
     { k: 'Points', v: cloud ? fmtN(cloud.count) : '—', s: info ? `${fmtN(info.stats.rays)} rays · ${fmtN(info.stats.misses)} no-return` : `${fmtN(rps * s.scanOpts.sweeps)} rays planned` },
@@ -76,7 +106,8 @@ export default function Tab1() {
             <ul style={{ margin: '4px 0 0', paddingLeft: '1.1rem' }}>{preset.profile.simplifications.map((t, i) => <li key={i}>{t}</li>)}</ul>
           </Callout>
         )}
-        {solid && <Callout kind="warn">The rosette pattern is illustrative. It does not reproduce any commercial non-repetitive scan pattern.</Callout>}
+        {solid && <Callout kind="warn">Steered-beam patterns (prism rosette, MEMS) are illustrative and do not reproduce any commercial scan pattern.</Callout>}
+        <PatternPreview sensor={sensor} />
       </Section>
 
       <Section title="Sensor pose">
@@ -145,6 +176,10 @@ export default function Tab1() {
       <Eq note="point spacing grows with range">spacing ≈ r · Δθ</Eq>
       <Callout kind="warn" title="Simplified models">
         Detection range scales with √reflectivity and intensity uses ρ·cosθ ÷ (1 + (r/r₀)²). These are teaching approximations, not a calibrated link budget.
+      </Callout>
+      <Callout kind="edu" title="Scan architectures you can simulate here">
+        <b>Rotating multi-channel</b> (VLP-16, OS1): fixed elevation rings, azimuth sweeps 360°. <b>Prism / Risley</b> (Avia-type): two counter-rotating wedges draw a rosette that fills in over time. <b>MEMS micro-mirror</b> (Cube-1-type): sinusoidal sweep, eye-shaped coverage. <b>Solid-state array</b> (FT120-type): fixed grid, identical every frame. <b>2D planar</b>: one fan. Use the scan-pattern preview to see each pattern.
+        <div className="caption" style={{ marginTop: 6 }}>Kinematic descriptions follow the open-source <a href="https://github.com/maninka123/rotating-target-calibration-studio" target="_blank" rel="noreferrer noopener" style={{ color: 'var(--accent)' }}>Rotating Target Calibration Studio</a>, which compares LiDAR and camera architectures in more depth (<a href="https://maninka123.github.io/rotating-target-calibration-studio/" target="_blank" rel="noreferrer noopener" style={{ color: 'var(--accent)' }}>live demo</a>).</div>
       </Callout>
       <Callout title="Terminology">Mechanical, MEMS, flash, rotating-mirror and optical-phased-array LiDAR describe the <i>sensing architecture</i>. TLS (tripod) and MLS (moving) describe the <i>deployment</i> — see Tab 3.</Callout>
     </>

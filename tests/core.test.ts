@@ -218,3 +218,17 @@ describe('import / export', () => {
     });
   }
 });
+
+describe('scan architectures', () => {
+  const sensor = (id: string) => presetToConfig(PRESETS.find((p) => p.id === id)!);
+  const cells = (c: SensorConfig, sweeps: number) => { const set = new Set<string>(); for (let sw = 0; sw < sweeps; sw++) { const d = sweepDirections(c, sw); for (let k = 0; k < d.n; k++) set.add(`${Math.round(d.az[k] * 57.3 * 4)},${Math.round(d.el[k] * 57.3 * 4)}`); } return set.size; };
+  it('prism (Risley) coverage grows as sweeps accumulate', () => { const c = sensor('avia'); expect(cells(c, 4)).toBeGreaterThan(cells(c, 1) * 1.5); });
+  it('array and rotating patterns repeat identically every sweep', () => {
+    for (const id of ['ft120', 'rot32']) { const c = sensor(id), a = sweepDirections(c, 0), b = sweepDirections(c, 3); expect(Array.from(a.az.slice(0, 50))).toEqual(Array.from(b.az.slice(0, 50))); }
+  });
+  it('MEMS pattern is eye-shaped: vertical amplitude vanishes at frame start/end', () => {
+    const c = sensor('cube1'), d = sweepDirections(c, 0); const mid = ((c.vMin + c.vMax) / 2) * (Math.PI / 180);
+    const amp = (from: number, to: number) => { let m = 0; for (let k = from; k < to; k++) m = Math.max(m, Math.abs(d.el[k] - mid)); return m; };
+    expect(amp(0, 200)).toBeLessThan(amp(Math.floor(d.n * 0.45), Math.floor(d.n * 0.55)) * 0.2);
+  });
+});

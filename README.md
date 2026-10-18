@@ -4,6 +4,8 @@ A browser-based, hands-on simulation platform for a 60-minute workshop on **LiDA
 
 Participants explore 3D scenes, drive virtual LiDAR scanners (real ray casting against scene geometry), generate point clouds, process and segment them, register scans, compare LiDAR with image-based reconstruction and query a geometric scene graph. Everything runs in the browser: no server, database, authentication or AI API is needed.
 
+**Live demo: https://maninka123.github.io/lidar-learning-lab/**
+
 **Live tools bundled:** nine lecture-aligned tabs · three procedural scenes · PLY / PCD / LAS import · PLY / PCD export · 9 auto-checked challenges with JSON / PDF summary.
 
 ## Quick start
@@ -28,7 +30,7 @@ First time running the end-to-end tests: `npx playwright install chromium`.
 
 | # | Tab | What you can do |
 |---|-----|-----------------|
-| 1 | **LiDAR Fundamentals** | Place and aim a scanner; set FOV, angular resolution, channels, min/max range, frequency, returns, noise and reflectivity; 3D and 2D-plan views, visible rays and hit points; compare point count, spacing, coverage and occlusion; presets incl. documented VLP-16, Ouster OS1 and Livox Mid-360 *example profiles*. |
+| 1 | **LiDAR Fundamentals** | Place and aim a scanner; set FOV, angular resolution, channels, min/max range, frequency, returns, noise and reflectivity; 3D and 2D-plan views, visible rays and hit points; compare point count, spacing, coverage and occlusion; presets incl. documented VLP-16, Ouster OS1 and Livox Mid-360 *example profiles*, plus prism (Risley), MEMS micro-mirror and solid-state-array scan architectures with a scan-pattern preview. |
 | 2 | **Point Cloud Explorer** | XYZ / height / range / intensity / RGB / semantic / normal colouring, point picking with attributes, point-to-point distances, clipping and cropping, upload (PLY, PCD, LAS) and export (PLY, PCD). |
 | 3 | **TLS & MLS Laboratory** | Tripod stations, overlap and missing-region visualisation, station registration error + ICP repair; moving platform with editable waypoints, time-dependent poses, animation and motion-distortion demo; TLS vs MLS comparison table. |
 | 4 | **SLAM & Registration** | Closed-loop robot run with drift accumulation (noisy odometry or ICP scan matching), loop closure *teaching approximation*, manual rigid error controls, point-to-point ICP with iteration scrubber, RMSE and fitness. |
@@ -97,9 +99,14 @@ Unit tests cover: ray distances to a known wall; FOV and angular resolution chan
 
 ## Deployment
 
+The app is published automatically to GitHub Pages by `.github/workflows/pages.yml` on every push to `main` → https://maninka123.github.io/lidar-learning-lab/ (one-time setup: repo **Settings → Pages → Source: GitHub Actions**).
+
 `npm run build` produces a fully static site in `dist/` (relative asset paths), deployable to any static host (GitHub Pages, Netlify, S3…). Nothing is sent to a server; uploaded files stay in the browser.
 
-## Related tool
+## Related tools
+
+Scan-architecture descriptions (prism rosette, MEMS eye-shaped pattern, fixed arrays) follow **[Rotating Target Calibration Studio](https://github.com/maninka123/rotating-target-calibration-studio)** ([live demo](https://maninka123.github.io/rotating-target-calibration-studio/)), which goes deeper into comparing LiDAR and camera architectures.
+
 
 Wondering which local LLM you could run for the scene-graph question-answering idea? Try **[Model Fit Explorer (local-llm-fit)](https://github.com/maninka123/local-llm-fit)** — [web version](https://maninka123.github.io/local-llm-fit/). It is linked (and optionally embeddable on request) from Tab 8.
 

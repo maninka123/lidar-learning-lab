@@ -2,7 +2,7 @@ import { D2R, eulerToR, Vec3 } from '../core/math';
 import { makeRng } from '../core/rng';
 import { PointCloud, makeId } from '../core/pointcloud';
 import { RayScene, SceneDef, newHit } from '../scenes/geometry';
-import { SensorConfig, raysPerSweep } from './presets';
+import { SensorConfig, raysPerSweep, isSteered } from './presets';
 
 export interface PoseSample { t: number; x: number; y: number; z: number; yaw: number; pitch: number; roll: number }
 
@@ -47,16 +47,22 @@ export function sweepDirections(s: SensorConfig, sweep: number, colStride = 1): 
   const stepDeg = s.hRes * colStride;
   const cols = Math.max(1, full ? Math.round(s.hFov / stepDeg) : Math.floor(s.hFov / stepDeg) + 1);
   const elAt = (c: number) => (ch === 1 ? (s.vMin + s.vMax) / 2 : s.vMin + ((s.vMax - s.vMin) * c) / (ch - 1));
-  if (s.pattern === 'solidstate') {
-    const n = Math.max(1, Math.round((cols * ch)));
+  if (isSteered(s.pattern)) {
+    const n = Math.max(1, Math.round(cols * ch));
     const az = new Float32Array(n), el = new Float32Array(n);
-    const a = Math.sqrt(n) * 0.5, b = a * 1.6180339887;
-    const phi = sweep * 2.399963, psi = sweep * 1.311;
-    const mid = (s.vMin + s.vMax) / 2, hv = (s.vMax - s.vMin) / 2;
+    const mid = (s.vMin + s.vMax) / 2, hv = (s.vMax - s.vMin) / 2, hh = s.hFov / 2;
     for (let k = 0; k < n; k++) {
-      const u = k / n;
-      az[k] = (s.hFov / 2) * Math.sin(2 * Math.PI * a * u + phi) * D2R;
-      el[k] = (mid + hv * Math.sin(2 * Math.PI * b * u + psi)) * D2R;
+      const x = k / n;
+      if (s.pattern === 'mems') {
+        // sinusoidal horizontal sweep; vertical = π/4-shifted sinusoid under a triangular amplitude ramp (eye shape)
+        const ph = 2 * Math.PI * 100 * x, ramp = 1 - Math.abs(2 * x - 1);
+        az[k] = hh * Math.sin(ph) * D2R; el[k] = (mid + hv * ramp * Math.sin(ph + Math.PI / 4)) * D2R;
+      } else {
+        // counter-rotating prisms: the sum of two rotating deflection vectors; phase continues across sweeps → non-repeating rosette
+        const t = sweep + x, a1 = 2 * Math.PI * 23.0 * t, a2 = -2 * Math.PI * 18.7 * t;
+        const dx = 0.5 * Math.cos(a1) + 0.5 * Math.cos(a2), dy = 0.5 * Math.sin(a1) + 0.5 * Math.sin(a2);
+        az[k] = hh * dx * D2R; el[k] = (mid + hv * dy) * D2R;
+      }
     }
     return { az, el, n };
   }
@@ -92,10 +98,10 @@ export function simulateScan(req: ScanRequest): ScanResult {
   const rng = makeRng(req.seed);
   const perSweepFull = raysPerSweep(sensor);
   const totalFull = perSweepFull * req.sweeps;
-  const colStride = sensor.pattern === 'solidstate' ? 1 : Math.max(1, Math.ceil(totalFull / req.maxRays));
+  const colStride = isSteered(sensor.pattern) ? 1 : Math.max(1, Math.ceil(totalFull / req.maxRays));
   let streamLimit = req.maxRays;
   const dirsFirst = sweepDirections(sensor, 0, colStride);
-  const perSweep = sensor.pattern === 'solidstate' ? Math.min(dirsFirst.n, Math.max(1, Math.floor(streamLimit / req.sweeps))) : dirsFirst.n;
+  const perSweep = isSteered(sensor.pattern) ? Math.min(dirsFirst.n, Math.max(1, Math.floor(streamLimit / req.sweeps))) : dirsFirst.n;
   const reduced = colStride > 1 || perSweep < dirsFirst.n;
   const totalRays = perSweep * req.sweeps;
   streamLimit = totalRays * sensor.returns;
@@ -121,7 +127,7 @@ export function simulateScan(req: ScanRequest): ScanResult {
   const static_ = trajectory.length === 1;
 
   for (let sw = 0; sw < req.sweeps; sw++) {
-    const dirs = sensor.pattern === 'solidstate' ? sweepDirections(sensor, sw, 1) : dirsFirst;
+    const dirs = isSteered(sensor.pattern) ? sweepDirections(sensor, sw, 1) : dirsFirst;
     const startPose = poseAt(trajectory, T0 + sw * sweepDur);
     const startR = eulerToR(startPose.yaw, startPose.pitch, startPose.roll);
     for (let k = 0; k < perSweep; k++) {

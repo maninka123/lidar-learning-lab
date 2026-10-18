@@ -1,4 +1,6 @@
-export type Pattern = 'planar' | 'rotating' | 'hybrid' | 'solidstate' | 'panoramic';
+export type Pattern = 'planar' | 'rotating' | 'hybrid' | 'solidstate' | 'risley' | 'mems' | 'array' | 'panoramic';
+/** Patterns whose beam count per sweep is fixed by the scanner (not by an azimuth step). */
+export const isSteered = (p: Pattern) => p === 'solidstate' || p === 'risley' || p === 'mems';
 
 export interface SensorConfig {
   id: string;
@@ -56,12 +58,27 @@ export const PRESETS: SensorPreset[] = [
     blurb: 'Fixed beam fan whose elevation is modulated by an oscillating mirror, swept across a limited azimuth window.',
   },
   {
-    ...base, id: 'solid', name: 'Forward-facing solid-state (illustrative)', pattern: 'solidstate', hFov: 70, hRes: 0.7, vMin: -35, vMax: 35, channels: 100, minRange: 0.3, maxRange: 60, frequency: 10,
+    ...base, id: 'solid', name: 'Forward-facing solid-state (illustrative)', pattern: 'risley', hFov: 70, hRes: 0.7, vMin: -35, vMax: 35, channels: 100, minRange: 0.3, maxRange: 60, frequency: 10,
     blurb: 'No spinning head: a steered beam draws a non-repeating rosette over a forward window. Coverage builds as sweeps accumulate.',
   },
   {
     ...base, id: 'tls', name: 'Panoramic TLS', pattern: 'panoramic', hFov: 360, hRes: 0.3, vMin: -60, vMax: 60, channels: 100, minRange: 0.5, maxRange: 120, frequency: 0.02, noise: 0.004,
     blurb: 'Tripod-mounted terrestrial scanner: slow, dense, near-spherical field of view with millimetre-level range noise.',
+  },
+  {
+    ...base, id: 'avia', name: 'Livox Avia-type prism scanner (illustrative)', pattern: 'risley', hFov: 70.4, hRes: 0.7, vMin: -35.2, vMax: 35.2, channels: 238, minRange: 0.5, maxRange: 120, frequency: 10, noise: 0.02,
+    blurb: 'Counter-rotating-prism (Risley) family: two wedges deflect the beam at different rates, tracing a rosette that fills in as you integrate sweeps. Parameters are approximate, not verified.',
+    profile: { vendor: 'Livox (prism family)', verified: [{ label: 'Architecture', value: 'counter-rotating prisms, non-repetitive rosette' }, { label: 'Coverage', value: 'roughly circular / elliptical forward FOV' }], simplifications: ['Wedge speeds are chosen to give a pleasant rosette, not the real values.', 'FOV and point rate are approximate and unverified.', 'No beam-divergence or multi-return behaviour of the real unit.'] },
+  },
+  {
+    ...base, id: 'cube1', name: 'MEMS micro-mirror, Cube-1-type (illustrative)', pattern: 'mems', hFov: 70, hRes: 0.7, vMin: -15, vMax: 15, channels: 194, minRange: 0.5, maxRange: 75, frequency: 5, noise: 0.02,
+    blurb: 'Oscillating micro-mirror: sinusoidal horizontal sweep, vertical motion phase-shifted by π/4 with a triangular amplitude ramp → eye-shaped coverage.',
+    profile: { vendor: 'Blickfeld (MEMS family)', verified: [{ label: 'FOV', value: '≈70° × 30° (per the calibration-studio description)' }, { label: 'Scan lines', value: '200 per frame' }, { label: 'Mirror eigenfrequency', value: '≈1 kHz' }, { label: 'Pulse rate', value: '≈97 kHz' }], simplifications: ['Frame rate (5 Hz here) is a simulator choice.', 'The amplitude ramp is idealised.', 'Range and noise are generic.'] },
+  },
+  {
+    ...base, id: 'ft120', name: 'Solid-state array, FT120-type (illustrative)', pattern: 'array', hFov: 100, hRes: 0.8, vMin: -37, vMax: 37, channels: 96, minRange: 0.3, maxRange: 60, frequency: 10, noise: 0.015,
+    blurb: 'Fixed rectangular grid of beam directions: every frame samples exactly the same angles (unlike prism scanners).',
+    profile: { vendor: 'Hesai (array family)', verified: [{ label: 'Architecture', value: 'fixed-grid solid-state array' }], simplifications: ['FOV, resolution and range are approximate and unverified.', 'Real arrays have per-pixel timing and crosstalk effects not modelled.'] },
   },
   {
     ...base, id: 'vlp16', name: 'Velodyne VLP-16 (example profile)', pattern: 'rotating', hFov: 360, hRes: 0.2, vMin: -15, vMax: 15, channels: 16, minRange: 0.5, maxRange: 100, frequency: 10, noise: 0.03,
@@ -107,7 +124,7 @@ export const PRESETS: SensorPreset[] = [
     },
   },
   {
-    ...base, id: 'mid360', name: 'Livox Mid-360 (example profile)', pattern: 'solidstate', hFov: 360, hRes: 6.4, vMin: -7, vMax: 52, channels: 56, minRange: 0.1, maxRange: 40, frequency: 10, noise: 0.02,
+    ...base, id: 'mid360', name: 'Livox Mid-360 (example profile)', pattern: 'risley', hFov: 360, hRes: 6.4, vMin: -7, vMax: 52, channels: 56, minRange: 0.1, maxRange: 40, frequency: 10, noise: 0.02,
     blurb: 'Example profile loosely based on the public Mid-360 datasheet. The scan pattern here is an illustrative rosette, NOT the real Livox pattern.',
     profile: {
       vendor: 'Livox',
