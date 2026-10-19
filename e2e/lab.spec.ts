@@ -18,6 +18,9 @@ test.describe('LiDAR Learning Lab', () => {
   test('shell: ten lecture tabs, viewport, view presets, panel toggle', async ({ page }) => {
     for (let i = 0; i < 10; i++) await expect(page.getByTestId(`nav-${i}`)).toBeVisible();
     await expect(page.locator('canvas').first()).toBeVisible();
+    await page.getByTestId('view-home').click();
+    await expect(page.getByTestId('view-top')).toHaveCount(0);
+    await go(page, 1);
     for (const v of ['top', 'front', 'side', 'home']) await page.getByTestId(`view-${v}`).click();
     await page.getByTestId('toggle-panel').click();
     await expect(page.getByTestId('right-panel')).toHaveClass(/closed/);
@@ -25,17 +28,12 @@ test.describe('LiDAR Learning Lab', () => {
     await expect(page.getByTestId('right-panel')).not.toHaveClass(/closed/);
   });
 
-  test('tab 0: what is LiDAR — concepts, point inspection and warm-up challenge', async ({ page }) => {
+  test('tab 0: what is LiDAR — simple concept page with point inspection', async ({ page }) => {
     await expect(page.getByTestId('concept-point-info')).toContainText('Intensity');
     await expect(page.getByTestId('stats-card')).toContainText('Time of flight');
-    const answers = [['100', 'Time of flight'], ['0.3', 'Divergence'], ['11.5', 'FOV']];
-    for (const [a, tab] of answers) {
-      await page.getByRole('button', { name: tab, exact: true }).click();
-      await page.getByLabel('Answer').fill(a);
-      await page.getByRole('button', { name: 'Check' }).click();
-      await expect(page.getByText(/Correct/)).toBeVisible();
-    }
-    await expect.poll(() => state(page, (s) => s.concepts.tof && s.concepts.div && s.concepts.fov)).toBe(true);
+    await expect(page.getByRole('button', { name: 'Exercise' })).toHaveCount(0);
+    await expect(page.getByTestId('dataset-menu')).toHaveCount(0);
+    for (const l of ['Divergence', 'FOV', 'Sandbox', 'Time of flight']) await page.getByRole('button', { name: l, exact: true }).click();
   });
 
   test('tab 1: simulated scan produces points and coverage statistics', async ({ page }) => {
@@ -144,7 +142,7 @@ test.describe('LiDAR Learning Lab', () => {
 
   test('tab 9: challenge dashboard and summary downloads', async ({ page }) => {
     await go(page, 9);
-    await expect(page.getByTestId('challenges-page')).toContainText('of 10 challenges complete');
+    await expect(page.getByTestId('challenges-page')).toContainText('of 9 challenges complete');
     const [j] = await Promise.all([page.waitForEvent('download'), page.getByTestId('download-json').click()]);
     expect(j.suggestedFilename()).toBe('lidar-lab-summary.json');
     const [p] = await Promise.all([page.waitForEvent('download'), page.getByTestId('download-pdf').click()]);

@@ -78,8 +78,6 @@ function Quiz({ q, answer, unit, tol, done, onDone }: { q: string; answer: numbe
 }
 
 export default function Tab0() {
-  const concepts = useLab((s) => s.concepts);
-  const markDone = (k: 'tof' | 'div' | 'fov') => useLab.setState({ concepts: { ...useLab.getState().concepts, [k]: true } });
   const [lesson, setLesson] = useState<Lesson>('tof');
   const [hFov, setHFov] = useState(60), [vFov, setVFov] = useState(30);
   const [nH, setNH] = useState(13), [nV, setNV] = useState(7);
@@ -205,101 +203,70 @@ export default function Tab0() {
 
   const info = focus?.hit ? (
     <div className="callout" data-testid="concept-point-info" style={{ gap: 6 }}>
-      <b>{sel !== null ? `Selected point #${focus.i + 1}` : 'Centre beam'} <span className="caption">(click any dot in the 3D view to inspect it)</span></b>
+      <b>{sel !== null ? `Point #${focus.i + 1}` : 'Centre beam'} <span className="caption">· click any dot to inspect</span></b>
       <table className="table"><tbody>
         <tr><td>Position X, Y, Z</td><td className="mono">{focus.p.map((v) => v.toFixed(3)).join(', ')} m</td></tr>
         <tr><td>Range r</td><td className="mono">{focus.r.toFixed(3)} m</td></tr>
-        <tr><td>Time of flight</td><td className="mono">{dtNs.toFixed(2)} ns</td></tr>
-        <tr><td>Beam direction</td><td className="mono">az {(focus.az / D2R).toFixed(1)}°, el {(focus.el / D2R).toFixed(1)}°</td></tr>
-        <tr><td>Surface</td><td>{scene.objects[focus.obj].name} · reflectivity ρ = {focus.rho.toFixed(2)}</td></tr>
-        <tr><td>Incidence angle θ</td><td className="mono">{(Math.acos(Math.min(1, focus.cos)) / D2R).toFixed(1)}° (cos θ = {focus.cos.toFixed(2)})</td></tr>
+        <tr><td>Reflectivity</td><td className="mono">{focus.rho.toFixed(2)}</td></tr>
+        <tr><td>Angle to surface</td><td className="mono">{(Math.acos(Math.min(1, focus.cos)) / D2R).toFixed(1)}°</td></tr>
         <tr><td><b>Intensity</b></td><td className="mono"><b>{focus.I.toFixed(3)}</b> = {focus.rho.toFixed(2)} × {focus.cos.toFixed(2)} ÷ {(1 + (focus.r / 15) ** 2).toFixed(2)}</td></tr>
-        <tr><td>Spot / mixed pixel</td><td>{(spot(focus.r) * 100).toFixed(1)} cm{focus.mixed ? ' — straddles an edge (mixed pixel)' : ''}</td></tr>
       </tbody></table>
-      <span className="caption">Intensity grows with reflectivity and shrinks with distance and with the angle between the beam and the surface normal. Try the sliders below and watch these numbers change.</span>
-      <MiniChart series={[{ name: 'intensity vs range (this surface & angle)', color: '#007aff', values: curve }]} height={110} yLabel="relative intensity" xLabel={`range 1 → ${Math.round(Math.max(D * 1.3, 20))} m`} />
+      <span className="caption">Intensity rises with reflectivity and falls with distance and surface angle.</span>
+      <MiniChart series={[{ name: 'intensity vs range (this surface & angle)', color: '#007aff', values: curve }]} height={100} xLabel="range (m)" />
     </div>
-  ) : <p className="hint">This beam has no return (it missed everything). Click a coloured dot on the wall.</p>;
+  ) : <p className="hint">No return from this beam. Click a coloured dot.</p>;
 
   const lessonBox = {
     tof: (
       <>
-        <Callout kind="edu" title="Time of flight">The sensor fires a short laser pulse and starts a stopwatch. The pulse hits a surface, a little light comes back, and the stopwatch stops. Light travels at <b>c ≈ 0.3 m per ns</b>, and it covers the distance twice (out and back), so <b>every metre of range costs 6.7 ns</b>.</Callout>
-        <Eq note="R = range, c = speed of light, Δt = measured round-trip time">R = c · Δt ⁄ 2</Eq>
+        <p className="hint">The sensor fires a laser pulse and times how long the light takes to come back. Light moves ≈ 0.3 m per ns, so every metre of range costs 6.7 ns.</p>
+        <Eq>R = c · Δt ⁄ 2</Eq>
         <TofChart dt={dtNs} pw={pw} tres={tres} I={focus?.hit ? focus.I : 0} clock={clock} />
-        <table className="table"><tbody>
-          <tr><td>Timing resolution {tres} ns</td><td className="mono">→ range resolution {(C * tres * 1e-9 / 2 * 100).toFixed(1)} cm</td></tr>
-          <tr><td>Pulse width {pw} ns</td><td className="mono">→ pulse length {(C * pw * 1e-9).toFixed(2)} m (two surfaces closer than half of it merge)</td></tr>
-        </tbody></table>
-        <Quiz q="How long does a pulse take to travel to a target 15 m away and come back?" answer={100} unit="ns" tol={0.05} done={concepts.tof} onDone={() => markDone('tof')} />
       </>
     ),
     div: (
       <>
-        <Callout kind="edu" title="Beam divergence">A laser beam is not a perfect line — it spreads like a very thin cone. The spot it paints on a surface grows with distance, so the same sensor sees fine detail up close and blurs far away. When a spot straddles an object edge the sensor receives light from two distances at once: a <b>mixed pixel</b> (orange).</Callout>
-        <Eq note="θ = full divergence angle, d₀ = exit aperture, r = range">d(r) ≈ d₀ + 2 r tan(θ ⁄ 2) ≈ d₀ + r · θ</Eq>
-        <MiniChart series={[{ name: 'spot diameter (cm)', color: '#34c759', values: spotCurve }]} height={110} yLabel="spot diameter (cm)" xLabel={`range 1 → ${Math.round(Math.max(D * 1.5, 30))} m`} />
-        <table className="table"><tbody>
-          <tr><td>Spot at the target</td><td className="mono">{focus?.hit ? `${(spot(focus.r) * 100).toFixed(1)} cm` : '—'}</td></tr>
-          <tr><td>Neighbour spacing</td><td className="mono">{(spacingH * 100).toFixed(1)} cm</td></tr>
-          <tr><td>Spot ÷ spacing</td><td className="mono">{spacingH > 0 && focus?.hit ? (spot(focus.r) / spacingH).toFixed(2) : '—'} {spacingH > 0 && focus?.hit ? (spot(focus.r) > spacingH ? '(footprints overlap)' : '(gaps between spots)') : ''}</td></tr>
-          <tr><td>Mixed-pixel beams</td><td className="mono">{mixedCount} of {hits.length}</td></tr>
-        </tbody></table>
-        <p className="hint">Real sensors are roughly 0.1–3 mrad; the slider goes higher so you can see the effect.</p>
-        <Quiz q="A sensor has 3 mrad beam divergence. Roughly how wide is the spot at 100 m (ignore the exit aperture)?" answer={0.3} unit="m" tol={0.1} done={concepts.div} onDone={() => markDone('div')} />
+        <p className="hint">The beam spreads like a thin cone, so its spot grows with distance. Orange spots straddle an edge (mixed pixel).</p>
+        <Eq>spot ≈ range × divergence</Eq>
+        <MiniChart series={[{ name: 'spot diameter (cm)', color: '#34c759', values: spotCurve }]} height={110} xLabel="range (m)" />
+        <p className="hint">Mixed-pixel beams: <b>{mixedCount}</b> of {hits.length}</p>
       </>
     ),
     fov: (
       <>
-        <Callout kind="edu" title="Field of view (FOV)">The <b>horizontal FOV</b> is the angle swept left-to-right; the <b>vertical FOV</b> is the angle covered up-and-down (the spread of the laser channels). Together they decide which part of the world is measured. Resolution = FOV ÷ number of beams.</Callout>
-        <Eq note="width covered at range r for horizontal FOV φ">W(r) = 2 r tan(φ ⁄ 2)</Eq>
+        <p className="hint">Horizontal FOV = left-to-right sweep. Vertical FOV = up-and-down spread of the beams.</p>
+        <Eq>width = 2 · r · tan(FOV ⁄ 2)</Eq>
         <FovDiagrams beams={beams} scene={scene} hFov={hFov} vFov={vFov} D={D} zs={zs} />
-        <table className="table"><tbody>
-          <tr><td>Covered at the wall</td><td className="mono">{(2 * D * Math.tan(hFov * D2R / 2)).toFixed(1)} m wide × {(2 * D * Math.tan(vFov * D2R / 2)).toFixed(1)} m high</td></tr>
-          <tr><td>Angular resolution</td><td className="mono">{dAz.toFixed(2)}° horizontal · {dEl.toFixed(2)}° vertical</td></tr>
-        </tbody></table>
-        <Quiz q="A scanner has a 60° horizontal FOV. How wide an area does it cover at 10 m distance?" answer={11.5} unit="m" tol={0.05} done={concepts.fov} onDone={() => markDone('fov')} />
       </>
     ),
-    sandbox: (
-      <>
-        <Callout kind="edu" title="Sensor sandbox">Change any sensor characteristic and watch the beams, the spots and the numbers react. Click a dot to read its position and intensity, then change the wall reflectivity or tilt to see how intensity responds.</Callout>
-      </>
-    ),
+    sandbox: <p className="hint">Change anything, then click a dot on the wall to read its position and intensity.</p>,
   }[lesson];
 
   const controls = (
     <>
       <Seg value={lesson} onChange={setLesson} options={[{ value: 'tof', label: 'Time of flight' }, { value: 'div', label: 'Divergence' }, { value: 'fov', label: 'FOV' }, { value: 'sandbox', label: 'Sandbox' }]} label="Lesson" />
-      {lessonBox}
+      <div style={{ display: 'grid', gap: 10, paddingTop: 12 }}>{lessonBox}</div>
       {info}
-      <Section title="Sensor characteristics">
+      <Section title="Sensor">
         <Slider label="Horizontal FOV" value={hFov} min={5} max={170} step={1} unit="°" onChange={setHFov} />
         <Slider label="Vertical FOV" value={vFov} min={0} max={90} step={1} unit="°" onChange={setVFov} />
-        <Slider label="Beams across (horizontal)" value={nH} min={1} max={41} step={1} onChange={setNH} />
-        <Slider label="Beams up/down (vertical channels)" value={nV} min={1} max={21} step={1} onChange={setNV} />
-        <Slider label="Beam divergence (full angle)" value={div} min={0.5} max={100} step={0.5} unit=" mrad" onChange={setDiv} hint="Real sensors: ≈ 0.1–3 mrad. Exaggerated here for visibility." />
-        <Slider label="Range noise (1σ)" value={noiseMm} min={0} max={200} step={1} unit=" mm" onChange={setNoiseMm} hint="Jitters the measured range along each beam." />
+        <Slider label="Beams across" value={nH} min={1} max={41} step={1} onChange={setNH} />
+        <Slider label="Beams up/down" value={nV} min={1} max={21} step={1} onChange={setNV} />
+        <Slider label="Beam divergence" value={div} min={0.5} max={100} step={0.5} unit=" mrad" onChange={setDiv} />
+      </Section>
+      <Section title="Target">
+        <Slider label="Distance" value={D} min={2} max={30} step={0.5} unit=" m" onChange={setD} />
+        <Slider label="Reflectivity" value={rho} min={0.05} max={1} step={0.05} format={(v) => `${Math.round(v * 100)}%`} onChange={setRho} />
+        <Slider label="Wall tilt" value={wallYaw} min={-70} max={70} step={5} unit="°" onChange={setWallYaw} />
+      </Section>
+      <Section title="More" open={false}>
+        <Slider label="Range noise" value={noiseMm} min={0} max={200} step={1} unit=" mm" onChange={setNoiseMm} />
         <Slider label="Pulse width" value={pw} min={1} max={20} step={1} unit=" ns" onChange={setPw} />
         <Slider label="Timer resolution" value={tres} min={0.1} max={5} step={0.1} unit=" ns" format={(v) => v.toFixed(1)} onChange={setTres} />
-      </Section>
-      <Section title="The world">
-        <Slider label="Distance to the wall" value={D} min={2} max={30} step={0.5} unit=" m" onChange={setD} />
-        <Slider label="Surface reflectivity" value={rho} min={0.05} max={1} step={0.05} format={(v) => `${Math.round(v * 100)}%`} onChange={setRho} hint="Dark surfaces return little light." />
-        <Slider label="Wall tilt" value={wallYaw} min={-70} max={70} step={5} unit="°" onChange={setWallYaw} hint="Tilting the wall increases the angle of incidence and lowers intensity." />
+        {lesson === 'tof' && <Slider label="Slow-motion" value={slow} min={0.25} max={3} step={0.25} unit="×" format={(v) => v.toFixed(2)} onChange={setSlow} />}
         <Seg value={colourBy} onChange={setColourBy} options={[{ value: 'intensity', label: 'Colour: intensity' }, { value: 'range', label: 'Colour: range' }]} />
-        {lesson === 'tof' && <Slider label="Slow-motion" value={slow} min={0.25} max={3} step={0.25} unit="×" format={(v) => v.toFixed(2)} onChange={setSlow} hint="Real round trip: tens of nanoseconds." />}
         <Btn sm onClick={() => setSel(null)} disabled={sel === null}>Back to centre beam</Btn>
       </Section>
-    </>
-  );
-
-  const learn = (
-    <>
-      <Callout kind="edu" title="LiDAR in one sentence">LiDAR (Light Detection And Ranging) measures distance by timing laser pulses, and a scanning mechanism points the pulses in many directions to build a 3D point cloud.</Callout>
-      <Callout title="From beams to points">Each beam gives one range <i>r</i> in a known direction (azimuth α, elevation ε): <span className="mono">x = r cos ε cos α, y = r cos ε sin α, z = r sin ε</span>. Many beams → many points.</Callout>
-      <Callout title="Why intensity matters">Besides range, each return has a strength (intensity). It depends on how reflective the surface is, how far away it is and the angle of incidence — so it helps tell materials apart, but it is not the same as colour.</Callout>
-      <Callout kind="warn" title="Simplifications">This page uses an idealised pulse, a Gaussian range-noise model and the same simplified intensity model as the rest of the lab. It is a teaching aid, not a calibrated sensor model.</Callout>
     </>
   );
 
@@ -309,7 +276,8 @@ export default function Tab0() {
       tab={0}
       viewport={viewport}
       controls={controls}
-      learn={learn}
+      learn={null}
+      simple
       stats={stats}
       overlays={
         <>

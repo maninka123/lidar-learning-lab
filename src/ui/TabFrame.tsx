@@ -12,25 +12,26 @@ export interface TabFrameProps {
   stats?: { k: string; v: ReactNode; s?: string }[];
   overlays?: ReactNode;
   hideViewControls?: boolean;
+  simple?: boolean; // controls only: no Exercise / Learn panes, minimal top bar
 }
 
-export function TabFrame({ title, tab, viewport, controls, learn, stats, overlays, hideViewControls }: TabFrameProps) {
+export function TabFrame({ title, tab, viewport, controls, learn, stats, overlays, hideViewControls, simple }: TabFrameProps) {
   const open = useLab((s) => s.rightOpen);
   const [pane, setPane] = useState<'controls' | 'exercise' | 'learn'>('controls');
   return (
     <>
-      <TopBar title={title} />
+      <TopBar title={title} minimal={simple} />
       <div className="tab-body">
         <div className="stage" data-testid="stage">
           {viewport}
-          {!hideViewControls && <ViewControls />}
+          {!hideViewControls && <ViewControls simple={simple} />}
           {stats && <StatsCard items={stats} />}
           {overlays}
         </div>
         <aside className={`right glass ${open ? '' : 'closed'}`} aria-label="Experiment controls" data-testid="right-panel">
-          <div style={{ padding: '0.8rem 1rem 0.4rem' }}>
+          {!simple && <div style={{ padding: '0.8rem 1rem 0.4rem' }}>
             <Seg value={pane} onChange={setPane} label="Panel" options={[{ value: 'controls', label: 'Controls' }, { value: 'exercise', label: 'Exercise' }, { value: 'learn', label: 'Learn' }]} />
-          </div>
+          </div>}
           <div className="right-body" key={pane}>
             <div className="fade-in" style={{ display: 'grid', gap: 0 }}>
               {pane === 'controls' && controls}

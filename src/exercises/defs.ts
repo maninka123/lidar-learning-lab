@@ -16,13 +16,6 @@ const lastScan = (s: LabState) => s.clouds['scan'];
 
 export const CHALLENGES: Challenge[] = [
   {
-    id: 0, tab: 0, title: 'Warm-up: how a LiDAR measures',
-    goal: 'Answer the three “Check yourself” questions on time of flight, beam divergence and field of view.',
-    steps: ['Open “What is LiDAR?” and watch the pulse travel out and back.', 'Change the divergence and distance to see the spot grow.', 'Change the FOV and read the covered area, then answer the questions.'],
-    outcome: 'Range comes from timing (R = cΔt/2); beams spread with distance; FOV and beam count set what is covered and at what resolution.',
-    check: (s) => { const c = s.concepts, n = [c.tof, c.div, c.fov].filter(Boolean).length; return { done: n === 3, detail: `Questions answered: ${n} / 3 (time of flight ${c.tof ? '✓' : '–'}, divergence ${c.div ? '✓' : '–'}, FOV ${c.fov ? '✓' : '–'}).` }; },
-  },
-  {
     id: 1, tab: 1, title: 'Configure the scanner to capture a small object',
     goal: 'Place and configure the scanner so the target object (the small calibration object of the current scene) is hit by at least 150 points.',
     steps: ['Open LiDAR Fundamentals and run a scan.', 'Move the scanner closer / change angular resolution and channels.', 'Watch the “Target object hits” statistic until it reaches 150.'],

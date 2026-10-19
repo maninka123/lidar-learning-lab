@@ -111,35 +111,35 @@ function ExportMenu() {
   );
 }
 
-export function TopBar({ title }: { title: string }) {
+export function TopBar({ title, minimal }: { title: string; minimal?: boolean }) {
   const s = useLab();
   const [confirm, setConfirm] = useState(false);
   useEffect(() => { if (confirm) { const t = setTimeout(() => setConfirm(false), 3000); return () => clearTimeout(t); } }, [confirm]);
   return (
     <header className="topbar glass">
       <h1>{title}</h1>
-      <DatasetMenu />
+      {!minimal && <DatasetMenu />}
       <div className="spacer" />
-      <Btn icon={<Undo2 size={16} />} onClick={doUndo} disabled={s.undoCount === 0} title="Undo last action" testId="undo">Undo</Btn>
-      <Btn icon={<RotateCcw size={16} />} variant={confirm ? 'danger' : ''} onClick={() => { if (confirm) { s.resetAll(); setConfirm(false); s.notify('Everything reset.', 'info'); } else setConfirm(true); }} title="Reset the whole lab" testId="reset">{confirm ? 'Confirm reset' : 'Reset'}</Btn>
+      {!minimal && <Btn icon={<Undo2 size={16} />} onClick={doUndo} disabled={s.undoCount === 0} title="Undo last action" testId="undo">Undo</Btn>}
+      {!minimal && <Btn icon={<RotateCcw size={16} />} variant={confirm ? 'danger' : ''} onClick={() => { if (confirm) { s.resetAll(); setConfirm(false); s.notify('Everything reset.', 'info'); } else setConfirm(true); }} title="Reset the whole lab" testId="reset">{confirm ? 'Confirm reset' : 'Reset'}</Btn>}
       <Btn icon={<Camera size={16} />} onClick={takeScreenshot} title="Save a screenshot of the 3D view" testId="screenshot">Screenshot</Btn>
-      <ExportMenu />
+      {!minimal && <ExportMenu />}
       <Btn icon={s.rightOpen ? <PanelRightClose size={17} /> : <PanelRightOpen size={17} />} onClick={() => s.patch({ rightOpen: !s.rightOpen })} title="Toggle the controls panel" testId="toggle-panel" />
     </header>
   );
 }
 
 // ------------------------------------------------------------------ overlays
-export function ViewControls() {
+export function ViewControls({ simple }: { simple?: boolean }) {
   const v = useLab((s) => s.view);
   const setView = useLab((s) => s.setView);
   const interaction = useLab((s) => s.interaction);
   return (
     <div className="overlay glass card" style={{ top: 12, right: 12, display: 'flex', gap: 6, padding: '0.35rem', alignItems: 'center' }} role="toolbar" aria-label="View controls">
       <Btn sm icon={<Home size={15} />} onClick={() => viewBus.emit('home')} testId="view-home">Home</Btn>
-      <Btn sm onClick={() => viewBus.emit('top')} testId="view-top">Top</Btn>
-      <Btn sm onClick={() => viewBus.emit('front')} testId="view-front">Front</Btn>
-      <Btn sm onClick={() => viewBus.emit('side')} testId="view-side">Side</Btn>
+      {!simple && <Btn sm onClick={() => viewBus.emit('top')} testId="view-top">Top</Btn>}
+      {!simple && <Btn sm onClick={() => viewBus.emit('front')} testId="view-front">Front</Btn>}
+      {!simple && <Btn sm onClick={() => viewBus.emit('side')} testId="view-side">Side</Btn>}
       <Btn sm icon={v.showGrid ? <Eye size={15} /> : <EyeOff size={15} />} onClick={() => setView({ showGrid: !v.showGrid })} title="Toggle grid">Grid</Btn>
       <Btn sm icon={v.showAxes ? <Eye size={15} /> : <EyeOff size={15} />} onClick={() => setView({ showAxes: !v.showAxes })} title="Toggle axes">Axes</Btn>
       {interaction !== 'select' && <Btn sm variant="primary" onClick={() => useLab.getState().patch({ interaction: 'select' })}>Done · {interaction.replace('-', ' ')}</Btn>}

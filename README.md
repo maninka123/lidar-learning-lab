@@ -30,7 +30,7 @@ First time running the end-to-end tests: `npx playwright install chromium`.
 
 | # | Tab | What you can do |
 |---|-----|-----------------|
-| 1 | **What is LiDAR?** | Concept page with no scene: a sensor, a wall and a few objects. Watch a laser pulse travel out and back (time of flight, R = cΔt/2), see beam divergence grow with range (spot size, mixed pixels), and explore horizontal/vertical FOV in 3D, top and side views. Change sensor characteristics live, click any point to read its position, range, incidence angle and intensity (and how reflectivity, distance and tilt change it). Includes three self-check questions. |
+| 1 | **What is LiDAR?** | Concept page with no scene: a sensor, a wall and a few objects. Watch a laser pulse travel out and back (time of flight, R = cΔt/2), see beam divergence grow with range (spot size, mixed pixels), and explore horizontal/vertical FOV in 3D, top and side views. Change sensor characteristics live, click any point to read its position, range, incidence angle and intensity (and how reflectivity, distance and tilt change it). Deliberately simple: no dataset menu, exercises or Learn pane. |
 | 2 | **Scanner Simulator** | Place and aim a scanner; set FOV, angular resolution, channels, min/max range, frequency, returns, noise and reflectivity; 3D and 2D-plan views, visible rays and hit points; compare point count, spacing, coverage and occlusion; presets incl. documented VLP-16, Ouster OS1 and Livox Mid-360 *example profiles*, plus prism (Risley), MEMS micro-mirror and solid-state-array scan architectures with a scan-pattern preview. |
 | 3 | **Point Cloud Explorer** | XYZ / height / range / intensity / RGB / semantic / normal colouring, point picking with attributes, point-to-point distances, clipping and cropping, upload (PLY, PCD, LAS) and export (PLY, PCD). |
 | 4 | **TLS & MLS Laboratory** | Tripod stations, overlap and missing-region visualisation, station registration error + ICP repair; moving platform with editable waypoints, time-dependent poses, animation and motion-distortion demo; TLS vs MLS comparison table. |
@@ -39,7 +39,7 @@ First time running the end-to-end tests: `npx playwright install chromium`.
 | 7 | **Clustering & Segmentation** | RANSAC planes, ground removal, Euclidean clustering, DBSCAN, parameter-sensitivity sweep, A/B comparison, over-/under-segmentation scoring against ground truth. |
 | 8 | **Image to 3D** | Photo, LiDAR cloud, reconstruction, voxel-surface mesh, overlay and error map; synced split view; similarity alignment (rotation, translation **and scale**); error statistics only after a valid alignment. |
 | 9 | **Scene Graphs & 3D AI** | Nodes with id, label, position, size, bbox, source, confidence; geometric relations (near, above, below, inside, left/right, intersects, blocks path); interactive graph ↔ 3D selection; deterministic offline question answering; notes on integrating a real LLM; link to the *local-llm-fit* model-fit tool. |
-| 10 | **Challenges** | Ten automatically checked exercises (a warm-up plus nine), progress tracking, JSON/PDF summary download and a suggested 60-minute agenda. |
+| 10 | **Challenges** | Nine automatically checked exercises, progress tracking, JSON/PDF summary download and a suggested 60-minute agenda. |
 
 ## What is real, and what is a teaching simplification
 

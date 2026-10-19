@@ -59,7 +59,6 @@ export interface LabState {
   toast: { msg: string; kind: 'info' | 'ok' | 'warn' | 'error'; n: number } | null;
   scanInfo: { stats: ScanResult['stats']; viz?: ScanResult['viz']; coverage?: CoverageInfo | null } | null;
   usedColorModes: string[];
-  concepts: { tof: boolean; div: boolean; fov: boolean };
   scanLog: { label: string; hRes: number; channels: number; maxRange: number; points: number; spacing: number; coveragePct: number | null; occludedPct: number | null }[];
   exportsLog: { name: string; fmt: string; count: number }[];
   undoCount: number;
@@ -154,7 +153,6 @@ function initial() {
     toast: null,
     scanInfo: null,
     usedColorModes: [] as string[],
-    concepts: { tof: false, div: false, fov: false },
     scanLog: [] as LabState['scanLog'],
     exportsLog: [] as LabState['exportsLog'],
     undoCount: 0,
