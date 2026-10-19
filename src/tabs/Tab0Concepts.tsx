@@ -12,10 +12,10 @@ import { makeRng } from '../core/rng';
 import { viridis, turbo } from '../core/colorize';
 import { D2R } from '../core/math';
 import { useLab } from '../state/store';
-import { Check } from '../ui/icons';
+import { Play, Pause } from '../ui/icons';
 
 const C = 299_792_458; // m/s
-type Lesson = 'tof' | 'div' | 'fov' | 'sandbox';
+type Lesson = 'tof' | 'div' | 'fov';
 
 interface Beam { i: number; az: number; el: number; hit: boolean; r: number; p: [number, number, number]; n: [number, number, number]; obj: number; mixed: boolean; cos: number; rho: number; I: number }
 
@@ -31,11 +31,11 @@ function conceptScene(D: number, wallYawDeg: number, rho: number): SceneDef {
   return { id: 'concept', name: 'concept', description: '', objects: objs, bounds: { min: [0, -7, 0], max: [D + 3, 7, 5] }, defaultPose: { x: 0, y: 0, z: 1.5, yaw: 0 }, cameraHome: [0, 0, 0], cameraTarget: [0, 0, 0] };
 }
 
-function Pulse({ from, to, slow, onTick }: { from: THREE.Vector3; to: THREE.Vector3; slow: number; onTick: (phase: number) => void }) {
+function Pulse({ from, to, slow, playing, onTick }: { from: THREE.Vector3; to: THREE.Vector3; slow: number; playing: boolean; onTick: (phase: number) => void }) {
   const ref = useRef<THREE.Mesh>(null);
   const acc = useRef(0), last = useRef(0);
   useFrame((_, dt) => {
-    acc.current = (acc.current + dt / (3.2 / slow)) % 1.15;
+    if (playing) acc.current = (acc.current + dt / (3.2 / slow)) % 1.15;
     const ph = Math.min(1, acc.current);
     const out = ph < 0.5;
     const f = out ? ph * 2 : (1 - ph) * 2;
@@ -55,25 +55,8 @@ function Footprint({ b, radius }: { b: Beam; radius: number }) {
   return (
     <mesh position={[b.p[0] + b.n[0] * 0.01, b.p[1] + b.n[1] * 0.01, b.p[2] + b.n[2] * 0.01]} quaternion={q} raycast={() => null}>
       <circleGeometry args={[Math.max(radius, 0.012), 28]} />
-      <meshBasicMaterial color={b.mixed ? '#ff9f0a' : '#0a84ff'} transparent opacity={0.35} depthWrite={false} side={THREE.DoubleSide} />
+      <meshBasicMaterial color={'#0a84ff'} transparent opacity={0.35} depthWrite={false} side={THREE.DoubleSide} />
     </mesh>
-  );
-}
-
-function Quiz({ q, answer, unit, tol, done, onDone }: { q: string; answer: number; unit: string; tol: number; done: boolean; onDone: () => void }) {
-  const [v, setV] = useState('');
-  const [msg, setMsg] = useState('');
-  return (
-    <div className="callout" style={{ gap: 8 }} data-testid="quiz">
-      <b>Check yourself {done && <Check size={16} color="var(--green)" />}</b>
-      <div>{q}</div>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr auto auto', gap: 8, alignItems: 'center' }}>
-        <input type="text" inputMode="decimal" value={v} placeholder={`answer in ${unit}`} onChange={(e) => setV(e.target.value)} aria-label="Answer" />
-        <span className="caption">{unit}</span>
-        <Btn sm onClick={() => { const x = parseFloat(v); if (!isFinite(x)) return setMsg('Enter a number.'); if (Math.abs(x - answer) <= Math.abs(answer) * tol) { setMsg(`Correct — ${answer} ${unit}.`); onDone(); } else setMsg('Not quite — use the slider and read the numbers in the statistics card.'); }}>Check</Btn>
-      </div>
-      {msg && <span className="caption" style={{ color: msg.startsWith('Correct') ? 'var(--green)' : 'var(--text2)' }}>{msg}</span>}
-    </div>
   );
 }
 
@@ -91,13 +74,13 @@ export default function Tab0() {
   const [colourBy, setColourBy] = useState<'intensity' | 'range'>('intensity');
   const [sel, setSel] = useState<number | null>(null);
   const [phase, setPhase] = useState(0);
+  const [playing, setPlaying] = useState(true);
   const zs = 1.5;
 
   const scene = useMemo(() => conceptScene(D, wallYaw, rho), [D, wallYaw, rho]);
   const beams: Beam[] = useMemo(() => {
     const rs = new RayScene(scene), h = newHit(), rng = makeRng(5);
     const out: Beam[] = [];
-    const half = (div / 1000) / 2;
     const dirOf = (az: number, el: number): [number, number, number] => [Math.cos(el) * Math.cos(az), Math.cos(el) * Math.sin(az), Math.sin(el)];
     const r0 = 15;
     for (let j = 0; j < nV; j++) for (let i = 0; i < nH; i++) {
@@ -110,14 +93,7 @@ export default function Tab0() {
       let nx = h.nx, ny = h.ny, nz = h.nz;
       let cos = -(nx * d[0] + ny * d[1] + nz * d[2]);
       if (cos < 0) { nx = -nx; ny = -ny; nz = -nz; cos = -cos; }
-      // mixed pixel test: rays at the rim of the divergence cone
-      let mixed = false;
-      for (let k = 0; k < 6 && half > 1e-4; k++) {
-        const a = (k / 6) * Math.PI * 2;
-        const d2 = dirOf(az + Math.cos(a) * half, el + Math.sin(a) * half);
-        const ok2 = rs.cast(0, 0, zs, d2[0], d2[1], d2[2], 0.05, 80, h);
-        if (!ok2 || Math.abs(h.t - r) > 0.15) { mixed = true; break; }
-      }
+      const mixed = false;
       const o = scene.objects[h.obj];
       const I = Math.min(1, Math.max(0, (o.reflectivity * cos) / (1 + (r / r0) ** 2)));
       out.push({ i: out.length, az, el, hit: true, r, p: [d[0] * r, d[1] * r, zs + d[2] * r], n: [nx, ny, nz], obj: h.obj, mixed, cos, rho: o.reflectivity, I });
@@ -132,8 +108,7 @@ export default function Tab0() {
   const dAz = nH > 1 ? hFov / (nH - 1) : 0, dEl = nV > 1 ? vFov / (nV - 1) : 0;
   const spacingH = focus ? focus.r * Math.tan(dAz * D2R) : 0;
   const hits = beams.filter((b) => b.hit);
-  const mixedCount = hits.filter((b) => b.mixed).length;
-
+  
   const hitGeom = useMemo(() => {
     const g = new THREE.BufferGeometry();
     const p = new Float32Array(beams.length * 3), c = new Float32Array(beams.length * 3);
@@ -171,21 +146,21 @@ export default function Tab0() {
         <mesh raycast={() => null}><boxGeometry args={[0.28, 0.28, 0.3]} /><meshStandardMaterial color="#007aff" /></mesh>
         <mesh position={[0.17, 0, 0]} rotation={[0, 0, -Math.PI / 2]} raycast={() => null}><coneGeometry args={[0.07, 0.16, 12]} /><meshStandardMaterial color="#1d1d1f" /></mesh>
       </group>
-      <TextSprite text="LiDAR sensor" position={[0, 0, zs + 0.5]} bg="rgba(0,70,160,0.9)" />
+      <TextSprite text="Sensor" position={[0, 0, zs + 0.5]} bg="rgba(0,70,160,0.9)" />
       <lineSegments geometry={lineGeom} raycast={() => null}><lineBasicMaterial color="#007aff" transparent opacity={0.32} /></lineSegments>
       {/* beam divergence cone for the focused beam */}
       {focus?.hit && lesson !== 'fov' && (
         <mesh position={[focus.p[0] / 2, focus.p[1] / 2, zs + (focus.p[2] - zs) / 2]} quaternion={new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), new THREE.Vector3(focus.p[0], focus.p[1], focus.p[2] - zs).normalize())} raycast={() => null}>
           <cylinderGeometry args={[Math.max(0.01, spot(focus.r) / 2), 0.012, focus.r, 24, 1, true]} />
-          <meshBasicMaterial color={focus.mixed ? '#ff9f0a' : '#34c759'} transparent opacity={0.22} depthWrite={false} side={THREE.DoubleSide} />
+          <meshBasicMaterial color={'#34c759'} transparent opacity={0.22} depthWrite={false} side={THREE.DoubleSide} />
         </mesh>
       )}
-      {(lesson === 'div' || lesson === 'sandbox') && beams.length <= 260 && beams.filter((b) => b.hit).map((b) => <Footprint key={b.i} b={b} radius={spot(b.r) / 2} />)}
+      {lesson === 'div' && beams.length <= 260 && beams.filter((b) => b.hit).map((b) => <Footprint key={b.i} b={b} radius={spot(b.r) / 2} />)}
       <points geometry={hitGeom} frustumCulled={false} onClick={(e) => { e.stopPropagation(); if (e.index !== undefined) setSel(e.index); }}>
         <pointsMaterial vertexColors size={9} sizeAttenuation={false} />
       </points>
       {focus?.hit && <mesh position={focus.p} raycast={() => null}><ringGeometry args={[0.14, 0.2, 24]} /><meshBasicMaterial color="#ff9f0a" side={THREE.DoubleSide} depthTest={false} /></mesh>}
-      {lesson === 'tof' && focus?.hit && <Pulse from={new THREE.Vector3(0, 0, zs)} to={new THREE.Vector3(...focus.p)} slow={slow} onTick={setPhase} />}
+      {lesson === 'tof' && focus?.hit && <Pulse from={new THREE.Vector3(0, 0, zs)} to={new THREE.Vector3(...focus.p)} slow={slow} playing={playing} onTick={setPhase} />}
     </Viewport>
   );
 
@@ -195,77 +170,73 @@ export default function Tab0() {
   const clock = phase * t0; // 0 → Δt over the whole round trip
 
   const stats = [
-    { k: 'Time of flight Δt', v: focus?.hit ? `${dtNs.toFixed(1)} ns` : '—', s: focus?.hit ? `range ${focus.r.toFixed(2)} m` : 'no return' },
-    { k: 'Spot diameter', v: focus?.hit ? `${(spot(focus.r) * 100).toFixed(1)} cm` : '—', s: `divergence ${div} mrad (${(div * 0.0573).toFixed(2)}°)` },
-    { k: 'Area at the wall', v: `${(2 * D * Math.tan(hFov * D2R / 2)).toFixed(1)} × ${(2 * D * Math.tan(vFov * D2R / 2)).toFixed(1)} m`, s: `FOV ${hFov}° × ${vFov}°` },
-    { k: 'Beam spacing', v: focus?.hit ? `${(spacingH * 100).toFixed(1)} cm` : '—', s: `${dAz.toFixed(2)}° × ${dEl.toFixed(2)}° steps` },
+    { k: 'Time for light to return', v: focus?.hit ? `${dtNs.toFixed(1)} ns` : '—', s: focus?.hit ? `distance ${focus.r.toFixed(2)} m` : 'nothing hit' },
+    { k: 'Area the sensor sees', v: `${(2 * D * Math.tan(hFov * D2R / 2)).toFixed(1)} × ${(2 * D * Math.tan(vFov * D2R / 2)).toFixed(1)} m`, s: `${hFov}° × ${vFov}°` },
+    { k: 'Gap between beams', v: focus?.hit ? `${(spacingH * 100).toFixed(1)} cm` : '—', s: `${dAz.toFixed(1)}° apart` },
   ];
 
   const info = focus?.hit ? (
     <div className="callout" data-testid="concept-point-info" style={{ gap: 6 }}>
-      <b>{sel !== null ? `Point #${focus.i + 1}` : 'Centre beam'} <span className="caption">· click any dot to inspect</span></b>
+      <b>{sel !== null ? `Point #${focus.i + 1}` : 'Middle beam'} <span className="caption">· click any dot to see its details</span></b>
       <table className="table"><tbody>
-        <tr><td>Position X, Y, Z</td><td className="mono">{focus.p.map((v) => v.toFixed(3)).join(', ')} m</td></tr>
-        <tr><td>Range r</td><td className="mono">{focus.r.toFixed(3)} m</td></tr>
-        <tr><td>Reflectivity</td><td className="mono">{focus.rho.toFixed(2)}</td></tr>
-        <tr><td>Angle to surface</td><td className="mono">{(Math.acos(Math.min(1, focus.cos)) / D2R).toFixed(1)}°</td></tr>
-        <tr><td><b>Intensity</b></td><td className="mono"><b>{focus.I.toFixed(3)}</b> = {focus.rho.toFixed(2)} × {focus.cos.toFixed(2)} ÷ {(1 + (focus.r / 15) ** 2).toFixed(2)}</td></tr>
+        <tr><td>Position (x, y, z)</td><td className="mono">{focus.p.map((v) => v.toFixed(3)).join(', ')} m</td></tr>
+        <tr><td>Distance</td><td className="mono">{focus.r.toFixed(3)} m</td></tr>
+        <tr><td>Wall shininess</td><td className="mono">{focus.rho.toFixed(2)}</td></tr>
+        <tr><td><b>Brightness</b> (intensity)</td><td className="mono"><b>{focus.I.toFixed(3)}</b></td></tr>
       </tbody></table>
-      <span className="caption">Intensity rises with reflectivity and falls with distance and surface angle.</span>
-      <MiniChart series={[{ name: 'intensity vs range (this surface & angle)', color: '#007aff', values: curve }]} height={100} xLabel="range (m)" />
+      <span className="caption">Brighter when the surface is shiny and close.</span>
+      <MiniChart series={[{ name: 'brightness vs distance', color: '#007aff', values: curve }]} height={100} xLabel="distance (m)" />
     </div>
-  ) : <p className="hint">No return from this beam. Click a coloured dot.</p>;
+  ) : <p className="hint">This beam hit nothing. Click a coloured dot.</p>;
 
   const lessonBox = {
     tof: (
       <>
-        <p className="hint">The sensor fires a laser pulse and times how long the light takes to come back. Light moves ≈ 0.3 m per ns, so every metre of range costs 6.7 ns.</p>
-        <Eq>R = c · Δt ⁄ 2</Eq>
+        <p className="hint">The sensor sends a flash of laser light and times how long it takes to bounce back. Longer time = farther away.</p>
+        <Btn variant="primary" icon={playing ? <Pause size={16} /> : <Play size={16} />} onClick={() => setPlaying(!playing)} testId="play-pause">{playing ? 'Pause' : 'Play'}</Btn>
+        <Eq note="distance = speed of light × time ÷ 2 (the light goes there and back)">R = c · Δt ⁄ 2</Eq>
         <TofChart dt={dtNs} pw={pw} tres={tres} I={focus?.hit ? focus.I : 0} clock={clock} />
       </>
     ),
     div: (
       <>
-        <p className="hint">The beam spreads like a thin cone, so its spot grows with distance. Orange spots straddle an edge (mixed pixel).</p>
-        <Eq>spot ≈ range × divergence</Eq>
-        <MiniChart series={[{ name: 'spot diameter (cm)', color: '#34c759', values: spotCurve }]} height={110} xLabel="range (m)" />
-        <p className="hint">Mixed-pixel beams: <b>{mixedCount}</b> of {hits.length}</p>
+        <p className="hint">A laser beam slowly spreads out, like a flashlight. The farther it goes, the bigger the spot it makes.</p>
+        <Eq note="spot size = distance × spread">spot ≈ r × θ</Eq>
+        <MiniChart series={[{ name: 'spot diameter (cm)', color: '#34c759', values: spotCurve }]} height={110} xLabel="distance (m)" />
       </>
     ),
     fov: (
       <>
-        <p className="hint">Horizontal FOV = left-to-right sweep. Vertical FOV = up-and-down spread of the beams.</p>
-        <Eq>width = 2 · r · tan(FOV ⁄ 2)</Eq>
+        <p className="hint">The view angle (FOV) is how much the sensor can see. Wide angle = sees more. It has a left-right angle and an up-down angle.</p>
+        <Eq note="width seen at distance r">width = 2 · r · tan(angle ⁄ 2)</Eq>
         <FovDiagrams beams={beams} scene={scene} hFov={hFov} vFov={vFov} D={D} zs={zs} />
       </>
     ),
-    sandbox: <p className="hint">Change anything, then click a dot on the wall to read its position and intensity.</p>,
   }[lesson];
 
   const controls = (
     <>
-      <Seg value={lesson} onChange={setLesson} options={[{ value: 'tof', label: 'Time of flight' }, { value: 'div', label: 'Divergence' }, { value: 'fov', label: 'FOV' }, { value: 'sandbox', label: 'Sandbox' }]} label="Lesson" />
+      <Seg value={lesson} onChange={setLesson} options={[{ value: 'tof', label: 'Time of flight' }, { value: 'div', label: 'Beam spread' }, { value: 'fov', label: 'View angle' }]} label="Lesson" />
       <div style={{ display: 'grid', gap: 10, paddingTop: 12 }}>{lessonBox}</div>
       {info}
       <Section title="Sensor">
-        <Slider label="Horizontal FOV" value={hFov} min={5} max={170} step={1} unit="°" onChange={setHFov} />
-        <Slider label="Vertical FOV" value={vFov} min={0} max={90} step={1} unit="°" onChange={setVFov} />
-        <Slider label="Beams across" value={nH} min={1} max={41} step={1} onChange={setNH} />
-        <Slider label="Beams up/down" value={nV} min={1} max={21} step={1} onChange={setNV} />
-        <Slider label="Beam divergence" value={div} min={0.5} max={100} step={0.5} unit=" mrad" onChange={setDiv} />
+        <Slider label="Left-right angle" value={hFov} min={5} max={170} step={1} unit="°" onChange={setHFov} />
+        <Slider label="Up-down angle" value={vFov} min={0} max={90} step={1} unit="°" onChange={setVFov} />
+        <Slider label="Beams left-right" value={nH} min={1} max={41} step={1} onChange={setNH} />
+        <Slider label="Beams up-down" value={nV} min={1} max={21} step={1} onChange={setNV} />
+        <Slider label="Beam spread" value={div} min={0.5} max={100} step={0.5} unit=" mrad" onChange={setDiv} />
       </Section>
-      <Section title="Target">
-        <Slider label="Distance" value={D} min={2} max={30} step={0.5} unit=" m" onChange={setD} />
-        <Slider label="Reflectivity" value={rho} min={0.05} max={1} step={0.05} format={(v) => `${Math.round(v * 100)}%`} onChange={setRho} />
-        <Slider label="Wall tilt" value={wallYaw} min={-70} max={70} step={5} unit="°" onChange={setWallYaw} />
+      <Section title="Wall">
+        <Slider label="Distance to wall" value={D} min={2} max={30} step={0.5} unit=" m" onChange={setD} />
+        <Slider label="Shininess of wall" value={rho} min={0.05} max={1} step={0.05} format={(v) => `${Math.round(v * 100)}%`} onChange={setRho} />
       </Section>
-      <Section title="More" open={false}>
-        <Slider label="Range noise" value={noiseMm} min={0} max={200} step={1} unit=" mm" onChange={setNoiseMm} />
-        <Slider label="Pulse width" value={pw} min={1} max={20} step={1} unit=" ns" onChange={setPw} />
-        <Slider label="Timer resolution" value={tres} min={0.1} max={5} step={0.1} unit=" ns" format={(v) => v.toFixed(1)} onChange={setTres} />
-        {lesson === 'tof' && <Slider label="Slow-motion" value={slow} min={0.25} max={3} step={0.25} unit="×" format={(v) => v.toFixed(2)} onChange={setSlow} />}
-        <Seg value={colourBy} onChange={setColourBy} options={[{ value: 'intensity', label: 'Colour: intensity' }, { value: 'range', label: 'Colour: range' }]} />
-        <Btn sm onClick={() => setSel(null)} disabled={sel === null}>Back to centre beam</Btn>
+      <Section title="More settings" open={false}>
+        <Slider label="Measuring error" value={noiseMm} min={0} max={200} step={1} unit=" mm" onChange={setNoiseMm} />
+        <Slider label="Flash length" value={pw} min={1} max={20} step={1} unit=" ns" onChange={setPw} />
+        <Slider label="Timer accuracy" value={tres} min={0.1} max={5} step={0.1} unit=" ns" format={(v) => v.toFixed(1)} onChange={setTres} />
+        {lesson === 'tof' && <Slider label="Slow motion" value={slow} min={0.25} max={3} step={0.25} unit="×" format={(v) => v.toFixed(2)} onChange={setSlow} />}
+        <Seg value={colourBy} onChange={setColourBy} options={[{ value: 'intensity', label: 'Colour: brightness' }, { value: 'range', label: 'Colour: distance' }]} />
+        <Btn sm onClick={() => setSel(null)} disabled={sel === null}>Back to middle beam</Btn>
       </Section>
     </>
   );
@@ -281,8 +252,8 @@ export default function Tab0() {
       stats={stats}
       overlays={
         <>
-          <KindLegend items={[{ color: '#007aff', label: 'Laser beams from the sensor' }, { color: '#34c759', label: 'Beam cone / spot (divergence)' }, { color: '#ff9f0a', label: 'Mixed-pixel spot / selected point' }]} />
-          {lesson === 'tof' && focus?.hit && <div className="overlay glass card" style={{ right: 12, bottom: 12, minWidth: 200 }}><div className="caption">Stopwatch (slow motion)</div><div className="mono" style={{ fontSize: '1.5rem', fontWeight: 650 }}>{clock.toFixed(1)} ns</div><div className="caption">{phase < 0.5 ? 'pulse going out' : 'light coming back'} · round trip {dtNs.toFixed(1)} ns</div></div>}
+          <KindLegend items={[{ color: '#007aff', label: 'Laser beams' }, { color: '#34c759', label: 'Beam and its spot' }, { color: '#ff9f0a', label: 'Selected point' }]} />
+          {lesson === 'tof' && focus?.hit && <div className="overlay glass card" style={{ right: 12, bottom: 12, minWidth: 200 }}><div className="caption" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>Stopwatch (slowed down)<button className="btn sm icon" onClick={() => setPlaying(!playing)} aria-label={playing ? 'Pause' : 'Play'}>{playing ? <Pause size={15} /> : <Play size={15} />}</button></div><div className="mono" style={{ fontSize: '1.5rem', fontWeight: 650 }}>{clock.toFixed(1)} ns</div><div className="caption">{phase < 0.5 ? 'light going out' : 'light coming back'} · total {dtNs.toFixed(1)} ns</div></div>}
         </>
       }
     />
@@ -303,15 +274,16 @@ function TofChart({ dt, pw, tres, I, clock }: { dt: number; pw: number; tres: nu
     <svg viewBox={`0 0 ${W} ${H}`} width="100%" role="img" aria-label="Emitted and returned pulse" style={{ background: 'var(--fill)', borderRadius: 12 }}>
       <line x1={pad.l} x2={W - pad.r} y1={Y(0)} y2={Y(0)} stroke="var(--sep)" />
       <line x1={pad.l} x2={W - pad.r} y1={Y(0.15)} y2={Y(0.15)} stroke="var(--red)" strokeDasharray="4 3" opacity={0.7} />
-      <text x={W - pad.r} y={Y(0.15) - 3} textAnchor="end" fontSize="12" fill="var(--red)">detection threshold</text>
+      <text x={W - pad.r} y={Y(0.15) - 3} textAnchor="end" fontSize="12" fill="var(--red)">detects light above this line</text>
       <polyline fill="none" stroke="#d97a00" strokeWidth="2.2" points={pts(pw, 0.95)} />
       <polyline fill="none" stroke="#007aff" strokeWidth="2.2" points={pts(dt + pw, ret)} />
       <line x1={X(pw)} x2={X(dt + pw)} y1={Y(0.55)} y2={Y(0.55)} stroke="var(--text)" markerEnd="url(#tarr)" markerStart="url(#tarr)" />
-      <text x={(X(pw) + X(dt + pw)) / 2} y={Y(0.55) - 5} textAnchor="middle" fontSize="13" fontWeight="600" fill="var(--text)">Δt = {dt.toFixed(1)} ns</text>
+      <text x={(X(pw) + X(dt + pw)) / 2} y={Y(0.55) - 5} textAnchor="middle" fontSize="13" fontWeight="600" fill="var(--text)">time = {dt.toFixed(1)} ns</text>
       <rect x={X(dt + pw) - (tres / tmax) * (W - pad.l - pad.r) / 2} y={Y(0.15) - 6} width={(tres / tmax) * (W - pad.l - pad.r)} height={12} fill="rgba(52,199,89,.45)" />
       <line x1={X(clock + pw)} x2={X(clock + pw)} y1={pad.t} y2={Y(0)} stroke="var(--text3)" strokeDasharray="2 3" />
       {ticks.map((t) => <text key={t} x={X(t)} y={H - 8} textAnchor={t === ticks[4] ? 'end' : 'middle'} fontSize="12" fill="var(--text2)">{t.toFixed(0)}{t === ticks[4] ? ' ns' : ''}</text>)}
-      <text x={pad.l - 4} y={pad.t + 8} textAnchor="end" fontSize="12" fill="#d97a00">sent</text>
+      <text x={pad.l - 4} y={pad.t + 8} textAnchor="end" fontSize="12" fill="#d97a00">flash sent</text>
+      <text x={X(dt + pw)} y={Y(ret) - 6} textAnchor="middle" fontSize="12" fill="#007aff">light back</text>
       <defs><marker id="tarr" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="var(--text)" /></marker></defs>
     </svg>
   );

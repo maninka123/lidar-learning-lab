@@ -29,11 +29,13 @@ test.describe('LiDAR Learning Lab', () => {
   });
 
   test('tab 0: what is LiDAR — simple concept page with point inspection', async ({ page }) => {
-    await expect(page.getByTestId('concept-point-info')).toContainText('Intensity');
-    await expect(page.getByTestId('stats-card')).toContainText('Time of flight');
+    await expect(page.getByTestId('concept-point-info')).toContainText('Brightness');
+    await expect(page.getByTestId('stats-card')).toContainText('Time for light to return');
     await expect(page.getByRole('button', { name: 'Exercise' })).toHaveCount(0);
     await expect(page.getByTestId('dataset-menu')).toHaveCount(0);
-    for (const l of ['Divergence', 'FOV', 'Sandbox', 'Time of flight']) await page.getByRole('button', { name: l, exact: true }).click();
+    await page.getByTestId('play-pause').click();
+    await expect(page.getByTestId('play-pause')).toContainText('Play');
+    for (const l of ['Beam spread', 'View angle', 'Time of flight']) await page.getByRole('button', { name: l, exact: true }).click();
   });
 
   test('tab 1: simulated scan produces points and coverage statistics', async ({ page }) => {

@@ -100,13 +100,6 @@ function ExportMenu() {
           </div>
         </>
       ) : <p className="hint">No point cloud yet — run a scan first.</p>}
-      <hr style={{ border: 0, borderTop: '1px solid var(--sep)', width: '100%' }} />
-      <div className="btn-row">
-        <Btn sm icon={<Settings2 size={15} />} onClick={() => downloadBlob(new Blob([JSON.stringify(exportSettings(), null, 2)], { type: 'application/json' }), 'lidar-lab-settings.json')}>Save settings</Btn>
-        <label className="btn sm" style={{ cursor: 'pointer' }}><FolderOpen size={15} />Load settings
-          <input type="file" accept=".json" hidden onChange={async (e) => { const f = e.target.files?.[0]; if (!f) return; try { importSettings(JSON.parse(await f.text())); useLab.getState().notify('Settings loaded.', 'ok'); } catch (err) { useLab.getState().notify((err as Error).message, 'error'); } e.target.value = ''; }} />
-        </label>
-      </div>
     </Popover>
   );
 }
