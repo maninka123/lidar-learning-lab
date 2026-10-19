@@ -29,7 +29,6 @@ test.describe('LiDAR Learning Lab', () => {
   });
 
   test('tab 0: what is LiDAR — simple concept page with point inspection', async ({ page }) => {
-    await page.getByRole('button', { name: 'Notes', exact: true }).click();
     await expect(page.getByTestId('concept-point-info')).toContainText('Intensity');
     await expect(page.getByTestId('stats-card')).toContainText('Time of flight');
     await expect(page.getByTestId('person-points')).toContainText('Points on the person');

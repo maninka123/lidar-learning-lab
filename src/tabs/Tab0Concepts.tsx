@@ -80,6 +80,30 @@ function AngleArc({ pts, label, labelAt, active, color }: { pts: V3[]; label: st
   );
 }
 
+/** Multi-line info card that floats next to a point in the 3D view (constant screen size). */
+function CardSprite({ lines, position, accent = '#e61e28' }: { lines: string[]; position: V3; accent?: string }) {
+  const { tex, w, h } = useMemo(() => {
+    const dpr = 2, fs = 15 * dpr, lh = 24 * dpr, padX = 14 * dpr, padY = 10 * dpr;
+    const c = document.createElement('canvas'); const g = c.getContext('2d')!;
+    g.font = `600 ${fs}px -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif`;
+    const W = Math.ceil(Math.max(...lines.map((l) => g.measureText(l).width))) + padX * 2, H = lines.length * lh + padY * 2;
+    c.width = W; c.height = H;
+    g.font = `600 ${fs}px -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif`;
+    g.fillStyle = 'rgba(255,255,255,0.96)'; g.strokeStyle = accent; g.lineWidth = 3;
+    g.beginPath(); g.roundRect(2, 2, W - 4, H - 4, 14 * dpr / 2 + 6); g.fill(); g.stroke();
+    lines.forEach((l, i) => { g.fillStyle = i === 0 ? accent : '#1d1d1f'; g.textBaseline = 'middle'; g.fillText(l, padX, padY + lh * i + lh / 2); });
+    const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
+    return { tex: t, w: W, h: H };
+  }, [lines.join('|'), accent]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => () => tex.dispose(), [tex]);
+  const k = (0.034 / 44 / 2) * 1.6; // screen-size scale per canvas pixel
+  return (
+    <sprite position={position} scale={[w * k, h * k, 1]} center={new THREE.Vector2(-0.05, -0.1)} renderOrder={60} raycast={() => null}>
+      <spriteMaterial map={tex} sizeAttenuation={false} depthTest={false} transparent />
+    </sprite>
+  );
+}
+
 function Pulse({ from, to, slow, playing, onTick }: { from: THREE.Vector3; to: THREE.Vector3; slow: number; playing: boolean; onTick: (phase: number) => void }) {
   const ref = useRef<THREE.Mesh>(null);
   const acc = useRef(0), last = useRef(0);
@@ -261,9 +285,14 @@ export default function Tab0() {
         </mesh>
       )}
       {lesson === 'div' && beams.length <= 520 && beams.filter((b) => b.hit).map((b) => <Footprint key={b.i} b={b} radius={spot(b.r) / 2} />)}
-      <points geometry={hitGeom} frustumCulled={false} onClick={(e) => { e.stopPropagation(); if (e.index !== undefined) setSel(e.index); }}>
+      <points geometry={hitGeom} frustumCulled={false} onClick={(e) => { e.stopPropagation(); const idx = e.index; if (idx !== undefined) setSel((cur) => (cur === idx ? null : idx)); }}>
         <pointsMaterial vertexColors size={6} sizeAttenuation={false} map={roundPointTexture()} alphaTest={0.5} />
       </points>
+      {sel !== null && focus && (focus.hit
+        ? <CardSprite position={focus.p} lines={[`Point #${focus.i + 1}`, `Position  ${focus.p.map((v) => v.toFixed(2)).join(', ')} m`, `Range  ${focus.r.toFixed(2)} m`, `Reflectivity  ${focus.rho.toFixed(2)}`, `Intensity  ${focus.I.toFixed(3)}`]} />
+        : focus.rGeo > 0
+          ? <CardSprite accent="#c4163f" position={focus.p} lines={[`Point #${focus.i + 1}: no return`, `Reflectivity  ${focus.rho.toFixed(2)}`, `Intensity  ${focus.IGeo.toFixed(3)} < ${DETECT}`, 'Too little light came back']} />
+          : <CardSprite accent="#666666" position={focus.p} lines={[`Point #${focus.i + 1}: no return`, 'This beam hit nothing']} />)}
       {focus?.hit && <mesh position={focus.p} raycast={() => null}><ringGeometry args={[0.14, 0.2, 24]} /><meshBasicMaterial color="#ff9f0a" side={THREE.DoubleSide} depthTest={false} /></mesh>}
       {focus?.hit && <Pulse from={new THREE.Vector3(0, 0, zs)} to={new THREE.Vector3(...focus.p)} slow={slow} playing={playing} onTick={setPhase} />}
     </Viewport>
@@ -322,7 +351,6 @@ export default function Tab0() {
         <div style={{ display: 'grid', gap: 12, paddingTop: 12 }}>
           <Seg value={lesson} onChange={setLesson} options={[{ value: 'tof', label: 'Time of flight' }, { value: 'div', label: 'Beam divergence' }, { value: 'fov', label: 'Field of view' }]} label="Lesson" />
           {lessonBox}
-          {info}
         </div>
       )}
       {pane === 'controls' && <>
@@ -359,6 +387,7 @@ export default function Tab0() {
       overlays={
         <>
           <KindLegend items={[{ color: '#007aff', label: 'Laser beams' }, { color: '#34c759', label: 'Beam divergence / spot' }, { color: '#ff9f0a', label: 'Selected point' }]} />
+          <div className="sr-only" data-testid="concept-point-info" aria-live="polite">{focus?.hit ? `${sel !== null ? `Point ${focus.i + 1}` : 'Middle beam'}: position ${focus.p.map((v) => v.toFixed(2)).join(', ')} m, range ${focus.r.toFixed(2)} m, reflectivity ${focus.rho.toFixed(2)}, Intensity ${focus.I.toFixed(3)}` : 'No return'}</div>
           <FrontInsets beams={beams} scene={scene} hFov={hFov} vFov={vFov} D={D} zs={zs} />
           <button className="btn primary overlay" style={{ left: '50%', bottom: 14, transform: 'translateX(-50%)', minWidth: 120 }} onClick={() => setPlaying(!playing)} data-testid="play-pause" aria-label={playing ? 'Pause the light pulse' : 'Play the light pulse'}>{playing ? <Pause size={16} /> : <Play size={16} />}{playing ? 'Pause' : 'Play'}</button>
           <div className="overlay" style={{ right: 12, bottom: 12, display: 'grid', gap: 8, justifyItems: 'end' }} data-testid="stats-card">
