@@ -8,7 +8,7 @@ import { Callout, Eq, Section, Seg, Slider, Toggle, Btn } from '../ui/controls';
 import { KindLegend } from '../ui/shared';
 import { SceneLayer, TextSprite, roundPointTexture } from '../ui/three';
 import { MiniChart } from './common';
-import { box, cyl, finalize, RayScene, newHit, SceneDef, primAABB } from '../scenes/geometry';
+import { box, cyl, sph, finalize, RayScene, newHit, SceneDef, primAABB } from '../scenes/geometry';
 import { makeRng } from '../core/rng';
 import { viridis, turbo } from '../core/colorize';
 import { D2R } from '../core/math';
@@ -20,12 +20,21 @@ type Lesson = 'tof' | 'div' | 'fov';
 
 interface Beam { i: number; az: number; el: number; hit: boolean; r: number; p: [number, number, number]; n: [number, number, number]; obj: number; mixed: boolean; cos: number; rho: number; I: number }
 
+/** A simple human-like figure (legs, torso, arms, head) standing at x = px, facing the sensor. */
+function personParts(px: number) {
+  return [
+    cyl([px, 0.11, 0.45], 0.085, 0.9, 'z'), cyl([px, -0.11, 0.45], 0.085, 0.9, 'z'),
+    box([px, 0, 1.2], [0.24, 0.42, 0.6]),
+    cyl([px, 0.28, 1.17], 0.05, 0.6, 'z'), cyl([px, -0.28, 1.17], 0.05, 0.6, 'z'),
+    sph([px, 0, 1.66], 0.12),
+  ];
+}
+
 function conceptScene(D: number, wallYawDeg: number, rho: number): SceneDef {
   const mat = (r: number) => ({ color: [200, 200, 205] as [number, number, number], reflectivity: r });
   const objs = finalize([
     { id: 'wall', name: 'Wall', classId: 2, structural: true, color: [205, 208, 214], reflectivity: rho, parts: [box([D + 0.1, 0, 4], [0.2, 60, 24], wallYawDeg * D2R)] },
-    { id: 'box', name: 'Box', classId: 6, color: [239, 120, 100], reflectivity: rho, parts: [box([D * 0.55, 0.9, 0.5], [0.8, 0.8, 1.0], 0.3)] },
-    { id: 'pole', name: 'Pole', classId: 18, color: [250, 190, 70], reflectivity: rho, parts: [cyl([D * 0.4, -1.6, 1.0], 0.14, 2, 'z')] },
+    { id: 'person', name: 'Person', classId: 20, color: [255, 140, 60], reflectivity: rho, parts: personParts(Math.min(5, D * 0.45)) },
   ] as never);
   void mat;
   return { id: 'concept', name: 'concept', description: '', objects: objs, bounds: { min: [0, -30, -8], max: [D + 3, 30, 16] }, defaultPose: { x: 0, y: 0, z: 1.5, yaw: 0 }, cameraHome: [0, 0, 0], cameraTarget: [0, 0, 0] };
@@ -96,7 +105,7 @@ function Footprint({ b, radius }: { b: Beam; radius: number }) {
 export default function Tab0() {
   const [lesson, setLesson] = useState<Lesson>('tof');
   const [hFov, setHFov] = useState(60), [vFov, setVFov] = useState(30);
-  const [nH, setNH] = useState(13), [nV, setNV] = useState(7);
+  const [nH, setNH] = useState(31), [nV, setNV] = useState(15);
   const [div, setDiv] = useState(20); // full-angle divergence, mrad
   const [D, setD] = useState(12);
   const [noiseMm, setNoiseMm] = useState(0);
@@ -207,7 +216,7 @@ export default function Tab0() {
 
   const viewport = (
     <Viewport home={[-5, -13, 8]} target={[D / 2, 0, 1.6]} threshold={0.18} id="concept" hideGrid hideAxes>
-      <SceneLayer scene={scene} opacity={0.55} showCeiling interactive={false} />
+      <SceneLayer scene={scene} opacity={0.55} showCeiling interactive={false} highlight={['person']} />
       {/* sensor */}
       <group position={[0, 0, zs]}>
         <mesh raycast={() => null}><boxGeometry args={[0.28, 0.28, 0.3]} /><meshStandardMaterial color="#007aff" /></mesh>
@@ -219,7 +228,7 @@ export default function Tab0() {
         pts={Array.from({ length: 33 }, (_, k) => { const a = (-hFov / 2 + (hFov * k) / 32) * D2R, R = Math.min(3.4, D * 0.5); return [R * Math.cos(a), R * Math.sin(a), zs] as V3; })} />
       <AngleArc active={active === 'v'} color="#8e3fd1" label={`${vFov}° vertical FOV`} labelAt={[Math.min(2.8, D * 0.42) * Math.cos(vFov * D2R / 2) + 0.2, 0, zs + Math.min(2.8, D * 0.42) * Math.sin(vFov * D2R / 2) + 0.35]}
         pts={Array.from({ length: 25 }, (_, k) => { const e = (-vFov / 2 + (vFov * k) / 24) * D2R, R = Math.min(2.8, D * 0.42); return [R * Math.cos(e), 0, zs + R * Math.sin(e)] as V3; })} />
-      <TextSprite text={`${nH} × ${nV} beams`} position={[0.2, 0, zs - 0.55]} bg={active === 'beams' ? 'rgba(217,122,0,0.95)' : 'rgba(0,70,160,0.9)'} />
+      <TextSprite text={`${nH} × ${nV} beams`} position={[0.4, 1.4, zs - 0.7]} bg={active === 'beams' ? 'rgba(217,122,0,0.95)' : 'rgba(0,70,160,0.9)'} />
       {focus?.hit && (() => { const sp = spot(focus.r), up = new THREE.Vector3(...focus.n).cross(new THREE.Vector3(0, 0, 1)).length() > 0.01 ? new THREE.Vector3(0, 0, 1) : new THREE.Vector3(0, 1, 0); const a: V3 = [focus.p[0] - focus.n[0] * 0.0 + 0.03, focus.p[1], focus.p[2] - (up.z ? sp / 2 : 0)], b: V3 = [a[0], a[1], a[2] + sp]; return <DimArrow a={a} b={b} label={`spot ${(sp * 100).toFixed(1)} cm`} active={active === 'spot'} color="#1f9d3d" labelOnActive />; })()}
       {showAxes && (
         <group position={[0, 0, zs]}>
@@ -234,7 +243,7 @@ export default function Tab0() {
       )}
       <TextSprite text="Sensor" position={[0, -1.1, zs - 0.1]} bg="rgba(0,70,160,0.9)" />
       {fovOutline.edges.map((pts, i) => <Line key={`e${i}`} points={pts} color="#000000" lineWidth={1.8} depthTest={false} />)}
-      <lineSegments geometry={lineGeom} raycast={() => null}><lineBasicMaterial color="#007aff" transparent opacity={0.32} /></lineSegments>
+      <lineSegments geometry={lineGeom} raycast={() => null}><lineBasicMaterial color="#007aff" transparent opacity={0.2} /></lineSegments>
       {/* beam divergence cone for the focused beam */}
       {focus?.hit && lesson !== 'fov' && (
         <mesh position={[focus.p[0] / 2, focus.p[1] / 2, zs + (focus.p[2] - zs) / 2]} quaternion={new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), new THREE.Vector3(focus.p[0], focus.p[1], focus.p[2] - zs).normalize())} raycast={() => null}>
@@ -242,7 +251,7 @@ export default function Tab0() {
           <meshBasicMaterial color={'#34c759'} transparent opacity={0.22} depthWrite={false} side={THREE.DoubleSide} />
         </mesh>
       )}
-      {lesson === 'div' && beams.length <= 260 && beams.filter((b) => b.hit).map((b) => <Footprint key={b.i} b={b} radius={spot(b.r) / 2} />)}
+      {lesson === 'div' && beams.length <= 520 && beams.filter((b) => b.hit).map((b) => <Footprint key={b.i} b={b} radius={spot(b.r) / 2} />)}
       <points geometry={hitGeom} frustumCulled={false} onClick={(e) => { e.stopPropagation(); if (e.index !== undefined) setSel(e.index); }}>
         <pointsMaterial vertexColors size={6} sizeAttenuation={false} map={roundPointTexture()} alphaTest={0.5} />
       </points>
@@ -308,8 +317,8 @@ export default function Tab0() {
       <Section title="Sensor">
         <Slider label="Horizontal field of view" value={hFov} min={5} max={360} step={1} unit="°" onChange={setHFov} />
         <Slider label="Vertical field of view" value={vFov} min={0} max={90} step={1} unit="°" onChange={setVFov} />
-        <Slider label="Horizontal resolution (beams per row)" value={nH} min={1} max={41} step={1} onChange={setNH} />
-        <Slider label="Vertical resolution (channels)" value={nV} min={1} max={21} step={1} onChange={setNV} />
+        <Slider label="Horizontal resolution (beams per row)" value={nH} min={1} max={81} step={1} onChange={setNH} />
+        <Slider label="Vertical resolution (channels)" value={nV} min={1} max={41} step={1} onChange={setNV} />
         <Slider label="Beam divergence" value={div} min={0.5} max={100} step={0.5} unit=" mrad" onChange={setDiv} />
       </Section>
       <Section title="Surface">
@@ -338,6 +347,7 @@ export default function Tab0() {
       overlays={
         <>
           <KindLegend items={[{ color: '#007aff', label: 'Laser beams' }, { color: '#34c759', label: 'Beam divergence / spot' }, { color: '#ff9f0a', label: 'Selected point' }]} />
+          <PersonPoints beams={beams} scene={scene} />
           <button className="btn primary overlay" style={{ left: '50%', bottom: 14, transform: 'translateX(-50%)', minWidth: 120 }} onClick={() => setPlaying(!playing)} data-testid="play-pause" aria-label={playing ? 'Pause the light pulse' : 'Play the light pulse'}>{playing ? <Pause size={16} /> : <Play size={16} />}{playing ? 'Pause' : 'Play'}</button>
           <div className="overlay" style={{ right: 12, bottom: 12, display: 'grid', gap: 8, justifyItems: 'end' }} data-testid="stats-card">
             {lesson === 'tof' && focus?.hit && <div className="glass card" style={{ minWidth: 210 }}><div className="caption">Stopwatch (slowed down)</div><div className="mono" style={{ fontSize: '1.5rem', fontWeight: 650 }}>{clock.toFixed(1)} ns</div><div className="caption">{phase < 0.5 ? 'light going out' : 'light coming back'}</div></div>}
@@ -349,6 +359,41 @@ export default function Tab0() {
         </>
       }
     />
+  );
+}
+
+
+/** Front view of only the points that landed on the person: this is what "a point cloud" of the person is. */
+function PersonPoints({ beams, scene }: { beams: Beam[]; scene: SceneDef }) {
+  const ref = useRef<HTMLCanvasElement>(null);
+  const idx = scene.objects.findIndex((o) => o.id === 'person');
+  const pts = beams.filter((b) => b.hit && b.obj === idx);
+  useEffect(() => {
+    const cv = ref.current; if (!cv || idx < 0) return;
+    const W = 150, H = 205, dpr = window.devicePixelRatio || 1;
+    cv.width = W * dpr; cv.height = H * dpr;
+    const g = cv.getContext('2d')!; g.scale(dpr, dpr);
+    g.fillStyle = '#ffffff'; g.fillRect(0, 0, W, H);
+    const sc = 88, X = (y: number) => W / 2 - y * sc, Y = (z: number) => H - 22 - z * sc;
+    // faint outline of the real person
+    g.strokeStyle = 'rgba(0,0,0,.22)'; g.setLineDash([4, 3]); g.lineWidth = 1;
+    for (const p of scene.objects[idx].parts) {
+      if (p.kind === 'sphere') { g.beginPath(); g.arc(X(p.c[1]), Y(p.c[2]), p.r! * sc, 0, 7); g.stroke(); }
+      else if (p.kind === 'box') g.strokeRect(X(p.c[1] + p.size![1] / 2), Y(p.c[2] + p.size![2] / 2), p.size![1] * sc, p.size![2] * sc);
+      else g.strokeRect(X(p.c[1] + p.r!), Y(p.c[2] + p.h! / 2), 2 * p.r! * sc, p.h! * sc);
+    }
+    g.setLineDash([]);
+    g.strokeStyle = '#ccc'; g.beginPath(); g.moveTo(10, Y(0)); g.lineTo(W - 10, Y(0)); g.stroke();
+    g.fillStyle = '#e61e28';
+    for (const b of pts) { g.beginPath(); g.arc(X(b.p[1]), Y(b.p[2]), 3.2, 0, 7); g.fill(); }
+  }, [pts.length, beams, scene, idx]);
+  return (
+    <div className="overlay glass card" style={{ right: 12, top: 70, width: 176, padding: 9 }} data-testid="person-points">
+      <div style={{ fontWeight: 650, fontSize: '0.95rem' }}>Points on the person</div>
+      <div className="caption" style={{ marginBottom: 6 }}>{pts.length} points = the person's point cloud</div>
+      <canvas ref={ref} style={{ width: 150, height: 205, borderRadius: 10, display: 'block' }} aria-label="Points that landed on the person" />
+      <div className="caption" style={{ marginTop: 4 }}>More beams = more points = clearer shape.</div>
+    </div>
   );
 }
 

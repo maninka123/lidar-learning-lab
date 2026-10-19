@@ -32,6 +32,7 @@ test.describe('LiDAR Learning Lab', () => {
     await page.getByRole('button', { name: 'Notes', exact: true }).click();
     await expect(page.getByTestId('concept-point-info')).toContainText('Intensity');
     await expect(page.getByTestId('stats-card')).toContainText('Time of flight');
+    await expect(page.getByTestId('person-points')).toContainText('Points on the person');
     await expect(page.getByRole('button', { name: 'Exercise' })).toHaveCount(0);
     await expect(page.getByTestId('dataset-menu')).toHaveCount(0);
     await page.getByRole('button', { name: 'Controls', exact: true }).click();
