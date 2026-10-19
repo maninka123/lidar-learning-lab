@@ -130,7 +130,7 @@ export default function Tab0() {
     const dirOf = (az: number, el: number): [number, number, number] => [Math.cos(el) * Math.cos(az), Math.cos(el) * Math.sin(az), Math.sin(el)];
     const r0 = 15;
     for (let j = 0; j < nV; j++) for (let i = 0; i < nH; i++) {
-      const az = (nH === 1 ? 0 : -hFov / 2 + (hFov * i) / (nH - 1)) * D2R, el = (nV === 1 ? 0 : -vFov / 2 + (vFov * j) / (nV - 1)) * D2R;
+      const az = (nH === 1 ? 0 : -hFov / 2 + (hFov * i) / (hFov >= 360 ? nH : nH - 1)) * D2R, el = (nV === 1 ? 0 : -vFov / 2 + (vFov * j) / (nV - 1)) * D2R;
       const d = dirOf(az, el);
       const ok = rs.cast(0, 0, zs, d[0], d[1], d[2], 0.05, 80, h);
       const jitter = noiseMm / 1000 * rng.gauss();
@@ -151,7 +151,7 @@ export default function Tab0() {
   const focus = sel !== null && beams[sel] ? beams[sel] : centre;
   const spot = (r: number) => 2 * r * Math.tan(div / 2000);
   const dtNs = focus?.hit ? ((2 * focus.r) / C) * 1e9 : 0;
-  const dAz = nH > 1 ? hFov / (nH - 1) : 0, dEl = nV > 1 ? vFov / (nV - 1) : 0;
+  const dAz = nH > 1 ? hFov / (hFov >= 360 ? nH : nH - 1) : 0, dEl = nV > 1 ? vFov / (nV - 1) : 0;
   const spacingH = focus ? focus.r * Math.tan(dAz * D2R) : 0;
   const hits = beams.filter((b) => b.hit);
   
@@ -168,6 +168,26 @@ export default function Tab0() {
     g.computeBoundingSphere();
     return g;
   }, [beams, colourBy, rho]); // eslint-disable-line react-hooks/exhaustive-deps
+  // thin outline of the field of view, drawn only where it lands on an object (no lines into empty space)
+  const fovOutline = useMemo(() => {
+    const rs = new RayScene(scene), h = newHit();
+    const pt = (az: number, el: number): V3 | null => {
+      const d: V3 = [Math.cos(el) * Math.cos(az), Math.cos(el) * Math.sin(az), Math.sin(el)];
+      if (!rs.cast(0, 0, zs, d[0], d[1], d[2], 0.05, 80, h)) return null;
+      return [d[0] * h.t, d[1] * h.t, zs + d[2] * h.t];
+    };
+    const runs = (pts: (V3 | null)[]): V3[][] => {
+      const out: V3[][] = []; let cur: V3[] = [];
+      for (const p of pts) { if (p) cur.push(p); else { if (cur.length > 1) out.push(cur); cur = []; } }
+      if (cur.length > 1) out.push(cur);
+      return out;
+    };
+    const full = hFov >= 360, N = full ? 144 : 48, M = 24;
+    const a0 = (-hFov / 2) * D2R, a1 = (hFov / 2) * D2R, e0 = (-vFov / 2) * D2R, e1 = (vFov / 2) * D2R;
+    const row = (el: number) => runs(Array.from({ length: N + 1 }, (_, k) => pt(a0 + ((a1 - a0) * k) / N, el)));
+    const col = (az: number) => runs(Array.from({ length: M + 1 }, (_, k) => pt(az, e0 + ((e1 - e0) * k) / M)));
+    return { edges: [...row(e1), ...row(e0), ...(full ? [] : [...col(a0), ...col(a1)])] };
+  }, [scene, hFov, vFov]);
   const lineGeom = useMemo(() => {
     const g = new THREE.BufferGeometry();
     const p = new Float32Array(beams.length * 6);
@@ -201,6 +221,7 @@ export default function Tab0() {
       <TextSprite text={`${nH} × ${nV} beams`} position={[0.2, 0, zs - 0.55]} bg={active === 'beams' ? 'rgba(217,122,0,0.95)' : 'rgba(0,70,160,0.9)'} />
       {focus?.hit && (() => { const sp = spot(focus.r), up = new THREE.Vector3(...focus.n).cross(new THREE.Vector3(0, 0, 1)).length() > 0.01 ? new THREE.Vector3(0, 0, 1) : new THREE.Vector3(0, 1, 0); const a: V3 = [focus.p[0] - focus.n[0] * 0.0 + 0.03, focus.p[1], focus.p[2] - (up.z ? sp / 2 : 0)], b: V3 = [a[0], a[1], a[2] + sp]; return <DimArrow a={a} b={b} label={`spot ${(sp * 100).toFixed(1)} cm`} active={active === 'spot'} color="#1f9d3d" labelOnActive />; })()}
       <TextSprite text="Sensor" position={[0, 0, zs + 0.5]} bg="rgba(0,70,160,0.9)" />
+      {fovOutline.edges.map((pts, i) => <Line key={`e${i}`} points={pts} color="#0a60c9" lineWidth={1.6} depthTest={false} />)}
       <lineSegments geometry={lineGeom} raycast={() => null}><lineBasicMaterial color="#007aff" transparent opacity={0.32} /></lineSegments>
       {/* beam divergence cone for the focused beam */}
       {focus?.hit && lesson !== 'fov' && (
@@ -273,7 +294,7 @@ export default function Tab0() {
       )}
       {pane === 'controls' && <>
       <Section title="Sensor">
-        <Slider label="Horizontal field of view" value={hFov} min={5} max={170} step={1} unit="°" onChange={setHFov} />
+        <Slider label="Horizontal field of view" value={hFov} min={5} max={360} step={1} unit="°" onChange={setHFov} />
         <Slider label="Vertical field of view" value={vFov} min={0} max={90} step={1} unit="°" onChange={setVFov} />
         <Slider label="Horizontal resolution (beams per row)" value={nH} min={1} max={41} step={1} onChange={setNH} />
         <Slider label="Vertical resolution (channels)" value={nV} min={1} max={21} step={1} onChange={setNV} />
@@ -372,7 +393,9 @@ function FovDiagrams({ beams, scene, hFov, vFov, D, zs }: { beams: Beam[]; scene
       const half = (mode === 'top' ? hFov : vFov) / 2 * D2R, R = xmax;
       const zo = mode === 'top' ? 0 : zs;
       g.fillStyle = 'rgba(0,122,255,.12)'; g.strokeStyle = 'rgba(0,122,255,.8)'; g.lineWidth = 1.5;
-      g.beginPath(); g.moveTo(X(0), Y(zo)); g.lineTo(X(R * Math.cos(half)), Y(zo + R * Math.sin(half))); g.lineTo(X(R * Math.cos(half)), Y(zo - R * Math.sin(half))); g.closePath(); g.fill(); g.stroke();
+      g.beginPath(); g.moveTo(X(0), Y(zo));
+      if (half >= Math.PI - 0.02) g.arc(X(0), Y(zo), R * sc, 0, Math.PI * 2); else g.arc(X(0), Y(zo), R * sc, -half, half);
+      g.closePath(); g.fill(); g.stroke();
       g.strokeStyle = 'rgba(0,122,255,.35)'; g.lineWidth = 1;
       for (const bm of beams) { if (!bm.hit) continue; g.beginPath(); g.moveTo(X(0), Y(zo)); g.lineTo(X(bm.p[0]), Y(mode === 'top' ? bm.p[1] : bm.p[2])); g.stroke(); }
       g.fillStyle = '#007aff'; g.beginPath(); g.arc(X(0), Y(zo), 5, 0, 7); g.fill();
