@@ -177,7 +177,7 @@ export default function Tab2() {
   return (
     <TabFrame
       title="Point Cloud Explorer"
-      tab={1}
+      tab={2}
       viewport={viewport}
       controls={controls}
       learn={learn}

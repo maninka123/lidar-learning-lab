@@ -6,7 +6,7 @@ Participants explore 3D scenes, drive virtual LiDAR scanners (real ray casting a
 
 **Live demo: https://maninka123.github.io/lidar-learning-lab/**
 
-**Live tools bundled:** nine lecture-aligned tabs · three procedural scenes · PLY / PCD / LAS import · PLY / PCD export · 9 auto-checked challenges with JSON / PDF summary.
+**Live tools bundled:** ten lecture-aligned tabs (light theme) · three procedural scenes · PLY / PCD / LAS import · PLY / PCD export · 9 auto-checked challenges with JSON / PDF summary.
 
 ## Quick start
 
@@ -30,15 +30,16 @@ First time running the end-to-end tests: `npx playwright install chromium`.
 
 | # | Tab | What you can do |
 |---|-----|-----------------|
-| 1 | **LiDAR Fundamentals** | Place and aim a scanner; set FOV, angular resolution, channels, min/max range, frequency, returns, noise and reflectivity; 3D and 2D-plan views, visible rays and hit points; compare point count, spacing, coverage and occlusion; presets incl. documented VLP-16, Ouster OS1 and Livox Mid-360 *example profiles*, plus prism (Risley), MEMS micro-mirror and solid-state-array scan architectures with a scan-pattern preview. |
-| 2 | **Point Cloud Explorer** | XYZ / height / range / intensity / RGB / semantic / normal colouring, point picking with attributes, point-to-point distances, clipping and cropping, upload (PLY, PCD, LAS) and export (PLY, PCD). |
-| 3 | **TLS & MLS Laboratory** | Tripod stations, overlap and missing-region visualisation, station registration error + ICP repair; moving platform with editable waypoints, time-dependent poses, animation and motion-distortion demo; TLS vs MLS comparison table. |
-| 4 | **SLAM & Registration** | Closed-loop robot run with drift accumulation (noisy odometry or ICP scan matching), loop closure *teaching approximation*, manual rigid error controls, point-to-point ICP with iteration scrubber, RMSE and fitness. |
-| 5 | **Point Cloud Processing** | Add/reorder/remove pipeline steps (crop, voxel, random downsample, noise, outliers, dropout, statistical & radius outlier removal, normals, rigid transform) on an **immutable original**; split comparison with synced cameras; deterministic seed; export. |
-| 6 | **Clustering & Segmentation** | RANSAC planes, ground removal, Euclidean clustering, DBSCAN, parameter-sensitivity sweep, A/B comparison, over-/under-segmentation scoring against ground truth. |
-| 7 | **Image to 3D** | Photo, LiDAR cloud, reconstruction, voxel-surface mesh, overlay and error map; synced split view; similarity alignment (rotation, translation **and scale**); error statistics only after a valid alignment. |
-| 8 | **Scene Graphs & 3D AI** | Nodes with id, label, position, size, bbox, source, confidence; geometric relations (near, above, below, inside, left/right, intersects, blocks path); interactive graph ↔ 3D selection; deterministic offline question answering; notes on integrating a real LLM; link to the *local-llm-fit* model-fit tool. |
-| 9 | **Challenges** | Nine automatically checked exercises, progress tracking, JSON/PDF summary download and a suggested 60-minute agenda. |
+| 1 | **What is LiDAR?** | Concept page with no scene: a sensor, a wall and a few objects. Watch a laser pulse travel out and back (time of flight, R = cΔt/2), see beam divergence grow with range (spot size, mixed pixels), and explore horizontal/vertical FOV in 3D, top and side views. Change sensor characteristics live, click any point to read its position, range, incidence angle and intensity (and how reflectivity, distance and tilt change it). Includes three self-check questions. |
+| 2 | **Scanner Simulator** | Place and aim a scanner; set FOV, angular resolution, channels, min/max range, frequency, returns, noise and reflectivity; 3D and 2D-plan views, visible rays and hit points; compare point count, spacing, coverage and occlusion; presets incl. documented VLP-16, Ouster OS1 and Livox Mid-360 *example profiles*, plus prism (Risley), MEMS micro-mirror and solid-state-array scan architectures with a scan-pattern preview. |
+| 3 | **Point Cloud Explorer** | XYZ / height / range / intensity / RGB / semantic / normal colouring, point picking with attributes, point-to-point distances, clipping and cropping, upload (PLY, PCD, LAS) and export (PLY, PCD). |
+| 4 | **TLS & MLS Laboratory** | Tripod stations, overlap and missing-region visualisation, station registration error + ICP repair; moving platform with editable waypoints, time-dependent poses, animation and motion-distortion demo; TLS vs MLS comparison table. |
+| 5 | **SLAM & Registration** | Closed-loop robot run with drift accumulation (noisy odometry or ICP scan matching), loop closure *teaching approximation*, manual rigid error controls, point-to-point ICP with iteration scrubber, RMSE and fitness. |
+| 6 | **Point Cloud Processing** | Add/reorder/remove pipeline steps (crop, voxel, random downsample, noise, outliers, dropout, statistical & radius outlier removal, normals, rigid transform) on an **immutable original**; split comparison with synced cameras; deterministic seed; export. |
+| 7 | **Clustering & Segmentation** | RANSAC planes, ground removal, Euclidean clustering, DBSCAN, parameter-sensitivity sweep, A/B comparison, over-/under-segmentation scoring against ground truth. |
+| 8 | **Image to 3D** | Photo, LiDAR cloud, reconstruction, voxel-surface mesh, overlay and error map; synced split view; similarity alignment (rotation, translation **and scale**); error statistics only after a valid alignment. |
+| 9 | **Scene Graphs & 3D AI** | Nodes with id, label, position, size, bbox, source, confidence; geometric relations (near, above, below, inside, left/right, intersects, blocks path); interactive graph ↔ 3D selection; deterministic offline question answering; notes on integrating a real LLM; link to the *local-llm-fit* model-fit tool. |
+| 10 | **Challenges** | Ten automatically checked exercises (a warm-up plus nine), progress tracking, JSON/PDF summary download and a suggested 60-minute agenda. |
 
 ## What is real, and what is a teaching simplification
 

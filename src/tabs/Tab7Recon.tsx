@@ -198,7 +198,7 @@ export default function Tab7() {
   return (
     <TabFrame
       title="Image to 3D Reconstruction"
-      tab={6}
+      tab={7}
       viewport={viewport}
       controls={controls}
       learn={learn}

@@ -232,7 +232,7 @@ export default function Tab4() {
   return (
     <TabFrame
       title="SLAM & Registration"
-      tab={3}
+      tab={4}
       viewport={viewport}
       controls={controls}
       learn={learn}

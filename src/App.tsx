@@ -1,9 +1,10 @@
 import { Suspense, lazy, ReactNode } from 'react';
-import { Radar, Boxes, Route, GitMerge, Filter, Network, Camera, Share2, Trophy, Check } from './ui/icons';
+import { Radar, Info, Boxes, Route, GitMerge, Filter, Network, Camera, Share2, Trophy, Check } from './ui/icons';
 import { useLab } from './state/store';
 import { Toast } from './ui/shared';
 import { CHALLENGES } from './exercises/defs';
 
+const Tab0 = lazy(() => import('./tabs/Tab0Concepts'));
 const Tab1 = lazy(() => import('./tabs/Tab1Fundamentals'));
 const Tab2 = lazy(() => import('./tabs/Tab2Explorer'));
 const Tab3 = lazy(() => import('./tabs/Tab3TlsMls'));
@@ -15,7 +16,8 @@ const Tab8 = lazy(() => import('./tabs/Tab8SceneGraph'));
 const Tab9 = lazy(() => import('./tabs/Tab9Challenges'));
 
 const TABS: { label: string; icon: ReactNode; el: ReactNode }[] = [
-  { label: 'LiDAR Fundamentals', icon: <Radar size={18} />, el: <Tab1 /> },
+  { label: 'What is LiDAR?', icon: <Info size={18} />, el: <Tab0 /> },
+  { label: 'Scanner Simulator', icon: <Radar size={18} />, el: <Tab1 /> },
   { label: 'Point Cloud Explorer', icon: <Boxes size={18} />, el: <Tab2 /> },
   { label: 'TLS & MLS Laboratory', icon: <Route size={18} />, el: <Tab3 /> },
   { label: 'SLAM & Registration', icon: <GitMerge size={18} />, el: <Tab4 /> },

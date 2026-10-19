@@ -59,6 +59,7 @@ export interface LabState {
   toast: { msg: string; kind: 'info' | 'ok' | 'warn' | 'error'; n: number } | null;
   scanInfo: { stats: ScanResult['stats']; viz?: ScanResult['viz']; coverage?: CoverageInfo | null } | null;
   usedColorModes: string[];
+  concepts: { tof: boolean; div: boolean; fov: boolean };
   scanLog: { label: string; hRes: number; channels: number; maxRange: number; points: number; spacing: number; coveragePct: number | null; occludedPct: number | null }[];
   exportsLog: { name: string; fmt: string; count: number }[];
   undoCount: number;
@@ -125,7 +126,7 @@ export function emptyGt() {
 }
 
 export const DEFAULT_VIEW: ViewOpts = {
-  colorMode: 'height', pointSize: 3, background: 'dark', showGrid: true, showAxes: true, showScene: true, sceneOpacity: 0.28, showCeiling: false,
+  colorMode: 'height', pointSize: 3, background: 'light', showGrid: true, showAxes: true, showScene: true, sceneOpacity: 0.28, showCeiling: false,
   renderBudget: 150000, clipOn: false, clipMin: -1, clipMax: 20, showRays: true,
 };
 
@@ -153,6 +154,7 @@ function initial() {
     toast: null,
     scanInfo: null,
     usedColorModes: [] as string[],
+    concepts: { tof: false, div: false, fov: false },
     scanLog: [] as LabState['scanLog'],
     exportsLog: [] as LabState['exportsLog'],
     undoCount: 0,

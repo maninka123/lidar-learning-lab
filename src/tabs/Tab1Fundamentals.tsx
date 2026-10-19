@@ -187,8 +187,8 @@ export default function Tab1() {
 
   return (
     <TabFrame
-      title="LiDAR Fundamentals"
-      tab={0}
+      title="Scanner Simulator"
+      tab={1}
       viewport={viewport}
       controls={controls}
       learn={learn}

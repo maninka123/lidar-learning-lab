@@ -53,7 +53,7 @@ function DatasetMenu() {
       <div className="field">
         <label>Upload a point cloud (PLY, PCD, LAS)</label>
         <Seg value={kind} onChange={setKind} options={[{ value: 'measured', label: 'Real / measured' }, { value: 'simulated', label: 'Synthetic' }]} label="Data origin" />
-        <input ref={fileRef} type="file" accept=".ply,.pcd,.las,.laz" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) { void uploadCloud(f, kind); s.setTab(1); } e.target.value = ''; }} data-testid="upload-input" />
+        <input ref={fileRef} type="file" accept=".ply,.pcd,.las,.laz" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) { void uploadCloud(f, kind); s.setTab(2); } e.target.value = ''; }} data-testid="upload-input" />
         <Btn icon={<Upload size={16} />} onClick={() => fileRef.current?.click()} block>Choose file…</Btn>
         <span className="caption">LAZ needs converting to LAS first. Large LAS files are thinned to 2 M points.</span>
       </div>
