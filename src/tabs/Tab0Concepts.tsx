@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { useFrame } from '@react-three/fiber';
+import { Line } from '@react-three/drei';
 import { Viewport } from '../ui/Viewport';
 import { TabFrame } from '../ui/TabFrame';
 import { Callout, Eq, Section, Seg, Slider, Toggle, Btn } from '../ui/controls';
@@ -29,6 +30,39 @@ function conceptScene(D: number, wallYawDeg: number, rho: number): SceneDef {
   ] as never);
   void mat;
   return { id: 'concept', name: 'concept', description: '', objects: objs, bounds: { min: [0, -7, 0], max: [D + 3, 7, 5] }, defaultPose: { x: 0, y: 0, z: 1.5, yaw: 0 }, cameraHome: [0, 0, 0], cameraTarget: [0, 0, 0] };
+}
+
+
+type V3 = [number, number, number];
+function Head({ at, dir, color, size = 0.18 }: { at: V3; dir: V3; color: string; size?: number }) {
+  const q = useMemo(() => new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), new THREE.Vector3(...dir).normalize()), [dir[0], dir[1], dir[2]]); // eslint-disable-line react-hooks/exhaustive-deps
+  return <mesh position={at} quaternion={q} raycast={() => null}><coneGeometry args={[size * 0.45, size, 12]} /><meshBasicMaterial color={color} depthTest={false} /></mesh>;
+}
+/** Double-headed dimension arrow with a label. */
+function DimArrow({ a, b, label, active, color = '#1d1d1f' }: { a: V3; b: V3; label: string; active: boolean; color?: string }) {
+  const c = active ? '#ff9f0a' : color;
+  const d: V3 = [b[0] - a[0], b[1] - a[1], b[2] - a[2]], L = Math.hypot(...d) || 1, u: V3 = [d[0] / L, d[1] / L, d[2] / L];
+  return (
+    <group>
+      <Line points={[a, b]} color={c} lineWidth={active ? 4 : 2} depthTest={false} />
+      <Head at={a} dir={[-u[0], -u[1], -u[2]]} color={c} />
+      <Head at={b} dir={u} color={c} />
+      <TextSprite text={label} position={[(a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2 + 0.28]} bg={active ? 'rgba(217,122,0,0.95)' : 'rgba(29,29,31,0.85)'} />
+    </group>
+  );
+}
+/** Angle arc with arrow heads at both ends. */
+function AngleArc({ pts, label, labelAt, active, color }: { pts: V3[]; label: string; labelAt: V3; active: boolean; color: string }) {
+  const c = active ? '#ff9f0a' : color;
+  const n = pts.length, t0: V3 = [pts[0][0] - pts[1][0], pts[0][1] - pts[1][1], pts[0][2] - pts[1][2]], t1: V3 = [pts[n - 1][0] - pts[n - 2][0], pts[n - 1][1] - pts[n - 2][1], pts[n - 1][2] - pts[n - 2][2]];
+  return (
+    <group>
+      <Line points={pts} color={c} lineWidth={active ? 4 : 2.5} depthTest={false} />
+      <Head at={pts[0]} dir={t0} color={c} />
+      <Head at={pts[n - 1]} dir={t1} color={c} />
+      <TextSprite text={label} position={labelAt} bg={active ? 'rgba(217,122,0,0.95)' : 'rgba(29,29,31,0.85)'} />
+    </group>
+  );
 }
 
 function Pulse({ from, to, slow, playing, onTick }: { from: THREE.Vector3; to: THREE.Vector3; slow: number; playing: boolean; onTick: (phase: number) => void }) {
@@ -75,6 +109,18 @@ export default function Tab0() {
   const [sel, setSel] = useState<number | null>(null);
   const [phase, setPhase] = useState(0);
   const [playing, setPlaying] = useState(true);
+  const [active, setActive] = useState<string | null>(null);
+  const prev = useRef<Record<string, number> | null>(null);
+  useEffect(() => {
+    const now = { h: hFov, v: vFov, beams: nH * 1000 + nV, spot: div, dist: D };
+    const was = prev.current; prev.current = now;
+    if (!was) return;
+    const changed = (Object.keys(now) as (keyof typeof now)[]).find((k) => now[k] !== was[k]);
+    if (!changed) return;
+    setActive(changed);
+    const t = setTimeout(() => setActive(null), 1800);
+    return () => clearTimeout(t);
+  }, [hFov, vFov, nH, nV, div, D]);
   const zs = 1.5;
 
   const scene = useMemo(() => conceptScene(D, wallYaw, rho), [D, wallYaw, rho]);
@@ -146,6 +192,15 @@ export default function Tab0() {
         <mesh raycast={() => null}><boxGeometry args={[0.28, 0.28, 0.3]} /><meshStandardMaterial color="#007aff" /></mesh>
         <mesh position={[0.17, 0, 0]} rotation={[0, 0, -Math.PI / 2]} raycast={() => null}><coneGeometry args={[0.07, 0.16, 12]} /><meshStandardMaterial color="#1d1d1f" /></mesh>
       </group>
+
+      {/* live measurements: they light up orange when you change the matching slider */}
+      <AngleArc active={active === 'h'} color="#007aff" label={`${hFov}° left-right`} labelAt={[Math.min(3.4, D * 0.5) * 1.12, 0, zs + 0.3]}
+        pts={Array.from({ length: 33 }, (_, k) => { const a = (-hFov / 2 + (hFov * k) / 32) * D2R, R = Math.min(3.4, D * 0.5); return [R * Math.cos(a), R * Math.sin(a), zs] as V3; })} />
+      <AngleArc active={active === 'v'} color="#8e3fd1" label={`${vFov}° up-down`} labelAt={[Math.min(2.8, D * 0.42) * Math.cos(vFov * D2R / 2) + 0.2, 0, zs + Math.min(2.8, D * 0.42) * Math.sin(vFov * D2R / 2) + 0.35]}
+        pts={Array.from({ length: 25 }, (_, k) => { const e = (-vFov / 2 + (vFov * k) / 24) * D2R, R = Math.min(2.8, D * 0.42); return [R * Math.cos(e), 0, zs + R * Math.sin(e)] as V3; })} />
+      <DimArrow a={[0, -2.6, 0.12]} b={[D, -2.6, 0.12]} label={`${D} m to the wall`} active={active === 'dist'} color="#1d1d1f" />
+      <TextSprite text={`${nH} × ${nV} beams`} position={[0.2, 0, zs - 0.55]} bg={active === 'beams' ? 'rgba(217,122,0,0.95)' : 'rgba(0,70,160,0.9)'} />
+      {focus?.hit && (() => { const sp = spot(focus.r), up = new THREE.Vector3(...focus.n).cross(new THREE.Vector3(0, 0, 1)).length() > 0.01 ? new THREE.Vector3(0, 0, 1) : new THREE.Vector3(0, 1, 0); const a: V3 = [focus.p[0] - focus.n[0] * 0.0 + 0.03, focus.p[1], focus.p[2] - (up.z ? sp / 2 : 0)], b: V3 = [a[0], a[1], a[2] + sp]; return <DimArrow a={a} b={b} label={`spot ${(sp * 100).toFixed(1)} cm`} active={active === 'spot'} color="#1f9d3d" />; })()}
       <TextSprite text="Sensor" position={[0, 0, zs + 0.5]} bg="rgba(0,70,160,0.9)" />
       <lineSegments geometry={lineGeom} raycast={() => null}><lineBasicMaterial color="#007aff" transparent opacity={0.32} /></lineSegments>
       {/* beam divergence cone for the focused beam */}
@@ -274,7 +329,7 @@ function TofChart({ dt, pw, tres, I, clock }: { dt: number; pw: number; tres: nu
     <svg viewBox={`0 0 ${W} ${H}`} width="100%" role="img" aria-label="Emitted and returned pulse" style={{ background: 'var(--fill)', borderRadius: 12 }}>
       <line x1={pad.l} x2={W - pad.r} y1={Y(0)} y2={Y(0)} stroke="var(--sep)" />
       <line x1={pad.l} x2={W - pad.r} y1={Y(0.15)} y2={Y(0.15)} stroke="var(--red)" strokeDasharray="4 3" opacity={0.7} />
-      <text x={W - pad.r} y={Y(0.15) - 3} textAnchor="end" fontSize="12" fill="var(--red)">detects light above this line</text>
+      <text x={W - pad.r} y={Y(0.15) - 3} textAnchor="end" fontSize="12" fill="var(--red)">detection level</text>
       <polyline fill="none" stroke="#d97a00" strokeWidth="2.2" points={pts(pw, 0.95)} />
       <polyline fill="none" stroke="#007aff" strokeWidth="2.2" points={pts(dt + pw, ret)} />
       <line x1={X(pw)} x2={X(dt + pw)} y1={Y(0.55)} y2={Y(0.55)} stroke="var(--text)" markerEnd="url(#tarr)" markerStart="url(#tarr)" />
@@ -282,7 +337,7 @@ function TofChart({ dt, pw, tres, I, clock }: { dt: number; pw: number; tres: nu
       <rect x={X(dt + pw) - (tres / tmax) * (W - pad.l - pad.r) / 2} y={Y(0.15) - 6} width={(tres / tmax) * (W - pad.l - pad.r)} height={12} fill="rgba(52,199,89,.45)" />
       <line x1={X(clock + pw)} x2={X(clock + pw)} y1={pad.t} y2={Y(0)} stroke="var(--text3)" strokeDasharray="2 3" />
       {ticks.map((t) => <text key={t} x={X(t)} y={H - 8} textAnchor={t === ticks[4] ? 'end' : 'middle'} fontSize="12" fill="var(--text2)">{t.toFixed(0)}{t === ticks[4] ? ' ns' : ''}</text>)}
-      <text x={pad.l - 4} y={pad.t + 8} textAnchor="end" fontSize="12" fill="#d97a00">flash sent</text>
+      <text x={pad.l + 4} y={pad.t + 8} textAnchor="start" fontSize="12" fill="#d97a00">flash sent</text>
       <text x={X(dt + pw)} y={Y(ret) - 6} textAnchor="middle" fontSize="12" fill="#007aff">light back</text>
       <defs><marker id="tarr" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="var(--text)" /></marker></defs>
     </svg>
