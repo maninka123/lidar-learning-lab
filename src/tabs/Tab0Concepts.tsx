@@ -39,7 +39,7 @@ function Head({ at, dir, color, size = 0.18 }: { at: V3; dir: V3; color: string;
   return <mesh position={at} quaternion={q} raycast={() => null}><coneGeometry args={[size * 0.45, size, 12]} /><meshBasicMaterial color={color} depthTest={false} /></mesh>;
 }
 /** Double-headed dimension arrow with a label. */
-function DimArrow({ a, b, label, active, color = '#1d1d1f' }: { a: V3; b: V3; label: string; active: boolean; color?: string }) {
+function DimArrow({ a, b, label, active, color = '#1d1d1f', labelOnActive = false }: { a: V3; b: V3; label: string; active: boolean; color?: string; labelOnActive?: boolean }) {
   const c = active ? '#ff9f0a' : color;
   const d: V3 = [b[0] - a[0], b[1] - a[1], b[2] - a[2]], L = Math.hypot(...d) || 1, u: V3 = [d[0] / L, d[1] / L, d[2] / L];
   return (
@@ -47,7 +47,7 @@ function DimArrow({ a, b, label, active, color = '#1d1d1f' }: { a: V3; b: V3; la
       <Line points={[a, b]} color={c} lineWidth={active ? 4 : 2} depthTest={false} />
       <Head at={a} dir={[-u[0], -u[1], -u[2]]} color={c} />
       <Head at={b} dir={u} color={c} />
-      <TextSprite text={label} position={[(a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2 + 0.28]} bg={active ? 'rgba(217,122,0,0.95)' : 'rgba(29,29,31,0.85)'} />
+      {(active || !labelOnActive) && <TextSprite text={label} position={[(a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2 + 0.28]} bg={active ? 'rgba(217,122,0,0.95)' : 'rgba(29,29,31,0.85)'} />}
     </group>
   );
 }
@@ -60,7 +60,7 @@ function AngleArc({ pts, label, labelAt, active, color }: { pts: V3[]; label: st
       <Line points={pts} color={c} lineWidth={active ? 4 : 2.5} depthTest={false} />
       <Head at={pts[0]} dir={t0} color={c} />
       <Head at={pts[n - 1]} dir={t1} color={c} />
-      <TextSprite text={label} position={labelAt} bg={active ? 'rgba(217,122,0,0.95)' : 'rgba(29,29,31,0.85)'} />
+      {active && <TextSprite text={label} position={labelAt} bg="rgba(217,122,0,0.95)" />}
     </group>
   );
 }
@@ -201,7 +201,7 @@ export default function Tab0() {
         pts={Array.from({ length: 25 }, (_, k) => { const e = (-vFov / 2 + (vFov * k) / 24) * D2R, R = Math.min(2.8, D * 0.42); return [R * Math.cos(e), 0, zs + R * Math.sin(e)] as V3; })} />
       <DimArrow a={[0, -2.6, 0.12]} b={[D, -2.6, 0.12]} label={`${D} m to the wall`} active={active === 'dist'} color="#1d1d1f" />
       <TextSprite text={`${nH} × ${nV} beams`} position={[0.2, 0, zs - 0.55]} bg={active === 'beams' ? 'rgba(217,122,0,0.95)' : 'rgba(0,70,160,0.9)'} />
-      {focus?.hit && (() => { const sp = spot(focus.r), up = new THREE.Vector3(...focus.n).cross(new THREE.Vector3(0, 0, 1)).length() > 0.01 ? new THREE.Vector3(0, 0, 1) : new THREE.Vector3(0, 1, 0); const a: V3 = [focus.p[0] - focus.n[0] * 0.0 + 0.03, focus.p[1], focus.p[2] - (up.z ? sp / 2 : 0)], b: V3 = [a[0], a[1], a[2] + sp]; return <DimArrow a={a} b={b} label={`spot ${(sp * 100).toFixed(1)} cm`} active={active === 'spot'} color="#1f9d3d" />; })()}
+      {focus?.hit && (() => { const sp = spot(focus.r), up = new THREE.Vector3(...focus.n).cross(new THREE.Vector3(0, 0, 1)).length() > 0.01 ? new THREE.Vector3(0, 0, 1) : new THREE.Vector3(0, 1, 0); const a: V3 = [focus.p[0] - focus.n[0] * 0.0 + 0.03, focus.p[1], focus.p[2] - (up.z ? sp / 2 : 0)], b: V3 = [a[0], a[1], a[2] + sp]; return <DimArrow a={a} b={b} label={`spot ${(sp * 100).toFixed(1)} cm`} active={active === 'spot'} color="#1f9d3d" labelOnActive />; })()}
       <TextSprite text="Sensor" position={[0, 0, zs + 0.5]} bg="rgba(0,70,160,0.9)" />
       <lineSegments geometry={lineGeom} raycast={() => null}><lineBasicMaterial color="#007aff" transparent opacity={0.32} /></lineSegments>
       {/* beam divergence cone for the focused beam */}
