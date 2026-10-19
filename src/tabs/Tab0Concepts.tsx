@@ -109,6 +109,7 @@ export default function Tab0() {
   const [sel, setSel] = useState<number | null>(null);
   const [phase, setPhase] = useState(0);
   const [playing, setPlaying] = useState(true);
+  const [pane, setPane] = useState<'notes' | 'controls'>('notes');
   const [active, setActive] = useState<string | null>(null);
   const prev = useRef<Record<string, number> | null>(null);
   useEffect(() => {
@@ -271,9 +272,15 @@ export default function Tab0() {
 
   const controls = (
     <>
-      <Seg value={lesson} onChange={setLesson} options={[{ value: 'tof', label: 'Time of flight' }, { value: 'div', label: 'Beam spread' }, { value: 'fov', label: 'View angle' }]} label="Lesson" />
-      <div style={{ display: 'grid', gap: 10, paddingTop: 12 }}>{lessonBox}</div>
-      {info}
+      <Seg value={pane} onChange={setPane} options={[{ value: 'notes', label: 'Notes' }, { value: 'controls', label: 'Controls' }]} label="Panel section" />
+      {pane === 'notes' && (
+        <div style={{ display: 'grid', gap: 12, paddingTop: 12 }}>
+          <Seg value={lesson} onChange={setLesson} options={[{ value: 'tof', label: 'Time of flight' }, { value: 'div', label: 'Beam spread' }, { value: 'fov', label: 'View angle' }]} label="Lesson" />
+          {lessonBox}
+          {info}
+        </div>
+      )}
+      {pane === 'controls' && <>
       <Section title="Sensor">
         <Slider label="Left-right angle" value={hFov} min={5} max={170} step={1} unit="°" onChange={setHFov} />
         <Slider label="Up-down angle" value={vFov} min={0} max={90} step={1} unit="°" onChange={setVFov} />
@@ -293,6 +300,7 @@ export default function Tab0() {
         <Seg value={colourBy} onChange={setColourBy} options={[{ value: 'intensity', label: 'Colour: brightness' }, { value: 'range', label: 'Colour: distance' }]} />
         <Btn sm onClick={() => setSel(null)} disabled={sel === null}>Back to middle beam</Btn>
       </Section>
+      </>}
     </>
   );
 
