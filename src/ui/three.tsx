@@ -34,6 +34,16 @@ export function TextSprite({ text, position, height = 0.034, bg = 'rgba(0,0,0,0.
   );
 }
 
+let _round: THREE.Texture | null = null;
+/** Soft-edged disc so GL points render as circles, not squares. */
+export function roundPointTexture(): THREE.Texture {
+  if (_round) return _round;
+  const c = document.createElement('canvas'); c.width = c.height = 64;
+  const g = c.getContext('2d')!; g.fillStyle = '#fff'; g.beginPath(); g.arc(32, 32, 30, 0, Math.PI * 2); g.fill();
+  _round = new THREE.CanvasTexture(c);
+  return _round;
+}
+
 // ------------------------------------------------------------------ scene meshes
 function PrimMesh({ p, color, opacity, wire, emissive }: { p: Primitive; color: string; opacity: number; wire?: boolean; emissive?: string }) {
   const mat = (
@@ -196,7 +206,7 @@ export function CloudLayer({ cloud, mode, size, budget, colorOpts, opacity = 1, 
         pushUndo('pick point', () => useLab.setState({ picks: useLab.getState().picks.slice(0, -1) }));
       } : undefined}
     >
-      <pointsMaterial vertexColors size={size} sizeAttenuation={false} transparent={opacity < 1} opacity={opacity} clippingPlanes={planes} depthWrite={opacity >= 1} />
+      <pointsMaterial vertexColors size={size} sizeAttenuation={false} transparent={opacity < 1} opacity={opacity} clippingPlanes={planes} depthWrite={opacity >= 1} map={roundPointTexture()} alphaTest={0.5} />
     </points>
   );
 }

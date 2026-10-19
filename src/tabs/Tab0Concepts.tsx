@@ -23,13 +23,12 @@ interface Beam { i: number; az: number; el: number; hit: boolean; r: number; p: 
 function conceptScene(D: number, wallYawDeg: number, rho: number): SceneDef {
   const mat = (r: number) => ({ color: [200, 200, 205] as [number, number, number], reflectivity: r });
   const objs = finalize([
-    { id: 'wall', name: 'Wall', classId: 2, structural: true, color: [205, 208, 214], reflectivity: rho, parts: [box([D + 0.1, 0, 2], [0.2, 14, 6], wallYawDeg * D2R)] },
+    { id: 'wall', name: 'Wall', classId: 2, structural: true, color: [205, 208, 214], reflectivity: rho, parts: [box([D + 0.1, 0, 4], [0.2, 60, 24], wallYawDeg * D2R)] },
     { id: 'box', name: 'Box', classId: 6, color: [239, 120, 100], reflectivity: rho, parts: [box([D * 0.55, 0.9, 0.5], [0.8, 0.8, 1.0], 0.3)] },
     { id: 'pole', name: 'Pole', classId: 18, color: [250, 190, 70], reflectivity: rho, parts: [cyl([D * 0.4, -1.6, 1.0], 0.14, 2, 'z')] },
-    { id: 'ground', name: 'Ground', classId: 1, structural: true, color: [225, 225, 230], reflectivity: rho, parts: [box([(D + 6) / 2 - 3, 0, -0.05], [D + 6, 14, 0.1])] },
   ] as never);
   void mat;
-  return { id: 'concept', name: 'concept', description: '', objects: objs, bounds: { min: [0, -7, 0], max: [D + 3, 7, 5] }, defaultPose: { x: 0, y: 0, z: 1.5, yaw: 0 }, cameraHome: [0, 0, 0], cameraTarget: [0, 0, 0] };
+  return { id: 'concept', name: 'concept', description: '', objects: objs, bounds: { min: [0, -30, -8], max: [D + 3, 30, 16] }, defaultPose: { x: 0, y: 0, z: 1.5, yaw: 0 }, cameraHome: [0, 0, 0], cameraTarget: [0, 0, 0] };
 }
 
 
@@ -186,7 +185,7 @@ export default function Tab0() {
   const spotCurve = useMemo(() => Array.from({ length: 40 }, (_, k) => spot(1 + k * (Math.max(D * 1.5, 30) / 39)) * 100), [div, D]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const viewport = (
-    <Viewport home={[-5, -13, 8]} target={[D / 2, 0, 1.6]} threshold={0.18} id="concept">
+    <Viewport home={[-5, -13, 8]} target={[D / 2, 0, 1.6]} threshold={0.18} id="concept" hideGrid>
       <SceneLayer scene={scene} opacity={0.55} showCeiling interactive={false} />
       {/* sensor */}
       <group position={[0, 0, zs]}>
@@ -195,11 +194,11 @@ export default function Tab0() {
       </group>
 
       {/* live measurements: they light up orange when you change the matching slider */}
-      <AngleArc active={active === 'h'} color="#007aff" label={`${hFov}° left-right`} labelAt={[Math.min(3.4, D * 0.5) * 1.12, 0, zs + 0.3]}
+      <AngleArc active={active === 'h'} color="#007aff" label={`${hFov}° horizontal FOV`} labelAt={[Math.min(3.4, D * 0.5) * 1.12, 0, zs + 0.3]}
         pts={Array.from({ length: 33 }, (_, k) => { const a = (-hFov / 2 + (hFov * k) / 32) * D2R, R = Math.min(3.4, D * 0.5); return [R * Math.cos(a), R * Math.sin(a), zs] as V3; })} />
-      <AngleArc active={active === 'v'} color="#8e3fd1" label={`${vFov}° up-down`} labelAt={[Math.min(2.8, D * 0.42) * Math.cos(vFov * D2R / 2) + 0.2, 0, zs + Math.min(2.8, D * 0.42) * Math.sin(vFov * D2R / 2) + 0.35]}
+      <AngleArc active={active === 'v'} color="#8e3fd1" label={`${vFov}° vertical FOV`} labelAt={[Math.min(2.8, D * 0.42) * Math.cos(vFov * D2R / 2) + 0.2, 0, zs + Math.min(2.8, D * 0.42) * Math.sin(vFov * D2R / 2) + 0.35]}
         pts={Array.from({ length: 25 }, (_, k) => { const e = (-vFov / 2 + (vFov * k) / 24) * D2R, R = Math.min(2.8, D * 0.42); return [R * Math.cos(e), 0, zs + R * Math.sin(e)] as V3; })} />
-      <DimArrow a={[0, -2.6, 0.12]} b={[D, -2.6, 0.12]} label={`${D} m to the wall`} active={active === 'dist'} color="#1d1d1f" />
+      <DimArrow a={[0, -2.6, 0.12]} b={[D, -2.6, 0.12]} label={`${D} m range`} active={active === 'dist'} color="#1d1d1f" />
       <TextSprite text={`${nH} × ${nV} beams`} position={[0.2, 0, zs - 0.55]} bg={active === 'beams' ? 'rgba(217,122,0,0.95)' : 'rgba(0,70,160,0.9)'} />
       {focus?.hit && (() => { const sp = spot(focus.r), up = new THREE.Vector3(...focus.n).cross(new THREE.Vector3(0, 0, 1)).length() > 0.01 ? new THREE.Vector3(0, 0, 1) : new THREE.Vector3(0, 1, 0); const a: V3 = [focus.p[0] - focus.n[0] * 0.0 + 0.03, focus.p[1], focus.p[2] - (up.z ? sp / 2 : 0)], b: V3 = [a[0], a[1], a[2] + sp]; return <DimArrow a={a} b={b} label={`spot ${(sp * 100).toFixed(1)} cm`} active={active === 'spot'} color="#1f9d3d" labelOnActive />; })()}
       <TextSprite text="Sensor" position={[0, 0, zs + 0.5]} bg="rgba(0,70,160,0.9)" />
@@ -216,7 +215,7 @@ export default function Tab0() {
         <pointsMaterial vertexColors size={9} sizeAttenuation={false} />
       </points>
       {focus?.hit && <mesh position={focus.p} raycast={() => null}><ringGeometry args={[0.14, 0.2, 24]} /><meshBasicMaterial color="#ff9f0a" side={THREE.DoubleSide} depthTest={false} /></mesh>}
-      {lesson === 'tof' && focus?.hit && <Pulse from={new THREE.Vector3(0, 0, zs)} to={new THREE.Vector3(...focus.p)} slow={slow} playing={playing} onTick={setPhase} />}
+      {focus?.hit && <Pulse from={new THREE.Vector3(0, 0, zs)} to={new THREE.Vector3(...focus.p)} slow={slow} playing={playing} onTick={setPhase} />}
     </Viewport>
   );
 
@@ -225,46 +224,39 @@ export default function Tab0() {
   void tofNow;
   const clock = phase * t0; // 0 → Δt over the whole round trip
 
-  const stats = [
-    { k: 'Time for light to return', v: focus?.hit ? `${dtNs.toFixed(1)} ns` : '—', s: focus?.hit ? `distance ${focus.r.toFixed(2)} m` : 'nothing hit' },
-    { k: 'Area the sensor sees', v: `${(2 * D * Math.tan(hFov * D2R / 2)).toFixed(1)} × ${(2 * D * Math.tan(vFov * D2R / 2)).toFixed(1)} m`, s: `${hFov}° × ${vFov}°` },
-    { k: 'Gap between beams', v: focus?.hit ? `${(spacingH * 100).toFixed(1)} cm` : '—', s: `${dAz.toFixed(1)}° apart` },
-  ];
-
   const info = focus?.hit ? (
     <div className="callout" data-testid="concept-point-info" style={{ gap: 6 }}>
       <b>{sel !== null ? `Point #${focus.i + 1}` : 'Middle beam'} <span className="caption">· click any dot to see its details</span></b>
       <table className="table"><tbody>
         <tr><td>Position (x, y, z)</td><td className="mono">{focus.p.map((v) => v.toFixed(3)).join(', ')} m</td></tr>
-        <tr><td>Distance</td><td className="mono">{focus.r.toFixed(3)} m</td></tr>
-        <tr><td>Wall shininess</td><td className="mono">{focus.rho.toFixed(2)}</td></tr>
-        <tr><td><b>Brightness</b> (intensity)</td><td className="mono"><b>{focus.I.toFixed(3)}</b></td></tr>
+        <tr><td>Range</td><td className="mono">{focus.r.toFixed(3)} m</td></tr>
+        <tr><td>Reflectivity</td><td className="mono">{focus.rho.toFixed(2)}</td></tr>
+        <tr><td><b>Intensity</b></td><td className="mono"><b>{focus.I.toFixed(3)}</b></td></tr>
       </tbody></table>
-      <span className="caption">Brighter when the surface is shiny and close.</span>
-      <MiniChart series={[{ name: 'brightness vs distance', color: '#007aff', values: curve }]} height={100} xLabel="distance (m)" />
+      <span className="caption">Intensity is higher for reflective, close surfaces.</span>
+      <MiniChart series={[{ name: 'intensity vs range', color: '#007aff', values: curve }]} height={100} xLabel="range (m)" />
     </div>
   ) : <p className="hint">This beam hit nothing. Click a coloured dot.</p>;
 
   const lessonBox = {
     tof: (
       <>
-        <p className="hint">The sensor sends a flash of laser light and times how long it takes to bounce back. Longer time = farther away.</p>
-        <Btn variant="primary" icon={playing ? <Pause size={16} /> : <Play size={16} />} onClick={() => setPlaying(!playing)} testId="play-pause">{playing ? 'Pause' : 'Play'}</Btn>
-        <Eq note="distance = speed of light × time ÷ 2 (the light goes there and back)">R = c · Δt ⁄ 2</Eq>
+        <p className="hint">The sensor sends a short laser pulse and measures the time of flight: how long the light takes to bounce back. Longer time = longer range.</p>
+        <Eq note="range = speed of light × time of flight ÷ 2 (the light goes there and back)">R = c · Δt ⁄ 2</Eq>
         <TofChart dt={dtNs} pw={pw} tres={tres} I={focus?.hit ? focus.I : 0} clock={clock} />
       </>
     ),
     div: (
       <>
-        <p className="hint">A laser beam slowly spreads out, like a flashlight. The farther it goes, the bigger the spot it makes.</p>
-        <Eq note="spot size = distance × spread">spot ≈ r × θ</Eq>
-        <MiniChart series={[{ name: 'spot diameter (cm)', color: '#34c759', values: spotCurve }]} height={110} xLabel="distance (m)" />
+        <p className="hint">Beam divergence is how much the laser beam spreads out, like a flashlight. The longer the range, the bigger the spot on the surface.</p>
+        <Eq note="spot size = range × beam divergence">spot ≈ r × θ</Eq>
+        <MiniChart series={[{ name: 'spot diameter (cm)', color: '#34c759', values: spotCurve }]} height={110} xLabel="range (m)" />
       </>
     ),
     fov: (
       <>
-        <p className="hint">The view angle (FOV) is how much the sensor can see. Wide angle = sees more. It has a left-right angle and an up-down angle.</p>
-        <Eq note="width seen at distance r">width = 2 · r · tan(angle ⁄ 2)</Eq>
+        <p className="hint">Field of view (FOV) is the angle the sensor can see. The horizontal FOV is left-right and the vertical FOV is up-down. Resolution is how many beams fill that angle.</p>
+        <Eq note="width covered at range r">width = 2 · r · tan(FOV ⁄ 2)</Eq>
         <FovDiagrams beams={beams} scene={scene} hFov={hFov} vFov={vFov} D={D} zs={zs} />
       </>
     ),
@@ -275,29 +267,29 @@ export default function Tab0() {
       <Seg value={pane} onChange={setPane} options={[{ value: 'notes', label: 'Notes' }, { value: 'controls', label: 'Controls' }]} label="Panel section" />
       {pane === 'notes' && (
         <div style={{ display: 'grid', gap: 12, paddingTop: 12 }}>
-          <Seg value={lesson} onChange={setLesson} options={[{ value: 'tof', label: 'Time of flight' }, { value: 'div', label: 'Beam spread' }, { value: 'fov', label: 'View angle' }]} label="Lesson" />
+          <Seg value={lesson} onChange={setLesson} options={[{ value: 'tof', label: 'Time of flight' }, { value: 'div', label: 'Beam divergence' }, { value: 'fov', label: 'Field of view' }]} label="Lesson" />
           {lessonBox}
           {info}
         </div>
       )}
       {pane === 'controls' && <>
       <Section title="Sensor">
-        <Slider label="Left-right angle" value={hFov} min={5} max={170} step={1} unit="°" onChange={setHFov} />
-        <Slider label="Up-down angle" value={vFov} min={0} max={90} step={1} unit="°" onChange={setVFov} />
-        <Slider label="Beams left-right" value={nH} min={1} max={41} step={1} onChange={setNH} />
-        <Slider label="Beams up-down" value={nV} min={1} max={21} step={1} onChange={setNV} />
-        <Slider label="Beam spread" value={div} min={0.5} max={100} step={0.5} unit=" mrad" onChange={setDiv} />
+        <Slider label="Horizontal field of view" value={hFov} min={5} max={170} step={1} unit="°" onChange={setHFov} />
+        <Slider label="Vertical field of view" value={vFov} min={0} max={90} step={1} unit="°" onChange={setVFov} />
+        <Slider label="Horizontal resolution (beams per row)" value={nH} min={1} max={41} step={1} onChange={setNH} />
+        <Slider label="Vertical resolution (channels)" value={nV} min={1} max={21} step={1} onChange={setNV} />
+        <Slider label="Beam divergence" value={div} min={0.5} max={100} step={0.5} unit=" mrad" onChange={setDiv} />
       </Section>
-      <Section title="Wall">
-        <Slider label="Distance to wall" value={D} min={2} max={30} step={0.5} unit=" m" onChange={setD} />
-        <Slider label="Shininess of wall" value={rho} min={0.05} max={1} step={0.05} format={(v) => `${Math.round(v * 100)}%`} onChange={setRho} />
+      <Section title="Surface">
+        <Slider label="Range to the wall" value={D} min={2} max={30} step={0.5} unit=" m" onChange={setD} />
+        <Slider label="Surface reflectivity" value={rho} min={0.05} max={1} step={0.05} format={(v) => `${Math.round(v * 100)}%`} onChange={setRho} />
       </Section>
       <Section title="More settings" open={false}>
-        <Slider label="Measuring error" value={noiseMm} min={0} max={200} step={1} unit=" mm" onChange={setNoiseMm} />
-        <Slider label="Flash length" value={pw} min={1} max={20} step={1} unit=" ns" onChange={setPw} />
-        <Slider label="Timer accuracy" value={tres} min={0.1} max={5} step={0.1} unit=" ns" format={(v) => v.toFixed(1)} onChange={setTres} />
+        <Slider label="Range noise" value={noiseMm} min={0} max={200} step={1} unit=" mm" onChange={setNoiseMm} />
+        <Slider label="Pulse width" value={pw} min={1} max={20} step={1} unit=" ns" onChange={setPw} />
+        <Slider label="Timer resolution" value={tres} min={0.1} max={5} step={0.1} unit=" ns" format={(v) => v.toFixed(1)} onChange={setTres} />
         {lesson === 'tof' && <Slider label="Slow motion" value={slow} min={0.25} max={3} step={0.25} unit="×" format={(v) => v.toFixed(2)} onChange={setSlow} />}
-        <Seg value={colourBy} onChange={setColourBy} options={[{ value: 'intensity', label: 'Colour: brightness' }, { value: 'range', label: 'Colour: distance' }]} />
+        <Seg value={colourBy} onChange={setColourBy} options={[{ value: 'intensity', label: 'Colour: intensity' }, { value: 'range', label: 'Colour: range' }]} />
         <Btn sm onClick={() => setSel(null)} disabled={sel === null}>Back to middle beam</Btn>
       </Section>
       </>}
@@ -312,11 +304,17 @@ export default function Tab0() {
       controls={controls}
       learn={null}
       simple
-      stats={stats}
       overlays={
         <>
-          <KindLegend items={[{ color: '#007aff', label: 'Laser beams' }, { color: '#34c759', label: 'Beam and its spot' }, { color: '#ff9f0a', label: 'Selected point' }]} />
-          {lesson === 'tof' && focus?.hit && <div className="overlay glass card" style={{ right: 12, bottom: 12, minWidth: 200 }}><div className="caption" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>Stopwatch (slowed down)<button className="btn sm icon" onClick={() => setPlaying(!playing)} aria-label={playing ? 'Pause' : 'Play'}>{playing ? <Pause size={15} /> : <Play size={15} />}</button></div><div className="mono" style={{ fontSize: '1.5rem', fontWeight: 650 }}>{clock.toFixed(1)} ns</div><div className="caption">{phase < 0.5 ? 'light going out' : 'light coming back'} · total {dtNs.toFixed(1)} ns</div></div>}
+          <KindLegend items={[{ color: '#007aff', label: 'Laser beams' }, { color: '#34c759', label: 'Beam divergence / spot' }, { color: '#ff9f0a', label: 'Selected point' }]} />
+          <button className="btn primary overlay" style={{ left: '50%', bottom: 14, transform: 'translateX(-50%)', minWidth: 120 }} onClick={() => setPlaying(!playing)} data-testid="play-pause" aria-label={playing ? 'Pause the light pulse' : 'Play the light pulse'}>{playing ? <Pause size={16} /> : <Play size={16} />}{playing ? 'Pause' : 'Play'}</button>
+          <div className="overlay" style={{ right: 12, bottom: 12, display: 'grid', gap: 8, justifyItems: 'end' }} data-testid="stats-card">
+            {lesson === 'tof' && focus?.hit && <div className="glass card" style={{ minWidth: 210 }}><div className="caption">Stopwatch (slowed down)</div><div className="mono" style={{ fontSize: '1.5rem', fontWeight: 650 }}>{clock.toFixed(1)} ns</div><div className="caption">{phase < 0.5 ? 'light going out' : 'light coming back'}</div></div>}
+            <div style={{ display: 'flex', gap: 8 }}>
+              <div className="glass card" style={{ minWidth: 170 }}><div className="caption">Time of flight</div><div style={{ fontSize: '1.3rem', fontWeight: 650 }}>{focus?.hit ? `${dtNs.toFixed(1)} ns` : '—'}</div><div className="caption">{focus?.hit ? `range ${focus.r.toFixed(2)} m` : 'nothing hit'}</div></div>
+              <div className="glass card" style={{ minWidth: 170 }}><div className="caption">Coverage</div><div style={{ fontSize: '1.3rem', fontWeight: 650 }}>{(2 * D * Math.tan(hFov * D2R / 2)).toFixed(1)} × {(2 * D * Math.tan(vFov * D2R / 2)).toFixed(1)} m</div><div className="caption">{hFov}° × {vFov}° FOV</div></div>
+            </div>
+          </div>
         </>
       }
     />

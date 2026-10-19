@@ -133,7 +133,7 @@ export function ViewControls({ simple }: { simple?: boolean }) {
       {!simple && <Btn sm onClick={() => viewBus.emit('top')} testId="view-top">Top</Btn>}
       {!simple && <Btn sm onClick={() => viewBus.emit('front')} testId="view-front">Front</Btn>}
       {!simple && <Btn sm onClick={() => viewBus.emit('side')} testId="view-side">Side</Btn>}
-      <Btn sm icon={v.showGrid ? <Eye size={15} /> : <EyeOff size={15} />} onClick={() => setView({ showGrid: !v.showGrid })} title="Toggle grid">Grid</Btn>
+      {!simple && <Btn sm icon={v.showGrid ? <Eye size={15} /> : <EyeOff size={15} />} onClick={() => setView({ showGrid: !v.showGrid })} title="Toggle grid">Grid</Btn>}
       <Btn sm icon={v.showAxes ? <Eye size={15} /> : <EyeOff size={15} />} onClick={() => setView({ showAxes: !v.showAxes })} title="Toggle axes">Axes</Btn>
       {interaction !== 'select' && <Btn sm variant="primary" onClick={() => useLab.getState().patch({ interaction: 'select' })}>Done · {interaction.replace('-', ' ')}</Btn>}
     </div>

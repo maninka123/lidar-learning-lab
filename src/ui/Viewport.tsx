@@ -85,9 +85,10 @@ export interface ViewportProps {
   labelPos?: 'bl' | 'br';
   bgOverride?: string;
   gridSize?: number;
+  hideGrid?: boolean;
 }
 
-export function Viewport({ children, home = [8, -9, 6.5], target = [0, 0, 1], group, id = 'main', primary = true, threshold = 0.05, label, labelPos = 'br', bgOverride, gridSize = 1 }: ViewportProps) {
+export function Viewport({ children, home = [8, -9, 6.5], target = [0, 0, 1], group, id = 'main', primary = true, threshold = 0.05, label, labelPos = 'br', bgOverride, gridSize = 1, hideGrid }: ViewportProps) {
   const bg = useLab((s) => s.view.background);
   const showGrid = useLab((s) => s.view.showGrid);
   const showAxes = useLab((s) => s.view.showAxes);
@@ -109,7 +110,7 @@ export function Viewport({ children, home = [8, -9, 6.5], target = [0, 0, 1], gr
         <directionalLight position={[-6, 5, 6]} intensity={0.5} />
         <OrbitControls makeDefault enableDamping dampingFactor={0.12} maxPolarAngle={Math.PI} />
         <Rig home={home} target={target} group={group} id={id} primary={primary} />
-        {showGrid && (
+        {showGrid && !hideGrid && (
           <Grid rotation={[Math.PI / 2, 0, 0]} position={[0, 0, -0.002]} args={[40, 40]} cellSize={gridSize} sectionSize={gridSize * 5} cellColor={light ? '#b9bcc4' : '#2c2f38'} sectionColor={light ? '#8d919c' : '#4a4f5c'} fadeDistance={60} fadeStrength={1.5} infiniteGrid raycast={() => null} />
         )}
         {showAxes && <axesHelper args={[1.2 * gridSize]} raycast={() => null} />}
