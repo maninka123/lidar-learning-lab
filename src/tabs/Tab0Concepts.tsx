@@ -288,7 +288,7 @@ export default function Tab0() {
       <span className="caption">Intensity is higher for reflective, close surfaces.</span>
       <MiniChart series={[{ name: 'intensity vs range', color: '#007aff', values: curve }]} height={100} xLabel="range (m)" />
     </div>
-  ) : <p className="hint">This beam hit nothing. Click a coloured dot.</p>;
+  ) : null;
 
   const lessonBox = {
     tof: (
@@ -302,7 +302,7 @@ export default function Tab0() {
       <>
         <p className="hint">Beam divergence is how much the laser beam spreads out, like a flashlight. The longer the range, the bigger the spot on the surface.</p>
         <Eq note="spot size = range × beam divergence">spot ≈ r × θ</Eq>
-        <MiniChart series={[{ name: 'spot diameter (cm)', color: '#34c759', values: spotCurve }]} height={110} xLabel="range (m)" />
+        <DivergenceFigure D={D} div={div} dAz={dAz} />
         <p className="hint">Not the same as resolution: <b>resolution</b> is the gap between beams, <b>divergence</b> is the size of each beam's spot. If the spot is bigger than the gap, fine details blur.</p>
       </>
     ),
@@ -310,7 +310,7 @@ export default function Tab0() {
       <>
         <p className="hint">Field of view (FOV) is the angle the sensor can see. The horizontal FOV is left-right and the vertical FOV is up-down. Resolution is how many beams fill that angle.</p>
         <Eq note="width covered at range r">width = 2 · r · tan(FOV ⁄ 2)</Eq>
-        <FovDiagrams beams={beams} scene={scene} hFov={hFov} vFov={vFov} D={D} zs={zs} />
+        <FovDiagrams hFov={hFov} vFov={vFov} D={D} nH={nH} nV={nV} />
       </>
     ),
   }[lesson];
@@ -457,44 +457,79 @@ function TofChart({ dt, pw, tres, I, clock }: { dt: number; pw: number; tres: nu
   );
 }
 
-function FovDiagrams({ beams, scene, hFov, vFov, D, zs }: { beams: Beam[]; scene: SceneDef; hFov: number; vFov: number; D: number; zs: number }) {
-  const a = useRef<HTMLCanvasElement>(null), b = useRef<HTMLCanvasElement>(null);
+/** Beam footprint vs angular spacing, drawn like a textbook figure. */
+function DivergenceFigure({ D, div, dAz }: { D: number; div: number; dAz: number }) {
+  const ref = useRef<HTMLCanvasElement>(null);
+  const spot = D * (div / 1000), spacing = D * Math.tan(dAz * D2R);
   useEffect(() => {
-    const draw = (cv: HTMLCanvasElement | null, mode: 'top' | 'side') => {
-      if (!cv) return;
-      const W = 340, H = 150, dpr = window.devicePixelRatio || 1;
-      cv.width = W * dpr; cv.height = H * dpr;
-      const g = cv.getContext('2d')!; g.scale(dpr, dpr);
-      g.fillStyle = '#f7f7fa'; g.fillRect(0, 0, W, H);
-      const xmax = D + 2, span = mode === 'top' ? 7 : 4;
-      const sc = Math.min((W - 30) / xmax, (H - 24) / (2 * span / (mode === 'top' ? 1 : 1.0)));
-      const ox = 14, oy = mode === 'top' ? H / 2 : H - 22;
-      const X = (x: number) => ox + x * sc, Y = (v: number) => (mode === 'top' ? oy - v * sc : oy - v * sc);
-      g.strokeStyle = '#ccc'; g.beginPath(); g.moveTo(ox, mode === 'top' ? oy : oy); g.lineTo(W - 6, oy); g.stroke();
-      for (const o of scene.objects) for (const p of o.parts) {
-        const bb = primAABB(p);
-        const y0 = mode === 'top' ? bb.min[1] : bb.min[2], y1 = mode === 'top' ? bb.max[1] : bb.max[2];
-        g.fillStyle = o.structural ? 'rgba(120,120,130,.25)' : `rgba(${o.color.join(',')},.7)`;
-        g.fillRect(X(bb.min[0]), Y(y1), Math.max(1.5, (bb.max[0] - bb.min[0]) * sc), Math.max(1.5, (y1 - y0) * sc));
-      }
-      const half = (mode === 'top' ? hFov : vFov) / 2 * D2R, R = xmax;
-      const zo = mode === 'top' ? 0 : zs;
-      g.fillStyle = 'rgba(0,122,255,.12)'; g.strokeStyle = 'rgba(0,122,255,.8)'; g.lineWidth = 1.5;
-      g.beginPath(); g.moveTo(X(0), Y(zo));
-      if (half >= Math.PI - 0.02) g.arc(X(0), Y(zo), R * sc, 0, Math.PI * 2); else g.arc(X(0), Y(zo), R * sc, -half, half);
-      g.closePath(); g.fill(); g.stroke();
-      g.strokeStyle = 'rgba(0,122,255,.35)'; g.lineWidth = 1;
-      for (const bm of beams) { if (!bm.hit) continue; g.beginPath(); g.moveTo(X(0), Y(zo)); g.lineTo(X(bm.p[0]), Y(mode === 'top' ? bm.p[1] : bm.p[2])); g.stroke(); }
-      g.fillStyle = '#007aff'; g.beginPath(); g.arc(X(0), Y(zo), 5, 0, 7); g.fill();
-      g.fillStyle = '#1d1d1f'; g.font = '600 12px -apple-system, sans-serif';
-      g.fillText(mode === 'top' ? `Top view · horizontal FOV ${hFov}°` : `Side view · vertical FOV ${vFov}°`, 8, 14);
+    const cv = ref.current; if (!cv) return;
+    const W = 340, H = 230, dpr = window.devicePixelRatio || 1;
+    cv.width = W * dpr; cv.height = H * dpr;
+    const g = cv.getContext('2d')!; g.scale(dpr, dpr);
+    g.fillStyle = '#fbfbfd'; g.fillRect(0, 0, W, H);
+    const sx = 38, sy = 118, ex = 280;
+    const k = 62 / Math.max(spot, spacing, 1e-6);
+    const sp = Math.max(6, spacing * k), st = Math.max(5, spot * k);
+    const cone = (yc: number, col: string, fill: string) => {
+      g.fillStyle = fill; g.strokeStyle = col; g.lineWidth = 2;
+      g.beginPath(); g.moveTo(sx + 12, sy); g.lineTo(ex, yc - st / 2); g.lineTo(ex, yc + st / 2); g.closePath(); g.fill(); g.stroke();
+      g.setLineDash([7, 5]); g.beginPath(); g.moveTo(sx + 12, sy); g.lineTo(ex, yc); g.stroke(); g.setLineDash([]);
+      g.fillStyle = col; g.beginPath(); g.roundRect(ex - 3, yc - st * 0.42, 9, st * 0.84, 4); g.fill();
     };
-    draw(a.current, 'top'); draw(b.current, 'side');
-  }, [beams, scene, hFov, vFov, D, zs]);
-  return (
-    <div style={{ display: 'grid', gap: 8 }}>
-      <canvas ref={a} style={{ width: '100%', height: 150, borderRadius: 12 }} aria-label="Top view of the field of view" />
-      <canvas ref={b} style={{ width: '100%', height: 150, borderRadius: 12 }} aria-label="Side view of the field of view" />
-    </div>
-  );
+    const yG = sy - sp / 2, yB = sy + sp / 2;
+    cone(yG, '#3d9080', 'rgba(61,144,128,.14)');
+    cone(yB, '#4a80f0', 'rgba(74,128,240,.14)');
+    g.fillStyle = '#6b7690'; g.beginPath(); g.arc(sx, sy, 13, 0, 7); g.fill();
+    // spacing bracket
+    const bx = ex + 30;
+    g.strokeStyle = '#444'; g.lineWidth = 1.6; g.beginPath(); g.moveTo(bx, yG); g.lineTo(bx, yB); g.moveTo(bx - 8, yG); g.lineTo(bx + 8, yG); g.moveTo(bx - 8, yB); g.lineTo(bx + 8, yB); g.stroke();
+    g.font = '600 13px -apple-system, sans-serif'; g.textAlign = 'center';
+    g.fillStyle = '#3d9080'; g.fillText(`Beam footprint · ${(spot * 100).toFixed(1)} cm`, 190, Math.max(18, yG - st / 2 - 12));
+    g.fillStyle = '#4a80f0'; g.fillText(`Angular spacing · ${(spacing * 100).toFixed(1)} cm`, 190, Math.min(H - 30, yB + st / 2 + 22));
+    g.fillStyle = '#1d1d1f'; g.fillText('LiDAR', sx, sy + 34);
+    g.textAlign = 'right'; g.fillText(`${D} m`, W - 8, H - 8);
+    g.textAlign = 'left'; g.font = '13px -apple-system, sans-serif'; g.fillStyle = spot > spacing ? '#c4163f' : '#1f7a3d';
+    g.fillText(spot > spacing ? 'Footprints overlap: details blur' : 'Gaps between beams: details can be missed', 8, H - 8);
+  }, [D, div, dAz, spot, spacing]);
+  return <canvas ref={ref} style={{ width: '100%', height: 230, borderRadius: 12 }} aria-label="Beam footprint compared with angular spacing" />;
+}
+
+/** One annotated figure: the sensor, the rectangle it covers at the wall, both FOV angles and the size covered. */
+function FovDiagrams({ hFov, vFov, D, nH, nV }: { hFov: number; vFov: number; D: number; nH: number; nV: number }) {
+  const ref = useRef<HTMLCanvasElement>(null);
+  useEffect(() => {
+    const cv = ref.current; if (!cv) return;
+    const W = 340, H = 250, dpr = window.devicePixelRatio || 1;
+    cv.width = W * dpr; cv.height = H * dpr;
+    const g = cv.getContext('2d')!; g.scale(dpr, dpr);
+    g.fillStyle = '#f7f7fa'; g.fillRect(0, 0, W, H);
+    const wy = Math.min(1.7, Math.tan(Math.min(hFov, 170) * D2R / 2)), wz = Math.min(1.5, Math.tan(vFov * D2R / 2));
+    const X0 = 34, Y0 = 138;
+    const P = (x: number, y: number, z: number): [number, number] => [X0 + x * 140 - y * (96 / Math.max(1, wy)), Y0 - z * (118 / Math.max(0.8, wz)) + y * (10 / Math.max(1, wy))];
+    const c = [P(1, wy, wz), P(1, -wy, wz), P(1, -wy, -wz), P(1, wy, -wz)];
+    const label = (t: string, x: number, y: number, bg: string) => { g.font = '600 13px -apple-system, sans-serif'; const w = g.measureText(t).width + 12; g.fillStyle = bg; g.beginPath(); g.roundRect(x - w / 2, y - 11, w, 22, 11); g.fill(); g.fillStyle = '#fff'; g.textAlign = 'center'; g.fillText(t, x, y + 4); };
+    // covered rectangle
+    g.fillStyle = 'rgba(0,122,255,.12)'; g.beginPath(); c.forEach((p, i) => (i ? g.lineTo(p[0], p[1]) : g.moveTo(p[0], p[1]))); g.closePath(); g.fill();
+    // beams = dots on the rectangle
+    g.fillStyle = '#e61e28';
+    const cols = Math.min(nH, 25), rows = Math.min(nV, 13);
+    for (let j = 0; j < rows; j++) for (let i = 0; i < cols; i++) { const y = cols === 1 ? 0 : wy - (2 * wy * i) / (cols - 1), z = rows === 1 ? 0 : wz - (2 * wz * j) / (rows - 1); const q = P(1, y, z); g.beginPath(); g.arc(q[0], q[1], 1.8, 0, 7); g.fill(); }
+    // edges of the field of view
+    g.strokeStyle = '#000'; g.lineWidth = 1.5; g.beginPath(); c.forEach((p, i) => (i ? g.lineTo(p[0], p[1]) : g.moveTo(p[0], p[1]))); g.closePath(); g.stroke();
+    g.strokeStyle = 'rgba(0,0,0,.45)'; g.lineWidth = 1; g.setLineDash([4, 3]);
+    for (const p of c) { g.beginPath(); g.moveTo(X0, Y0); g.lineTo(p[0], p[1]); g.stroke(); }
+    g.setLineDash([]);
+    // angle arcs at the sensor
+    const arc = (f: (t: number) => [number, number], a: number, col: string) => { g.strokeStyle = col; g.lineWidth = 3; g.beginPath(); for (let k = 0; k <= 30; k++) { const t = -a / 2 + (a * k) / 30, q = f(t * D2R); k ? g.lineTo(q[0], q[1]) : g.moveTo(q[0], q[1]); } g.stroke(); };
+    arc((t) => P(0.42 * Math.cos(t), 0.42 * Math.sin(t) * Math.min(1.7, 1), 0), Math.min(hFov, 170), '#0a60c9');
+    arc((t) => P(0.5 * Math.cos(t), 0, 0.5 * Math.sin(t)), vFov, '#8e3fd1');
+    g.fillStyle = '#007aff'; g.beginPath(); g.arc(X0, Y0, 6, 0, 7); g.fill();
+    label(`${hFov}° horizontal FOV`, X0 + 70, Y0 + 70, '#0a60c9');
+    label(`${vFov}° vertical FOV`, X0 + 62, Y0 - 66, '#8e3fd1');
+    // size covered at the wall
+    const top = P(1, 0, wz), right = P(1, -wy, 0);
+    label(`${(2 * D * Math.tan(Math.min(hFov, 170) * D2R / 2)).toFixed(1)} m wide at ${D} m`, Math.min(W - 80, Math.max(80, top[0] + 20)), 22, '#1d1d1f');
+    label(`${(2 * D * Math.tan(vFov * D2R / 2)).toFixed(1)} m high`, W - 52, Y0 + 4, '#1d1d1f');
+  }, [hFov, vFov, D, nH, nV]);
+  return <canvas ref={ref} style={{ width: '100%', height: 250, borderRadius: 12 }} aria-label="Field of view: horizontal and vertical angle and the area covered" />;
 }
