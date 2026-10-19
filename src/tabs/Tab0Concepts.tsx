@@ -17,6 +17,8 @@ import { Play, Pause } from '../ui/icons';
 
 const C = 299_792_458; // m/s
 const DETECT = 0.04; // minimum returned intensity the detector can see
+/** Darker surfaces are seen less far: effective max range scales with √reflectivity (80 % target = full range). */
+const effRange = (maxRange: number, rho: number) => maxRange * Math.min(1, Math.sqrt(Math.max(rho, 0) / 0.8));
 const MATERIALS: { id: string; label: string; rho: number }[] = [
   { id: 'white', label: 'White paint (0.90)', rho: 0.9 },
   { id: 'concrete', label: 'Concrete (0.50)', rho: 0.5 },
@@ -141,6 +143,7 @@ export default function Tab0() {
   const [D, setD] = useState(12);
   const [noiseMm, setNoiseMm] = useState(0);
   const [rho, setRho] = useState(0.9);
+  const [maxRange, setMaxRange] = useState(40);
   const [wallYaw, setWallYaw] = useState(0);
   const pw = 5, tres = 1; // fixed teaching values
   const [slow, setSlow] = useState(1);
@@ -183,11 +186,11 @@ export default function Tab0() {
       const mixed = false;
       const o = scene.objects[h.obj];
       const I = Math.min(1, Math.max(0, (o.reflectivity * cos) / (1 + (r / r0) ** 2)));
-      const det = I >= DETECT;
+      const det = I >= DETECT && r <= effRange(maxRange, o.reflectivity);
       out.push({ det, rGeo: r, IGeo: I, i: out.length, az, el, hit: det, r: det ? r : 80, p: det ? [d[0] * r, d[1] * r, zs + d[2] * r] : [d[0] * 20, d[1] * 20, zs + d[2] * 20], n: [nx, ny, nz], obj: h.obj, mixed, cos, rho: o.reflectivity, I });
     }
     return out;
-  }, [scene, hFov, vFov, nH, nV, div, noiseMm]);
+  }, [scene, hFov, vFov, nH, nV, div, noiseMm, maxRange]);
 
   const centre = beams[Math.floor(nV / 2) * nH + Math.floor(nH / 2)];
   const focus = sel !== null && beams[sel] ? beams[sel] : centre;
@@ -274,6 +277,8 @@ export default function Tab0() {
           ))}
         </group>
       )}
+      {/* effective maximum range for the current wall material */}
+      {(() => { const R = effRange(maxRange, rho), span = Math.min(hFov, 170) / 2 * D2R; const pts = Array.from({ length: 41 }, (_, k) => { const a = -span + (2 * span * k) / 40; return [R * Math.cos(a), R * Math.sin(a), zs] as V3; }); return (<><Line points={pts} color="#000000" lineWidth={1.4} dashed dashSize={0.5} gapSize={0.35} depthTest={false} /><TextSprite text={`max range on this wall: ${R.toFixed(1)} m`} position={[R * Math.cos(span * 0.85), R * Math.sin(span * 0.85), zs + 0.4]} bg="rgba(0,0,0,0.85)" /></>); })()}
       <TextSprite text="Sensor" position={[0, -1.1, zs - 0.1]} bg="rgba(0,70,160,0.9)" />
       {fovOutline.edges.map((pts, i) => <Line key={`e${i}`} points={pts} color="#000000" lineWidth={1.8} depthTest={false} />)}
       <lineSegments geometry={lineGeom} raycast={() => null}><lineBasicMaterial color="#007aff" transparent opacity={0.2} /></lineSegments>
@@ -291,7 +296,9 @@ export default function Tab0() {
       {sel !== null && focus && (focus.hit
         ? <CardSprite position={focus.p} lines={[`Point #${focus.i + 1}`, `Position  ${focus.p.map((v) => v.toFixed(2)).join(', ')} m`, `Range  ${focus.r.toFixed(2)} m`, `Reflectivity  ${focus.rho.toFixed(2)}`, `Intensity  ${focus.I.toFixed(3)}`]} />
         : focus.rGeo > 0
-          ? <CardSprite accent="#c4163f" position={focus.p} lines={[`Point #${focus.i + 1}: no return`, `Reflectivity  ${focus.rho.toFixed(2)}`, `Intensity  ${focus.IGeo.toFixed(3)} < ${DETECT}`, 'Too little light came back']} />
+          ? <CardSprite accent="#c4163f" position={focus.p} lines={focus.rGeo > effRange(maxRange, focus.rho)
+            ? [`Point #${focus.i + 1}: no return`, `Range  ${focus.rGeo.toFixed(1)} m`, `Max range here  ${effRange(maxRange, focus.rho).toFixed(1)} m`, 'Too far for this surface']
+            : [`Point #${focus.i + 1}: no return`, `Reflectivity  ${focus.rho.toFixed(2)}`, `Intensity  ${focus.IGeo.toFixed(3)} < ${DETECT}`, 'Too little light came back']} />
           : <CardSprite accent="#666666" position={focus.p} lines={[`Point #${focus.i + 1}: no return`, 'This beam hit nothing']} />)}
       {focus?.hit && <mesh position={focus.p} raycast={() => null}><ringGeometry args={[0.14, 0.2, 24]} /><meshBasicMaterial color="#ff9f0a" side={THREE.DoubleSide} depthTest={false} /></mesh>}
       {focus?.hit && <Pulse from={new THREE.Vector3(0, 0, zs)} to={new THREE.Vector3(...focus.p)} slow={slow} playing={playing} onTick={setPhase} />}
@@ -359,13 +366,14 @@ export default function Tab0() {
         <Slider label="Vertical field of view" value={vFov} min={0} max={90} step={1} unit="°" onChange={setVFov} />
         <Slider label="Horizontal resolution (columns of beams)" value={nH} min={1} max={81} step={1} onChange={setNH} />
         <Slider label="Vertical resolution (beams per column)" value={nV} min={1} max={41} step={1} onChange={setNV} />
+        <Slider label="Maximum range" value={maxRange} min={5} max={100} step={1} unit=" m" onChange={setMaxRange} />
         <Slider label="Beam divergence" value={div} min={0.5} max={100} step={0.5} unit=" mrad" onChange={setDiv} />
       </Section>
       <Section title="Surface">
         <Slider label="Range to the wall" value={D} min={2} max={30} step={0.5} unit=" m" onChange={setD} />
         <div className="field"><label>Wall material (reflectivity)</label>
           <div className="chip-row">{MATERIALS.map((m) => <button key={m.id} className="chip" aria-pressed={rho === m.rho} onClick={() => setRho(m.rho)} data-testid={`mat-${m.id}`}>{m.label}</button>)}</div>
-          <span className="caption">Dark or clear surfaces return too little light: no return, no point.</span></div>
+          <span className="caption">Darker surfaces are seen less far, and clear ones not at all. Watch “Max range on this wall”.</span></div>
       </Section>
       <Section title="More settings" open={false}>
         <Slider label="Range noise" value={noiseMm} min={0} max={200} step={1} unit=" mm" onChange={setNoiseMm} />
@@ -389,12 +397,16 @@ export default function Tab0() {
           <KindLegend items={[{ color: '#007aff', label: 'Laser beams' }, { color: '#34c759', label: 'Beam divergence / spot' }, { color: '#ff9f0a', label: 'Selected point' }]} />
           <div className="sr-only" data-testid="concept-point-info" aria-live="polite">{focus?.hit ? `${sel !== null ? `Point ${focus.i + 1}` : 'Middle beam'}: position ${focus.p.map((v) => v.toFixed(2)).join(', ')} m, range ${focus.r.toFixed(2)} m, reflectivity ${focus.rho.toFixed(2)}, Intensity ${focus.I.toFixed(3)}` : 'No return'}</div>
           <FrontInsets beams={beams} scene={scene} hFov={hFov} vFov={vFov} D={D} zs={zs} />
-          <button className="btn primary overlay" style={{ left: '50%', bottom: 14, transform: 'translateX(-50%)', minWidth: 120 }} onClick={() => setPlaying(!playing)} data-testid="play-pause" aria-label={playing ? 'Pause the light pulse' : 'Play the light pulse'}>{playing ? <Pause size={16} /> : <Play size={16} />}{playing ? 'Pause' : 'Play'}</button>
+          <button className="btn primary overlay" style={{ left: 14, bottom: 14, minWidth: 120 }} onClick={() => setPlaying(!playing)} data-testid="play-pause" aria-label={playing ? 'Pause the light pulse' : 'Play the light pulse'}>{playing ? <Pause size={16} /> : <Play size={16} />}{playing ? 'Pause' : 'Play'}</button>
           <div className="overlay" style={{ right: 12, bottom: 12, display: 'grid', gap: 8, justifyItems: 'end' }} data-testid="stats-card">
-            {lesson === 'tof' && focus?.hit && <div className="glass card" style={{ minWidth: 210 }}><div className="caption">Stopwatch (slowed down)</div><div className="mono" style={{ fontSize: '1.5rem', fontWeight: 650 }}>{clock.toFixed(1)} ns</div><div className="caption">{phase < 0.5 ? 'light going out' : 'light coming back'}</div></div>}
+            {lesson === 'tof' && focus?.hit && <div className="glass card" style={{ minWidth: 210, padding: '0.45rem 0.8rem' }}><div className="caption">Stopwatch (slowed down) · {phase < 0.5 ? 'going out' : 'coming back'}</div><div className="mono" style={{ fontSize: '1.3rem', fontWeight: 650 }}>{clock.toFixed(1)} ns</div></div>}
             <div style={{ display: 'flex', gap: 8 }}>
-              <div className="glass card" style={{ minWidth: 170 }}><div className="caption">Time of flight</div><div style={{ fontSize: '1.3rem', fontWeight: 650 }}>{focus?.hit ? `${dtNs.toFixed(1)} ns` : '—'}</div><div className="caption">{focus?.hit ? `range ${focus.r.toFixed(2)} m` : 'no return'}</div></div>
-              <div className="glass card" style={{ minWidth: 170 }}><div className="caption">Coverage</div><div style={{ fontSize: '1.3rem', fontWeight: 650 }}>{(2 * D * Math.tan(hFov * D2R / 2)).toFixed(1)} × {(2 * D * Math.tan(vFov * D2R / 2)).toFixed(1)} m</div><div className="caption">{hFov}° × {vFov}° FOV</div></div>
+              <div className="glass card" style={{ minWidth: 170, padding: '0.45rem 0.8rem' }}><div className="caption">Time of flight</div><div style={{ fontSize: '1.15rem', fontWeight: 650 }}>{focus?.hit ? `${dtNs.toFixed(1)} ns` : '—'}</div><div className="caption">{focus?.hit ? `range ${focus.r.toFixed(2)} m` : 'no return'}</div></div>
+              <div className="glass card" style={{ minWidth: 170, padding: '0.45rem 0.8rem' }}><div className="caption">Coverage</div><div style={{ fontSize: '1.3rem', fontWeight: 650 }}>{(2 * D * Math.tan(hFov * D2R / 2)).toFixed(1)} × {(2 * D * Math.tan(vFov * D2R / 2)).toFixed(1)} m</div><div className="caption">{hFov}° × {vFov}° FOV</div></div>
+            </div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <div className="glass card" style={{ minWidth: 170, padding: '0.45rem 0.8rem' }}><div className="caption">Max range on this wall</div><div style={{ fontSize: '1.3rem', fontWeight: 650 }}>{effRange(maxRange, rho).toFixed(1)} m</div><div className="caption">sensor max {maxRange} m · wall at {D} m</div></div>
+              <div className="glass card" style={{ minWidth: 170, padding: '0.45rem 0.8rem' }}><div className="caption">Returns</div><div style={{ fontSize: '1.3rem', fontWeight: 650 }}>{hits.length} / {beams.length}</div><div className="caption">beams that got light back</div></div>
             </div>
           </div>
         </>
@@ -411,11 +423,11 @@ function FrontInsets({ beams, scene, hFov, vFov, D, zs }: { beams: Beam[]; scene
   const pts = beams.filter((b) => b.hit && b.obj === idx), wpts = beams.filter((b) => b.hit && b.obj === widx);
   useEffect(() => {
     const cv = ref.current; if (!cv || idx < 0) return;
-    const W = 150, H = 205, dpr = window.devicePixelRatio || 1;
+    const W = 150, H = 170, dpr = window.devicePixelRatio || 1;
     cv.width = W * dpr; cv.height = H * dpr;
     const g = cv.getContext('2d')!; g.scale(dpr, dpr);
     g.fillStyle = '#ffffff'; g.fillRect(0, 0, W, H);
-    const sc = 88, X = (y: number) => W / 2 - y * sc, Y = (z: number) => H - 22 - z * sc;
+    const sc = 72, X = (y: number) => W / 2 - y * sc, Y = (z: number) => H - 18 - z * sc;
     g.strokeStyle = 'rgba(0,0,0,.22)'; g.setLineDash([4, 3]); g.lineWidth = 1;
     for (const p of scene.objects[idx].parts) {
       if (p.kind === 'sphere') { g.beginPath(); g.arc(X(p.c[1]), Y(p.c[2]), p.r! * sc, 0, 7); g.stroke(); }
@@ -445,9 +457,8 @@ function FrontInsets({ beams, scene, hFov, vFov, D, zs }: { beams: Beam[]; scene
       <div className="glass card" style={{ padding: 9 }}>
         <div style={{ fontWeight: 650, fontSize: '0.95rem' }}>Points on the person</div>
         <div className="caption" style={{ marginBottom: 6 }}>{pts.length} points = the person's point cloud</div>
-        <canvas ref={ref} style={{ width: 150, height: 205, borderRadius: 10, display: 'block' }} aria-label="Points that landed on the person" />
-        <div className="caption" style={{ marginTop: 4 }}>More beams = more points = clearer shape.</div>
-      </div>
+        <canvas ref={ref} style={{ width: 150, height: 170, borderRadius: 10, display: 'block' }} aria-label="Points that landed on the person" />
+              </div>
       <div className="glass card" style={{ padding: 9 }}>
         <div style={{ fontWeight: 650, fontSize: '0.95rem' }}>Points on the wall</div>
         <div className="caption" style={{ marginBottom: 6 }}>{wpts.length} points · gap = person's shadow</div>
