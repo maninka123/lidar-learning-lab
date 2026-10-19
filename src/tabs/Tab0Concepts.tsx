@@ -303,6 +303,7 @@ export default function Tab0() {
         <p className="hint">Beam divergence is how much the laser beam spreads out, like a flashlight. The longer the range, the bigger the spot on the surface.</p>
         <Eq note="spot size = range × beam divergence">spot ≈ r × θ</Eq>
         <MiniChart series={[{ name: 'spot diameter (cm)', color: '#34c759', values: spotCurve }]} height={110} xLabel="range (m)" />
+        <p className="hint">Not the same as resolution: <b>resolution</b> is the gap between beams, <b>divergence</b> is the size of each beam's spot. If the spot is bigger than the gap, fine details blur.</p>
       </>
     ),
     fov: (
@@ -328,8 +329,8 @@ export default function Tab0() {
       <Section title="Sensor">
         <Slider label="Horizontal field of view" value={hFov} min={5} max={360} step={1} unit="°" onChange={setHFov} />
         <Slider label="Vertical field of view" value={vFov} min={0} max={90} step={1} unit="°" onChange={setVFov} />
-        <Slider label="Horizontal resolution (beams per row)" value={nH} min={1} max={81} step={1} onChange={setNH} />
-        <Slider label="Vertical resolution (channels)" value={nV} min={1} max={41} step={1} onChange={setNV} />
+        <Slider label="Horizontal resolution (columns of beams)" value={nH} min={1} max={81} step={1} onChange={setNH} />
+        <Slider label="Vertical resolution (beams per column)" value={nV} min={1} max={41} step={1} onChange={setNV} />
         <Slider label="Beam divergence" value={div} min={0.5} max={100} step={0.5} unit=" mrad" onChange={setDiv} />
       </Section>
       <Section title="Surface">
