@@ -16,9 +16,16 @@ import { useLab } from '../state/store';
 import { Play, Pause } from '../ui/icons';
 
 const C = 299_792_458; // m/s
+const DETECT = 0.04; // minimum returned intensity the detector can see
+const MATERIALS: { id: string; label: string; rho: number }[] = [
+  { id: 'white', label: 'White paint (0.90)', rho: 0.9 },
+  { id: 'concrete', label: 'Concrete (0.50)', rho: 0.5 },
+  { id: 'dark', label: 'Dark rubber (0.08)', rho: 0.08 },
+  { id: 'glass', label: 'Clear glass (0.01)', rho: 0.01 },
+];
 type Lesson = 'tof' | 'div' | 'fov';
 
-interface Beam { i: number; az: number; el: number; hit: boolean; r: number; p: [number, number, number]; n: [number, number, number]; obj: number; mixed: boolean; cos: number; rho: number; I: number }
+interface Beam { det: boolean; rGeo: number; IGeo: number; i: number; az: number; el: number; hit: boolean; r: number; p: [number, number, number]; n: [number, number, number]; obj: number; mixed: boolean; cos: number; rho: number; I: number }
 
 /** A simple human-like figure (legs, torso, arms, head) standing at x = px, facing the sensor. */
 function personParts(px: number) {
@@ -34,7 +41,7 @@ function conceptScene(D: number, wallYawDeg: number, rho: number): SceneDef {
   const mat = (r: number) => ({ color: [200, 200, 205] as [number, number, number], reflectivity: r });
   const objs = finalize([
     { id: 'wall', name: 'Wall', classId: 2, structural: true, color: [205, 208, 214], reflectivity: rho, parts: [box([D + 0.1, 0, 4], [0.2, 60, 24], wallYawDeg * D2R)] },
-    { id: 'person', name: 'Person', classId: 20, color: [255, 140, 60], reflectivity: rho, parts: personParts(Math.min(5, D * 0.45)) },
+    { id: 'person', name: 'Person', classId: 20, color: [255, 140, 60], reflectivity: 0.6, parts: personParts(Math.min(5, D * 0.45)) },
   ] as never);
   void mat;
   return { id: 'concept', name: 'concept', description: '', objects: objs, bounds: { min: [0, -30, -8], max: [D + 3, 30, 16] }, defaultPose: { x: 0, y: 0, z: 1.5, yaw: 0 }, cameraHome: [0, 0, 0], cameraTarget: [0, 0, 0] };
@@ -109,9 +116,9 @@ export default function Tab0() {
   const [div, setDiv] = useState(20); // full-angle divergence, mrad
   const [D, setD] = useState(12);
   const [noiseMm, setNoiseMm] = useState(0);
-  const [rho, setRho] = useState(0.7);
+  const [rho, setRho] = useState(0.9);
   const [wallYaw, setWallYaw] = useState(0);
-  const [pw, setPw] = useState(5), [tres, setTres] = useState(1);
+  const pw = 5, tres = 1; // fixed teaching values
   const [slow, setSlow] = useState(1);
   const [colourBy, setColourBy] = useState<'intensity' | 'range'>('intensity');
   const [sel, setSel] = useState<number | null>(null);
@@ -144,7 +151,7 @@ export default function Tab0() {
       const d = dirOf(az, el);
       const ok = rs.cast(0, 0, zs, d[0], d[1], d[2], 0.05, 80, h);
       const jitter = noiseMm / 1000 * rng.gauss();
-      if (!ok) { out.push({ i: out.length, az, el, hit: false, r: 80, p: [d[0] * 20, d[1] * 20, zs + d[2] * 20], n: [1, 0, 0], obj: -1, mixed: false, cos: 0, rho: 0, I: 0 }); continue; }
+      if (!ok) { out.push({ det: false, rGeo: 0, IGeo: 0, i: out.length, az, el, hit: false, r: 80, p: [d[0] * 20, d[1] * 20, zs + d[2] * 20], n: [1, 0, 0], obj: -1, mixed: false, cos: 0, rho: 0, I: 0 }); continue; }
       const r = h.t + jitter;
       let nx = h.nx, ny = h.ny, nz = h.nz;
       let cos = -(nx * d[0] + ny * d[1] + nz * d[2]);
@@ -152,15 +159,17 @@ export default function Tab0() {
       const mixed = false;
       const o = scene.objects[h.obj];
       const I = Math.min(1, Math.max(0, (o.reflectivity * cos) / (1 + (r / r0) ** 2)));
-      out.push({ i: out.length, az, el, hit: true, r, p: [d[0] * r, d[1] * r, zs + d[2] * r], n: [nx, ny, nz], obj: h.obj, mixed, cos, rho: o.reflectivity, I });
+      const det = I >= DETECT;
+      out.push({ det, rGeo: r, IGeo: I, i: out.length, az, el, hit: det, r: det ? r : 80, p: det ? [d[0] * r, d[1] * r, zs + d[2] * r] : [d[0] * 20, d[1] * 20, zs + d[2] * 20], n: [nx, ny, nz], obj: h.obj, mixed, cos, rho: o.reflectivity, I });
     }
     return out;
   }, [scene, hFov, vFov, nH, nV, div, noiseMm]);
 
   const centre = beams[Math.floor(nV / 2) * nH + Math.floor(nH / 2)];
   const focus = sel !== null && beams[sel] ? beams[sel] : centre;
+  const geoHit = !!focus && (focus.hit || focus.rGeo > 0);
   const spot = (r: number) => 2 * r * Math.tan(div / 2000);
-  const dtNs = focus?.hit ? ((2 * focus.r) / C) * 1e9 : 0;
+  const dtNs = focus && geoHit ? ((2 * (focus.hit ? focus.r : focus.rGeo)) / C) * 1e9 : 0;
   const dAz = nH > 1 ? hFov / (hFov >= 360 ? nH : nH - 1) : 0, dEl = nV > 1 ? vFov / (nV - 1) : 0;
   const spacingH = focus ? focus.r * Math.tan(dAz * D2R) : 0;
   const hits = beams.filter((b) => b.hit);
@@ -265,7 +274,9 @@ export default function Tab0() {
   void tofNow;
   const clock = phase * t0; // 0 → Δt over the whole round trip
 
-  const info = focus?.hit ? (
+  const info = focus && !focus.hit && focus.rGeo > 0 ? (
+    <div className="callout bad" data-testid="concept-point-info"><b>No return</b><span>This beam hit a surface with reflectivity {focus.rho.toFixed(2)} but only {focus.IGeo.toFixed(3)} of the light came back, below the detection level ({DETECT}). The sensor sees nothing, so there is no point. Try a more reflective material or a shorter range.</span></div>
+  ) : focus?.hit ? (
     <div className="callout" data-testid="concept-point-info" style={{ gap: 6 }}>
       <b>{sel !== null ? `Point #${focus.i + 1}` : 'Middle beam'} <span className="caption">· click any dot to see its details</span></b>
       <table className="table"><tbody>
@@ -284,7 +295,7 @@ export default function Tab0() {
       <>
         <p className="hint">The sensor sends a short laser pulse and measures the time of flight: how long the light takes to bounce back. Longer time = longer range.</p>
         <Eq note="range = speed of light × time of flight ÷ 2 (the light goes there and back)">R = c · Δt ⁄ 2</Eq>
-        <TofChart dt={dtNs} pw={pw} tres={tres} I={focus?.hit ? focus.I : 0} clock={clock} />
+        <TofChart dt={dtNs} pw={pw} tres={tres} I={focus && geoHit ? (focus.hit ? focus.I : focus.IGeo) : 0} clock={clock} />
       </>
     ),
     div: (
@@ -323,12 +334,12 @@ export default function Tab0() {
       </Section>
       <Section title="Surface">
         <Slider label="Range to the wall" value={D} min={2} max={30} step={0.5} unit=" m" onChange={setD} />
-        <Slider label="Surface reflectivity" value={rho} min={0.05} max={1} step={0.05} format={(v) => `${Math.round(v * 100)}%`} onChange={setRho} />
+        <div className="field"><label>Wall material (reflectivity)</label>
+          <div className="chip-row">{MATERIALS.map((m) => <button key={m.id} className="chip" aria-pressed={rho === m.rho} onClick={() => setRho(m.rho)} data-testid={`mat-${m.id}`}>{m.label}</button>)}</div>
+          <span className="caption">Dark or clear surfaces return too little light: no return, no point.</span></div>
       </Section>
       <Section title="More settings" open={false}>
         <Slider label="Range noise" value={noiseMm} min={0} max={200} step={1} unit=" mm" onChange={setNoiseMm} />
-        <Slider label="Pulse width" value={pw} min={1} max={20} step={1} unit=" ns" onChange={setPw} />
-        <Slider label="Timer resolution" value={tres} min={0.1} max={5} step={0.1} unit=" ns" format={(v) => v.toFixed(1)} onChange={setTres} />
         {lesson === 'tof' && <Slider label="Slow motion" value={slow} min={0.25} max={3} step={0.25} unit="×" format={(v) => v.toFixed(2)} onChange={setSlow} />}
         <Btn sm onClick={() => setSel(null)} disabled={sel === null}>Back to middle beam</Btn>
       </Section>
@@ -347,12 +358,12 @@ export default function Tab0() {
       overlays={
         <>
           <KindLegend items={[{ color: '#007aff', label: 'Laser beams' }, { color: '#34c759', label: 'Beam divergence / spot' }, { color: '#ff9f0a', label: 'Selected point' }]} />
-          <PersonPoints beams={beams} scene={scene} />
+          <FrontInsets beams={beams} scene={scene} hFov={hFov} vFov={vFov} D={D} zs={zs} />
           <button className="btn primary overlay" style={{ left: '50%', bottom: 14, transform: 'translateX(-50%)', minWidth: 120 }} onClick={() => setPlaying(!playing)} data-testid="play-pause" aria-label={playing ? 'Pause the light pulse' : 'Play the light pulse'}>{playing ? <Pause size={16} /> : <Play size={16} />}{playing ? 'Pause' : 'Play'}</button>
           <div className="overlay" style={{ right: 12, bottom: 12, display: 'grid', gap: 8, justifyItems: 'end' }} data-testid="stats-card">
             {lesson === 'tof' && focus?.hit && <div className="glass card" style={{ minWidth: 210 }}><div className="caption">Stopwatch (slowed down)</div><div className="mono" style={{ fontSize: '1.5rem', fontWeight: 650 }}>{clock.toFixed(1)} ns</div><div className="caption">{phase < 0.5 ? 'light going out' : 'light coming back'}</div></div>}
             <div style={{ display: 'flex', gap: 8 }}>
-              <div className="glass card" style={{ minWidth: 170 }}><div className="caption">Time of flight</div><div style={{ fontSize: '1.3rem', fontWeight: 650 }}>{focus?.hit ? `${dtNs.toFixed(1)} ns` : '—'}</div><div className="caption">{focus?.hit ? `range ${focus.r.toFixed(2)} m` : 'nothing hit'}</div></div>
+              <div className="glass card" style={{ minWidth: 170 }}><div className="caption">Time of flight</div><div style={{ fontSize: '1.3rem', fontWeight: 650 }}>{focus?.hit ? `${dtNs.toFixed(1)} ns` : '—'}</div><div className="caption">{focus?.hit ? `range ${focus.r.toFixed(2)} m` : 'no return'}</div></div>
               <div className="glass card" style={{ minWidth: 170 }}><div className="caption">Coverage</div><div style={{ fontSize: '1.3rem', fontWeight: 650 }}>{(2 * D * Math.tan(hFov * D2R / 2)).toFixed(1)} × {(2 * D * Math.tan(vFov * D2R / 2)).toFixed(1)} m</div><div className="caption">{hFov}° × {vFov}° FOV</div></div>
             </div>
           </div>
@@ -363,11 +374,11 @@ export default function Tab0() {
 }
 
 
-/** Front view of only the points that landed on the person: this is what "a point cloud" of the person is. */
-function PersonPoints({ beams, scene }: { beams: Beam[]; scene: SceneDef }) {
-  const ref = useRef<HTMLCanvasElement>(null);
-  const idx = scene.objects.findIndex((o) => o.id === 'person');
-  const pts = beams.filter((b) => b.hit && b.obj === idx);
+/** Front views: only the points that landed on the person, and only the points that landed on the wall. */
+function FrontInsets({ beams, scene, hFov, vFov, D, zs }: { beams: Beam[]; scene: SceneDef; hFov: number; vFov: number; D: number; zs: number }) {
+  const ref = useRef<HTMLCanvasElement>(null), ref2 = useRef<HTMLCanvasElement>(null);
+  const idx = scene.objects.findIndex((o) => o.id === 'person'), widx = scene.objects.findIndex((o) => o.id === 'wall');
+  const pts = beams.filter((b) => b.hit && b.obj === idx), wpts = beams.filter((b) => b.hit && b.obj === widx);
   useEffect(() => {
     const cv = ref.current; if (!cv || idx < 0) return;
     const W = 150, H = 205, dpr = window.devicePixelRatio || 1;
@@ -375,7 +386,6 @@ function PersonPoints({ beams, scene }: { beams: Beam[]; scene: SceneDef }) {
     const g = cv.getContext('2d')!; g.scale(dpr, dpr);
     g.fillStyle = '#ffffff'; g.fillRect(0, 0, W, H);
     const sc = 88, X = (y: number) => W / 2 - y * sc, Y = (z: number) => H - 22 - z * sc;
-    // faint outline of the real person
     g.strokeStyle = 'rgba(0,0,0,.22)'; g.setLineDash([4, 3]); g.lineWidth = 1;
     for (const p of scene.objects[idx].parts) {
       if (p.kind === 'sphere') { g.beginPath(); g.arc(X(p.c[1]), Y(p.c[2]), p.r! * sc, 0, 7); g.stroke(); }
@@ -387,12 +397,32 @@ function PersonPoints({ beams, scene }: { beams: Beam[]; scene: SceneDef }) {
     g.fillStyle = '#e61e28';
     for (const b of pts) { g.beginPath(); g.arc(X(b.p[1]), Y(b.p[2]), 3.2, 0, 7); g.fill(); }
   }, [pts.length, beams, scene, idx]);
+  useEffect(() => {
+    const cv = ref2.current; if (!cv) return;
+    const W = 150, H = 110, dpr = window.devicePixelRatio || 1;
+    cv.width = W * dpr; cv.height = H * dpr;
+    const g = cv.getContext('2d')!; g.scale(dpr, dpr);
+    g.fillStyle = '#ffffff'; g.fillRect(0, 0, W, H);
+    const w = Math.min(60, 2 * D * Math.tan(Math.min(hFov, 170) * Math.PI / 360)), hh = 2 * D * Math.tan(vFov * Math.PI / 360) || 1;
+    const sc = Math.min((W - 16) / w, (H - 16) / hh), X = (y: number) => W / 2 - y * sc, Y = (z: number) => H / 2 - (z - zs) * sc;
+    g.strokeStyle = '#000'; g.lineWidth = 1; g.strokeRect(W / 2 - (w * sc) / 2, H / 2 - (hh * sc) / 2, w * sc, hh * sc);
+    g.fillStyle = '#e61e28';
+    for (const b of wpts) { g.beginPath(); g.arc(X(b.p[1]), Y(b.p[2]), 2.3, 0, 7); g.fill(); }
+    if (!wpts.length) { g.fillStyle = '#666'; g.font = '13px -apple-system, sans-serif'; g.textAlign = 'center'; g.fillText('no return from the wall', W / 2, H / 2 + 4); }
+  }, [wpts.length, beams, hFov, vFov, D, zs]);
   return (
-    <div className="overlay glass card" style={{ right: 12, top: 70, width: 176, padding: 9 }} data-testid="person-points">
-      <div style={{ fontWeight: 650, fontSize: '0.95rem' }}>Points on the person</div>
-      <div className="caption" style={{ marginBottom: 6 }}>{pts.length} points = the person's point cloud</div>
-      <canvas ref={ref} style={{ width: 150, height: 205, borderRadius: 10, display: 'block' }} aria-label="Points that landed on the person" />
-      <div className="caption" style={{ marginTop: 4 }}>More beams = more points = clearer shape.</div>
+    <div className="overlay" style={{ right: 12, top: 70, display: 'grid', gap: 8, width: 176 }} data-testid="person-points">
+      <div className="glass card" style={{ padding: 9 }}>
+        <div style={{ fontWeight: 650, fontSize: '0.95rem' }}>Points on the person</div>
+        <div className="caption" style={{ marginBottom: 6 }}>{pts.length} points = the person's point cloud</div>
+        <canvas ref={ref} style={{ width: 150, height: 205, borderRadius: 10, display: 'block' }} aria-label="Points that landed on the person" />
+        <div className="caption" style={{ marginTop: 4 }}>More beams = more points = clearer shape.</div>
+      </div>
+      <div className="glass card" style={{ padding: 9 }}>
+        <div style={{ fontWeight: 650, fontSize: '0.95rem' }}>Points on the wall</div>
+        <div className="caption" style={{ marginBottom: 6 }}>{wpts.length} points · gap = person's shadow</div>
+        <canvas ref={ref2} style={{ width: 150, height: 110, borderRadius: 10, display: 'block' }} aria-label="Points that landed on the wall" />
+      </div>
     </div>
   );
 }
@@ -403,20 +433,20 @@ function TofChart({ dt, pw, tres, I, clock }: { dt: number; pw: number; tres: nu
   const X = (t: number) => pad.l + (t / tmax) * (W - pad.l - pad.r), Y = (a: number) => H - pad.b - a * (H - pad.t - pad.b);
   const pulse = (t: number, c: number, a: number) => a * Math.exp(-((t - c) ** 2) / (2 * (pw / 2.355) ** 2));
   const pts = (c: number, a: number) => Array.from({ length: 160 }, (_, k) => { const t = (k / 159) * tmax; return `${X(t)},${Y(pulse(t, c, a))}`; }).join(' ');
-  const ret = Math.max(0.08, Math.min(0.9, I * 2.2));
+  const ret = Math.max(0.01, Math.min(0.9, I * 2.2));
   const ticks = [0, 0.25, 0.5, 0.75, 1].map((f) => f * tmax);
   const PADR = 0;
   void PADR;
   return (
     <svg viewBox={`0 0 ${W} ${H}`} width="100%" role="img" aria-label="Emitted and returned pulse" style={{ background: 'var(--fill)', borderRadius: 12 }}>
       <line x1={pad.l} x2={W - pad.r} y1={Y(0)} y2={Y(0)} stroke="var(--sep)" />
-      <line x1={pad.l} x2={W - pad.r} y1={Y(0.15)} y2={Y(0.15)} stroke="var(--red)" strokeDasharray="4 3" opacity={0.7} />
-      <text x={W - pad.r} y={Y(0.15) - 3} textAnchor="end" fontSize="12" fill="var(--red)">detection level</text>
+      <line x1={pad.l} x2={W - pad.r} y1={Y(DETECT * 2.2)} y2={Y(DETECT * 2.2)} stroke="var(--red)" strokeDasharray="4 3" opacity={0.7} />
+      <text x={W - pad.r} y={Y(DETECT * 2.2) - 3} textAnchor="end" fontSize="12" fill="var(--red)">detection level</text>
       <polyline fill="none" stroke="#d97a00" strokeWidth="2.2" points={pts(pw, 0.95)} />
       <polyline fill="none" stroke="#007aff" strokeWidth="2.2" points={pts(dt + pw, ret)} />
       <line x1={X(pw)} x2={X(dt + pw)} y1={Y(0.55)} y2={Y(0.55)} stroke="var(--text)" markerEnd="url(#tarr)" markerStart="url(#tarr)" />
       <text x={(X(pw) + X(dt + pw)) / 2} y={Y(0.55) - 5} textAnchor="middle" fontSize="13" fontWeight="600" fill="var(--text)">time = {dt.toFixed(1)} ns</text>
-      <rect x={X(dt + pw) - (tres / tmax) * (W - pad.l - pad.r) / 2} y={Y(0.15) - 6} width={(tres / tmax) * (W - pad.l - pad.r)} height={12} fill="rgba(52,199,89,.45)" />
+      <rect x={X(dt + pw) - (tres / tmax) * (W - pad.l - pad.r) / 2} y={Y(DETECT * 2.2) - 6} width={(tres / tmax) * (W - pad.l - pad.r)} height={12} fill="rgba(52,199,89,.45)" />
       <line x1={X(clock + pw)} x2={X(clock + pw)} y1={pad.t} y2={Y(0)} stroke="var(--text3)" strokeDasharray="2 3" />
       {ticks.map((t) => <text key={t} x={X(t)} y={H - 8} textAnchor={t === ticks[4] ? 'end' : 'middle'} fontSize="12" fill="var(--text2)">{t.toFixed(0)}{t === ticks[4] ? ' ns' : ''}</text>)}
       <text x={pad.l + 4} y={pad.t + 8} textAnchor="start" fontSize="12" fill="#d97a00">flash sent</text>

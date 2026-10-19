@@ -37,6 +37,10 @@ test.describe('LiDAR Learning Lab', () => {
     await expect(page.getByTestId('dataset-menu')).toHaveCount(0);
     await page.getByRole('button', { name: 'Controls', exact: true }).click();
     await expect(page.getByText('Horizontal field of view')).toBeVisible();
+    await expect(page.getByTestId('person-points')).toContainText('Points on the wall');
+    await page.getByTestId('mat-glass').click();
+    await expect(page.getByTestId('person-points')).toContainText('0 points · gap');
+    await page.getByTestId('mat-white').click();
     await page.getByTestId('play-pause').click();
     await expect(page.getByTestId('play-pause')).toContainText('Play');
     await page.getByRole('button', { name: 'Notes', exact: true }).click();
