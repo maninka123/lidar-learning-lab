@@ -6,7 +6,7 @@ import { Viewport } from '../ui/Viewport';
 import { TabFrame } from '../ui/TabFrame';
 import { Callout, Eq, Section, Seg, Slider, Toggle, Btn } from '../ui/controls';
 import { KindLegend } from '../ui/shared';
-import { SceneLayer, TextSprite } from '../ui/three';
+import { SceneLayer, TextSprite, roundPointTexture } from '../ui/three';
 import { MiniChart } from './common';
 import { box, cyl, finalize, RayScene, newHit, SceneDef, primAABB } from '../scenes/geometry';
 import { makeRng } from '../core/rng';
@@ -108,6 +108,7 @@ export default function Tab0() {
   const [sel, setSel] = useState<number | null>(null);
   const [phase, setPhase] = useState(0);
   const [playing, setPlaying] = useState(true);
+  const showAxes = useLab((s) => s.view.showAxes);
   const [pane, setPane] = useState<'notes' | 'controls'>('notes');
   const [active, setActive] = useState<string | null>(null);
   const prev = useRef<Record<string, number> | null>(null);
@@ -161,7 +162,7 @@ export default function Tab0() {
     const rmax = Math.max(1, ...hits.map((b) => b.r));
     beams.forEach((b, i) => {
       p.set(b.p, i * 3);
-      const col = b.hit ? (colourBy === 'intensity' ? viridis(b.I / Math.max(0.01, rho)) : turbo(b.r / rmax)) : [200, 200, 200];
+      const col = b.hit ? [230, 30, 40] : [200, 200, 200];
       c.set([col[0] / 255, col[1] / 255, col[2] / 255], i * 3);
     });
     g.setAttribute('position', new THREE.BufferAttribute(p, 3)); g.setAttribute('color', new THREE.BufferAttribute(c, 3));
@@ -205,7 +206,7 @@ export default function Tab0() {
   const spotCurve = useMemo(() => Array.from({ length: 40 }, (_, k) => spot(1 + k * (Math.max(D * 1.5, 30) / 39)) * 100), [div, D]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const viewport = (
-    <Viewport home={[-5, -13, 8]} target={[D / 2, 0, 1.6]} threshold={0.18} id="concept" hideGrid>
+    <Viewport home={[-5, -13, 8]} target={[D / 2, 0, 1.6]} threshold={0.18} id="concept" hideGrid hideAxes>
       <SceneLayer scene={scene} opacity={0.55} showCeiling interactive={false} />
       {/* sensor */}
       <group position={[0, 0, zs]}>
@@ -220,8 +221,19 @@ export default function Tab0() {
         pts={Array.from({ length: 25 }, (_, k) => { const e = (-vFov / 2 + (vFov * k) / 24) * D2R, R = Math.min(2.8, D * 0.42); return [R * Math.cos(e), 0, zs + R * Math.sin(e)] as V3; })} />
       <TextSprite text={`${nH} × ${nV} beams`} position={[0.2, 0, zs - 0.55]} bg={active === 'beams' ? 'rgba(217,122,0,0.95)' : 'rgba(0,70,160,0.9)'} />
       {focus?.hit && (() => { const sp = spot(focus.r), up = new THREE.Vector3(...focus.n).cross(new THREE.Vector3(0, 0, 1)).length() > 0.01 ? new THREE.Vector3(0, 0, 1) : new THREE.Vector3(0, 1, 0); const a: V3 = [focus.p[0] - focus.n[0] * 0.0 + 0.03, focus.p[1], focus.p[2] - (up.z ? sp / 2 : 0)], b: V3 = [a[0], a[1], a[2] + sp]; return <DimArrow a={a} b={b} label={`spot ${(sp * 100).toFixed(1)} cm`} active={active === 'spot'} color="#1f9d3d" labelOnActive />; })()}
-      <TextSprite text="Sensor" position={[0, 0, zs + 0.5]} bg="rgba(0,70,160,0.9)" />
-      {fovOutline.edges.map((pts, i) => <Line key={`e${i}`} points={pts} color="#0a60c9" lineWidth={1.6} depthTest={false} />)}
+      {showAxes && (
+        <group position={[0, 0, zs]}>
+          {([['X (forward)', [2.2, 0, 0], '#e0362c'], ['Y (left)', [0, 2.2, 0], '#1f9d3d'], ['Z (up)', [0, 0, 2.2], '#0a60c9']] as [string, V3, string][]).map(([name, end, col]) => (
+            <group key={name}>
+              <Line points={[[0, 0, 0], end]} color={col} lineWidth={3} depthTest={false} />
+              <Head at={end} dir={end} color={col} size={0.3} />
+              <TextSprite text={name} position={[end[0] * 1.14, end[1] * 1.14, end[2] * 1.14 + 0.12]} bg={col} />
+            </group>
+          ))}
+        </group>
+      )}
+      <TextSprite text="Sensor" position={[0, -1.1, zs - 0.1]} bg="rgba(0,70,160,0.9)" />
+      {fovOutline.edges.map((pts, i) => <Line key={`e${i}`} points={pts} color="#000000" lineWidth={1.8} depthTest={false} />)}
       <lineSegments geometry={lineGeom} raycast={() => null}><lineBasicMaterial color="#007aff" transparent opacity={0.32} /></lineSegments>
       {/* beam divergence cone for the focused beam */}
       {focus?.hit && lesson !== 'fov' && (
@@ -232,7 +244,7 @@ export default function Tab0() {
       )}
       {lesson === 'div' && beams.length <= 260 && beams.filter((b) => b.hit).map((b) => <Footprint key={b.i} b={b} radius={spot(b.r) / 2} />)}
       <points geometry={hitGeom} frustumCulled={false} onClick={(e) => { e.stopPropagation(); if (e.index !== undefined) setSel(e.index); }}>
-        <pointsMaterial vertexColors size={9} sizeAttenuation={false} />
+        <pointsMaterial vertexColors size={6} sizeAttenuation={false} map={roundPointTexture()} alphaTest={0.5} />
       </points>
       {focus?.hit && <mesh position={focus.p} raycast={() => null}><ringGeometry args={[0.14, 0.2, 24]} /><meshBasicMaterial color="#ff9f0a" side={THREE.DoubleSide} depthTest={false} /></mesh>}
       {focus?.hit && <Pulse from={new THREE.Vector3(0, 0, zs)} to={new THREE.Vector3(...focus.p)} slow={slow} playing={playing} onTick={setPhase} />}
@@ -309,7 +321,6 @@ export default function Tab0() {
         <Slider label="Pulse width" value={pw} min={1} max={20} step={1} unit=" ns" onChange={setPw} />
         <Slider label="Timer resolution" value={tres} min={0.1} max={5} step={0.1} unit=" ns" format={(v) => v.toFixed(1)} onChange={setTres} />
         {lesson === 'tof' && <Slider label="Slow motion" value={slow} min={0.25} max={3} step={0.25} unit="×" format={(v) => v.toFixed(2)} onChange={setSlow} />}
-        <Seg value={colourBy} onChange={setColourBy} options={[{ value: 'intensity', label: 'Colour: intensity' }, { value: 'range', label: 'Colour: range' }]} />
         <Btn sm onClick={() => setSel(null)} disabled={sel === null}>Back to middle beam</Btn>
       </Section>
       </>}
