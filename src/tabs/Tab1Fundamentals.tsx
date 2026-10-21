@@ -124,16 +124,16 @@ export default function Tab1() {
       </Section>
 
       <Section title="Sensor characteristics">
+        {sensor.pattern === 'planar' && <p className="hint">2D scanner: a single beam sweeps one plane, so there is no vertical FOV or vertical resolution.</p>}
         <Slider label="Horizontal FOV" value={sensor.hFov} min={10} max={360} step={5} unit="°" onChange={(hFov) => s.setSensor({ hFov })} disabled={sensor.pattern === 'planar' && false} />
-        <Slider label="Vertical FOV" value={Math.round((sensor.vMax - sensor.vMin) * 2) / 2} min={0} max={150} step={0.5} unit="°" onChange={(f) => { const mid = (sensor.vMin + sensor.vMax) / 2; s.setSensor({ vMin: mid - f / 2, vMax: mid + f / 2 }); }} />
+        {sensor.pattern !== 'planar' && <Slider label="Vertical FOV" value={Math.round((sensor.vMax - sensor.vMin) * 2) / 2} min={0} max={150} step={0.5} unit="°" onChange={(f) => { const mid = (sensor.vMin + sensor.vMax) / 2; s.setSensor({ vMin: mid - f / 2, vMax: mid + f / 2 }); }} />}
         <Slider label="Horizontal resolution (angular step)" value={sensor.hRes} min={0.05} max={3} step={0.05} unit="°" format={(v) => v.toFixed(2)} onChange={(hRes) => s.setSensor({ hRes })} hint={solid ? 'For solid-state: sets the number of steered beams per sweep.' : undefined} />
-        <Slider label={solid ? 'Beam density (lines)' : 'Vertical resolution (channels)'} value={sensor.channels} min={1} max={256} step={1} onChange={(channels) => s.setSensor({ channels })} />
+        {sensor.pattern !== 'planar' && <Slider label={solid ? 'Beam density (lines)' : 'Vertical resolution (channels)'} value={sensor.channels} min={1} max={256} step={1} onChange={(channels) => s.setSensor({ channels })} />}
         <Slider label="Maximum range" value={sensor.maxRange} min={1} max={150} step={1} unit=" m" onChange={(maxRange) => s.setSensor({ maxRange })} />
       </Section>
 
       <Section title="Run">
         <div className="btn-row">
-          <Btn variant="primary" icon={<Play size={16} />} onClick={() => runScan()} busy={!!s.busy} testId="run-scan">Run scan</Btn>
           <Btn icon={<Plus size={16} />} onClick={logRow} disabled={!cloud} testId="log-scan">Add to comparison</Btn>
           <Btn icon={<Trash2 size={16} />} onClick={() => { s.setCloud('scan', null); s.patch({ scanInfo: null }); }} disabled={!cloud}>Clear</Btn>
         </div>
@@ -208,7 +208,7 @@ export default function Tab1() {
       controls={controls}
       learn={learn}
       stats={stats}
-      viewExtras={<><Btn sm icon={<Dots size={15} />} variant={pointsOnly ? 'primary' : ''} onClick={() => setPointsOnly(!pointsOnly)} testId="points-only">{pointsOnly ? 'Show scene' : 'Point cloud'}</Btn><Btn sm icon={<FileText size={15} />} variant={rawOpen ? 'primary' : ''} onClick={() => setRawOpen(!rawOpen)} disabled={!cloud} testId="raw-toggle">Raw</Btn></>}
+      viewExtras={<><Btn sm variant="primary" icon={<Play size={15} />} onClick={() => runScan()} busy={!!s.busy} testId="run-scan">Run scan</Btn><Btn sm icon={<Dots size={15} />} variant={pointsOnly ? 'primary' : ''} onClick={() => setPointsOnly(!pointsOnly)} testId="points-only">{pointsOnly ? 'Show scene' : 'Point cloud'}</Btn><Btn sm icon={<FileText size={15} />} variant={rawOpen ? 'primary' : ''} onClick={() => setRawOpen(!rawOpen)} disabled={!cloud} testId="raw-toggle">Raw</Btn></>}
       overlays={<>{rawOpen && cloud && <RawViewer text={rawText} filename="scan.pcd" onClose={() => setRawOpen(false)} />}<KindLegend items={[{ color: '#8e8e93', label: 'Scene mesh (original geometry)', style: 'wire' }, { color: '#64d2ff', label: 'Simulated LiDAR points' }, { color: '#ff9f0a', label: 'Ray end-points' }]} /></>}
     />
   );

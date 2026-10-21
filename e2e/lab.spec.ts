@@ -70,6 +70,10 @@ test.describe('LiDAR Learning Lab', () => {
     await page.getByTestId('raw-toggle').click();
     await page.getByTestId('points-only').click();
     await page.getByTestId('points-only').click();
+    await expect(page.getByText('Vertical FOV', { exact: true })).toBeVisible();
+    await page.evaluate(() => window.__lab.getState().setPreset('planar'));
+    await expect(page.getByText('Vertical FOV', { exact: true })).toHaveCount(0);
+    await page.evaluate(() => window.__lab.getState().setPreset('rot32'));
     await page.getByTestId('log-scan').click();
     await expect(page.getByTestId('scan-log')).toBeVisible();
   });
