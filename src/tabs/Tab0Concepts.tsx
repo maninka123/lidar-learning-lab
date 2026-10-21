@@ -150,13 +150,15 @@ function Pulse({ from, to, slow, playing, onTick }: { from: THREE.Vector3; to: T
   return <mesh ref={ref} raycast={() => null}><sphereGeometry args={[0.13, 16, 12]} /><meshBasicMaterial color="#ff9f0a" /></mesh>;
 }
 
-function Footprint({ b, radius }: { b: Beam; radius: number }) {
+function Footprint({ b, radius, active }: { b: Beam; radius: number; active: boolean }) {
   const q = useMemo(() => new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), new THREE.Vector3(...b.n).normalize()), [b.n[0], b.n[1], b.n[2]]); // eslint-disable-line react-hooks/exhaustive-deps
+  const r = Math.max(radius, 0.03);
+  const fill = active ? '#ff9f0a' : '#34c759', edge = active ? '#b45f00' : '#1f7a3d';
   return (
-    <mesh position={[b.p[0] + b.n[0] * 0.01, b.p[1] + b.n[1] * 0.01, b.p[2] + b.n[2] * 0.01]} quaternion={q} raycast={() => null}>
-      <circleGeometry args={[Math.max(radius, 0.012), 28]} />
-      <meshBasicMaterial color={'#0a84ff'} transparent opacity={0.35} depthWrite={false} side={THREE.DoubleSide} />
-    </mesh>
+    <group position={[b.p[0] + b.n[0] * 0.015, b.p[1] + b.n[1] * 0.015, b.p[2] + b.n[2] * 0.015]} quaternion={q} raycast={() => null}>
+      <mesh raycast={() => null}><circleGeometry args={[r, 32]} /><meshBasicMaterial color={fill} transparent opacity={0.55} depthWrite={false} side={THREE.DoubleSide} /></mesh>
+      <mesh position={[0, 0, 0.004]} raycast={() => null}><ringGeometry args={[r * 0.9, r, 32]} /><meshBasicMaterial color={edge} depthWrite={false} side={THREE.DoubleSide} /></mesh>
+    </group>
   );
 }
 
@@ -315,7 +317,7 @@ export default function Tab0() {
           <meshBasicMaterial color={'#34c759'} transparent opacity={0.22} depthWrite={false} side={THREE.DoubleSide} />
         </mesh>
       )}
-      {lesson === 'div' && beams.length <= 520 && beams.filter((b) => b.hit).map((b) => <Footprint key={b.i} b={b} radius={spot(b.r) / 2} />)}
+      {beams.length <= 520 && beams.filter((b) => b.hit).map((b) => <Footprint key={b.i} b={b} radius={spot(b.r) / 2} active={active === 'spot'} />)}
       <points geometry={hitGeom} frustumCulled={false} onClick={(e) => { e.stopPropagation(); const idx = e.index; if (idx !== undefined) setSel((cur) => (cur === idx ? null : idx)); setPulseOn(true); }}>
         <pointsMaterial vertexColors size={6} sizeAttenuation={false} map={roundPointTexture()} alphaTest={0.5} />
       </points>
