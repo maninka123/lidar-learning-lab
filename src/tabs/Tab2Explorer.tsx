@@ -8,7 +8,7 @@ import { Badge, Btn, Callout, Eq, Section, Select, Slider, Stat, cloudBadge, fmt
 import { DatasetInfo, DisplaySection, KindLegend } from '../ui/shared';
 import { SceneFromStore, CloudFromStore, PickLayer } from './common';
 import { Crosshair, Download, Play, Scissors, Trash2, Undo2, Upload } from '../ui/icons';
-import { activeCloud, clearPicks, exportCloudFile, runScan, uploadCloud } from '../state/actions';
+import { activeCloud, clearPicks, exampleCloud, exportCloudFile, runScan, uploadCloud } from '../state/actions';
 import { cloudBounds, PointCloud, attributesOf } from '../core/pointcloud';
 import { cropBox } from '../processing/ops';
 import { turbo, viridis, COLOR_MODE_LABEL } from '../core/colorize';
@@ -88,6 +88,7 @@ export default function Tab2() {
             <input type="file" accept=".ply,.pcd,.las,.laz" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) void uploadCloud(f); e.target.value = ''; }} />
           </label>
         </div>
+        <div className="field"><label>Example clouds</label><div className="chip-row"><button className="chip" onClick={() => exampleCloud('A')}>Room</button><button className="chip" onClick={() => exampleCloud('B')}>Workshop</button><button className="chip" onClick={() => exampleCloud('C')}>Street</button></div><span className="caption">Synthetic scans made by this simulator (MIT). Upload accepts PLY, PCD, LAS.</span></div>
         {cloud && <div className="btn-row">
           <Btn icon={<Download size={16} />} onClick={() => exportCloudFile(cloud, 'ply')}>PLY</Btn>
           <Btn icon={<Download size={16} />} onClick={() => exportCloudFile(cloud, 'pcd')}>PCD</Btn>

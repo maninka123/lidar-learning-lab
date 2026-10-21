@@ -34,7 +34,7 @@ test.describe('LiDAR Learning Lab', () => {
     await expect(page.getByTestId('stats-card')).toContainText('Time of flight');
     await expect(page.getByTestId('person-points')).toContainText('Points on the person');
     await expect(page.getByRole('button', { name: 'Exercise' })).toHaveCount(0);
-    await expect(page.getByTestId('dataset-menu')).toHaveCount(0);
+    await expect(page.getByTestId('environment-menu')).toHaveCount(0);
     await page.getByRole('button', { name: 'Controls', exact: true }).click();
     await expect(page.getByText('Horizontal field of view')).toBeVisible();
     await expect(page.getByTestId('person-points')).toContainText('Points on the wall');
@@ -176,6 +176,16 @@ test.describe('LiDAR Learning Lab', () => {
     expect(j.suggestedFilename()).toBe('lidar-lab-summary.json');
     const [p] = await Promise.all([page.waitForEvent('download'), page.getByTestId('download-pdf').click()]);
     expect(p.suggestedFilename()).toBe('lidar-lab-summary.pdf');
+  });
+
+  test('environment menu switches scenes compactly', async ({ page }) => {
+    await go(page, 1);
+    await page.getByTestId('environment-menu').click();
+    await page.getByTestId('env-B').click();
+    await expect.poll(() => state(page, (s) => s.sceneId)).toBe('B');
+    await page.getByTestId('environment-menu').click();
+    await page.getByTestId('env-A').click();
+    await expect.poll(() => state(page, (s) => s.sceneId)).toBe('A');
   });
 
   test('scene switching keeps state per scene and all three scenes can be scanned', async ({ page }) => {
