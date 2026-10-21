@@ -172,7 +172,7 @@ export function DisplaySection({ cloud, extra, open = true, hideColour }: { clou
     <Section title="Display" open={open}>
       {!hideColour && <Select label="Colour by" value={v.colorMode} options={modes.map((m) => ({ value: m, label: COLOR_MODE_LABEL[m] }))} onChange={(m) => { setView({ colorMode: m }); const u = useLab.getState().usedColorModes; if (!u.includes(m)) useLab.setState({ usedColorModes: [...u, m] }); }} />}
       <Slider label="Point size" value={v.pointSize} min={1} max={10} step={0.5} unit=" px" onChange={(x) => setView({ pointSize: x })} />
-      <Slider label="Render budget" value={v.renderBudget} min={10000} max={800000} step={10000} format={(x) => fmtN(x)} onChange={(x) => setView({ renderBudget: x })} hint="Upper limit of points drawn. Lower it on slow machines — the app also lowers it automatically when the frame rate drops." />
+      <Slider label="Render budget" value={v.renderBudget} min={10000} max={2000000} step={10000} format={(x) => fmtN(x)} onChange={(x) => setView({ renderBudget: x })} hint="Upper limit of points drawn. Lower it on slow machines — the app also lowers it automatically when the frame rate drops." />
       <Seg value={v.background} onChange={(b) => setView({ background: b as Background })} options={[{ value: 'dark', label: 'Dark' }, { value: 'graphite', label: 'Graphite' }, { value: 'gray', label: 'Gray' }, { value: 'light', label: 'Light' }]} label="Background" />
       <Toggle label="Show scene geometry" checked={v.showScene} onChange={(x) => setView({ showScene: x })} />
       <Slider label="Scene opacity" value={v.sceneOpacity} min={0.05} max={1} step={0.05} format={(x) => `${Math.round(x * 100)}%`} onChange={(x) => setView({ sceneOpacity: x })} />

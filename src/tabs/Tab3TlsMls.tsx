@@ -12,7 +12,7 @@ import { autoRays } from '../state/actions';
 import { SceneFromStore, CloudFromStore } from './common';
 import { SensorMarker, PolyLine, Marker, CloudLayer } from '../ui/three';
 import { Plan2D } from '../ui/Plan2D';
-import { Crosshair, Pause, Play, Plus, Trash2, Route as RouteIcon } from '../ui/icons';
+import { Crosshair, Pause, Play, Plus, Trash2, Undo2, Route as RouteIcon } from '../ui/icons';
 import { PRESETS, getPreset, presetToConfig, SensorConfig, pointsPerSecond } from '../sensor/presets';
 import { runTask } from '../engine/client';
 import { staticPose, PoseSample } from '../sensor/simulate';
@@ -75,7 +75,10 @@ export default function Tab3({ labSwitch }: { labSwitch?: React.ReactNode }) {
   const [mlsCov, setMlsCov] = useState<(CoverageInfo & { unobservedArea: number }) | null>(null);
   const b = scene.bounds;
 
-  const tlsSensor: SensorConfig = useMemo(() => presetToConfig(getPreset('tls')), []);
+  const [detail, setDetail] = useState<'std' | 'high'>('high');
+  const stepDeg = detail === 'high' ? 0.2 : 0.3; // equal horizontal and vertical step, as on a real TLS
+  const tlsSensor: SensorConfig = useMemo(() => ({ ...presetToConfig(getPreset('tls')), hRes: stepDeg, channels: Math.round(150 / stepDeg) }), [stepDeg]);
+  const tlsRays = Math.round(360 / stepDeg) * Math.round(150 / stepDeg);
   const mlsSensor: SensorConfig = useMemo(() => presetToConfig(getPreset(mlsId)), [mlsId]);
 
   // Tool clicks (3D scene or plan) arrive through the shared interaction state
@@ -96,16 +99,18 @@ export default function Tab3({ labSwitch }: { labSwitch?: React.ReactNode }) {
   async function addStation(x: number, y: number) {
     const st = useLab.getState();
     if (st.busy) return;
+    if (st.stations.length >= 4) { st.notify('Four stations is the limit in the browser: remove one first.', 'warn'); return; }
     const id = st.stations.length + 1;
     st.patch({ busy: `Scanning station ${id}…` });
     try {
-      const res = await runTask('scan', { scene: getScene(st.sceneId), sensor: tlsSensor, trajectory: staticPose(x, y, tripod, stationYaw * D2R), sweeps: 1, seed: st.scanOpts.seed + id, maxRays: autoRays(tlsSensor), distortion: false, scanId: id, name: `Station ${id}` });
+      const res = await runTask('scan', { scene: getScene(st.sceneId), sensor: tlsSensor, trajectory: staticPose(x, y, tripod, stationYaw * D2R), sweeps: 1, seed: st.scanOpts.seed + id, maxRays: tlsRays, distortion: false, scanId: id, name: `Station ${id}` });
       const rng = makeRng(1000 + id);
       const e = st.stationRegErr;
       const err: Rigid = { R: eulerToR(e.deg * D2R * rng.gauss(), e.deg * D2R * rng.gauss() * 0.3, 0), t: [e.t * rng.gauss(), e.t * rng.gauss(), e.t * rng.gauss() * 0.3] };
       const cloud = e.t > 0 || e.deg > 0 ? applyError(res.cloud, [x, y, tripod], err) : res.cloud;
       cloud.name = `Station ${id}`;
       const station: Station = { id, pose: { x, y, z: tripod, yaw: stationYaw * D2R, pitch: 0 }, cloud, trueCloud: res.cloud, err: { t: Math.hypot(...err.t), deg: e.deg } };
+      useLab.getState().setView({ renderBudget: Math.max(useLab.getState().view.renderBudget, 1500000) });
       const stations = [...useLab.getState().stations, station];
       useLab.setState({ stations });
       pushUndo(`station ${id}`, () => { const ss = useLab.getState().stations.slice(0, -1); useLab.setState({ stations: ss }); void refreshTls(ss); });
@@ -269,12 +274,14 @@ export default function Tab3({ labSwitch }: { labSwitch?: React.ReactNode }) {
       {mode === 'tls' && (
         <>
           <Section title="Scanner on tripod">
-            <p className="hint"><b>Leica RTC360</b>: a tripod laser scanner, 360° × 150° with equal angular steps, records colour.</p>
+            <p className="hint"><b>Leica RTC360</b>: a tripod laser scanner with a 360° × 150° view and colour. Each station is one long, very dense scan.</p>
+            <Seg value={detail} onChange={setDetail} label="Scan detail" options={[{ value: 'std', label: 'Standard · 0.3°' }, { value: 'high', label: 'Detailed · 0.2°' }]} />
+            <span className="caption">{fmtN(tlsRays)} beams per station · point spacing ≈ {(0.1 * Math.tan(stepDeg * D2R) * 1000 / 1).toFixed(1)} cm per metre of range · up to 4 stations</span>
             <Slider label="Tripod height" value={tripod} min={0.5} max={Math.max(1.6, b.max[2] - 0.3)} step={0.05} unit=" m" format={(v) => v.toFixed(2)} onChange={setTripod} />
             <Slider label="Station heading" value={stationYaw} min={-180} max={180} step={5} unit="°" onChange={setStationYaw} />
             <div className="btn-row">
-              <Btn variant={tool === 'station' ? 'primary' : ''} icon={<Crosshair size={16} />} onClick={() => setTool(tool === 'station' ? null : 'station')} testId="tool-station">{tool === 'station' ? 'Click the plan or scene…' : 'Place station by clicking'}</Btn>
-              <Btn icon={<Plus size={16} />} onClick={() => addStation(s.pose.x, s.pose.y)} busy={!!s.busy} testId="add-station-here">Scan at scanner pose</Btn>
+              <Btn variant={tool === 'station' ? 'primary' : ''} icon={<Crosshair size={16} />} onClick={() => setTool(tool === 'station' ? null : 'station')} testId="tool-station">{tool === 'station' ? 'Click the plan or scene to add…' : 'Add station by clicking'}</Btn>
+              <Btn variant="primary" icon={<Plus size={16} />} onClick={() => addStation(s.pose.x, s.pose.y)} busy={!!s.busy} testId="add-station-here">Add station at scanner position</Btn>
             </div>
             <span className="caption">The scanner position is the one set in the Scanner Simulator ({s.pose.x.toFixed(1)}, {s.pose.y.toFixed(1)}).</span>
           </Section>
@@ -291,6 +298,7 @@ export default function Tab3({ labSwitch }: { labSwitch?: React.ReactNode }) {
               </div>
             ))}
             <div className="btn-row">
+              <Btn sm icon={<Undo2 size={15} />} onClick={() => { const ss = useLab.getState().stations.slice(0, -1); useLab.setState({ stations: ss }); void refreshTls(ss); }} disabled={!s.stations.length}>Remove last</Btn>
               <Btn sm icon={<Trash2 size={15} />} onClick={() => { useLab.setState({ stations: [] }); void refreshTls([]); }} disabled={!s.stations.length}>Remove all</Btn>
             </div>
           </Section>
@@ -362,7 +370,7 @@ export default function Tab3({ labSwitch }: { labSwitch?: React.ReactNode }) {
       stats={stats}
       topExtras={labSwitch}
       viewExtras={<>
-        <Btn sm variant="primary" icon={<Play size={15} />} onClick={() => (mode === 'mls' ? runMls() : addStation(s.pose.x, s.pose.y))} busy={mode === 'mls' ? mlsBusy : !!s.busy} testId="run-lab-scan">{mode === 'mls' ? 'Generate scan' : 'Scan station'}</Btn>
+        <Btn sm variant="primary" icon={<Play size={15} />} onClick={() => (mode === 'mls' ? runMls() : addStation(s.pose.x, s.pose.y))} busy={mode === 'mls' ? mlsBusy : !!s.busy} testId="run-lab-scan">{mode === 'mls' ? 'Generate scan' : 'Add station'}</Btn>
         <Btn sm icon={<Dots size={15} />} variant={pointsOnly ? 'primary' : ''} onClick={() => setPointsOnly(!pointsOnly)} testId="points-only">{pointsOnly ? 'Show scene' : 'Point cloud'}</Btn>
         <Btn sm icon={<FileText size={15} />} variant={rawOpen ? 'primary' : ''} onClick={() => setRawOpen(!rawOpen)} disabled={!(mode === 'mls' ? s.mls : merged)} testId="raw-toggle">Raw</Btn>
       </>}
