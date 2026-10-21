@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { useFrame } from '@react-three/fiber';
-import { Line } from '@react-three/drei';
+import { Line, RoundedBox } from '@react-three/drei';
 import { Viewport } from '../ui/Viewport';
 import { TabFrame } from '../ui/TabFrame';
 import { Callout, Eq, Section, Seg, Slider, Toggle, Btn } from '../ui/controls';
@@ -106,6 +106,27 @@ function CardSprite({ lines, position, accent = '#e61e28', onClose }: { lines: s
     <sprite position={position} scale={[w * k, h * k, 1]} center={new THREE.Vector2(1.04, -0.1)} renderOrder={60} onClick={(e) => { const uv = (e as unknown as { uv?: THREE.Vector2 }).uv; e.stopPropagation(); if (onClose && uv && uv.x > 0.82 && uv.y > 0.6) onClose(); }}>
       <spriteMaterial map={tex} sizeAttenuation={false} depthTest={false} transparent />
     </sprite>
+  );
+}
+
+/** Visual 3D person (the scanned geometry is a simpler version of the same shape). */
+function PersonModel({ px }: { px: number }) {
+  const shirt = '#3b82f6', trousers = '#374151', skin = '#f2c9a0', shoe = '#1f2937', hair = '#4a3426';
+  const cap = (x: number, y: number, z: number, r: number, len: number, col: string) => (
+    <mesh position={[x, y, z]} rotation={[Math.PI / 2, 0, 0]} raycast={() => null}><capsuleGeometry args={[r, len, 6, 14]} /><meshStandardMaterial color={col} roughness={0.8} /></mesh>
+  );
+  return (
+    <group>
+      {cap(px, 0.11, 0.45, 0.085, 0.73, trousers)}{cap(px, -0.11, 0.45, 0.085, 0.73, trousers)}
+      {[0.11, -0.11].map((y) => <mesh key={y} position={[px - 0.05, y, 0.04]} raycast={() => null}><boxGeometry args={[0.28, 0.12, 0.08]} /><meshStandardMaterial color={shoe} /></mesh>)}
+      <RoundedBox args={[0.24, 0.42, 0.6]} radius={0.07} smoothness={4} position={[px, 0, 1.2]} raycast={() => null}><meshStandardMaterial color={shirt} roughness={0.7} /></RoundedBox>
+      {cap(px, 0.28, 1.17, 0.05, 0.5, shirt)}{cap(px, -0.28, 1.17, 0.05, 0.5, shirt)}
+      {[0.28, -0.28].map((y) => <mesh key={y} position={[px, y, 0.86]} raycast={() => null}><sphereGeometry args={[0.055, 14, 10]} /><meshStandardMaterial color={skin} /></mesh>)}
+      <mesh position={[px, 0, 1.55]} rotation={[Math.PI / 2, 0, 0]} raycast={() => null}><cylinderGeometry args={[0.05, 0.055, 0.1, 14]} /><meshStandardMaterial color={skin} /></mesh>
+      <mesh position={[px, 0, 1.66]} raycast={() => null}><sphereGeometry args={[0.12, 22, 16]} /><meshStandardMaterial color={skin} roughness={0.7} /></mesh>
+      <mesh position={[px + 0.02, 0, 1.72]} scale={[1, 1.02, 0.8]} raycast={() => null}><sphereGeometry args={[0.125, 22, 16, 0, Math.PI * 2, 0, Math.PI / 2]} /><meshStandardMaterial color={hair} roughness={0.9} /></mesh>
+      <mesh position={[px - 0.12, 0, 1.65]} rotation={[0, 0, Math.PI / 2]} raycast={() => null}><coneGeometry args={[0.025, 0.05, 10]} /><meshStandardMaterial color={skin} /></mesh>
+    </group>
   );
 }
 
@@ -256,8 +277,9 @@ export default function Tab0() {
   const spotCurve = useMemo(() => Array.from({ length: 40 }, (_, k) => spot(1 + k * (Math.max(D * 1.5, 30) / 39)) * 100), [div, D]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const viewport = (
-    <Viewport home={[-5, -13, 8]} target={[D / 2, 0, 1.6]} threshold={0.18} id="concept" hideGrid hideAxes>
-      <SceneLayer scene={scene} opacity={0.55} showCeiling interactive={false} highlight={['person']} />
+    <Viewport home={[-3.5, -9.5, 5.5]} target={[D / 2.4, 0, 1.5]} threshold={0.18} id="concept" hideGrid hideAxes>
+      <SceneLayer scene={scene} opacity={0.55} showCeiling interactive={false} hide={['person']} />
+      <PersonModel px={Math.min(5, D * 0.45)} />
       {/* sensor */}
       <group position={[0, 0, zs]}>
         <mesh raycast={() => null}><boxGeometry args={[0.28, 0.28, 0.3]} /><meshStandardMaterial color="#007aff" /></mesh>
