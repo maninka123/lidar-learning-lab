@@ -16,6 +16,7 @@ import { useLab } from '../state/store';
 import { Play, Pause } from '../ui/icons';
 
 const C = 299_792_458; // m/s
+const MAX_RANGE = 40; // fixed sensor maximum range (m)
 const DETECT = 0.04; // minimum returned intensity the detector can see
 /** Darker surfaces are seen less far: effective max range scales with √reflectivity (80 % target = full range). */
 const effRange = (maxRange: number, rho: number) => maxRange * Math.min(1, Math.sqrt(Math.max(rho, 0) / 0.8));
@@ -167,7 +168,7 @@ export default function Tab0() {
   const [D, setD] = useState(12);
   const [noiseMm, setNoiseMm] = useState(0);
   const [rho, setRho] = useState(0.9);
-  const [maxRange, setMaxRange] = useState(40);
+  const maxRange = MAX_RANGE;
   const [wallYaw, setWallYaw] = useState(0);
   const pw = 5, tres = 1; // fixed teaching values
   const [slow, setSlow] = useState(1);
@@ -303,7 +304,7 @@ export default function Tab0() {
         </group>
       )}
       {/* effective maximum range for the current wall material */}
-      {(() => { const R = effRange(maxRange, rho), span = Math.min(hFov, 170) / 2 * D2R; const pts = Array.from({ length: 41 }, (_, k) => { const a = -span + (2 * span * k) / 40; return [R * Math.cos(a), R * Math.sin(a), zs] as V3; }); return (<><Line points={pts} color="#000000" lineWidth={1.4} dashed dashSize={0.5} gapSize={0.35} depthTest={false} /><TextSprite text={`max range on this wall: ${R.toFixed(1)} m`} position={[R * Math.cos(span * 0.85), R * Math.sin(span * 0.85), zs + 0.4]} bg="rgba(0,0,0,0.85)" /></>); })()}
+      {(() => { const R = effRange(maxRange, rho), span = Math.min(hFov, 170) / 2 * D2R; const pts = Array.from({ length: 41 }, (_, k) => { const a = -span + (2 * span * k) / 40; return [R * Math.cos(a), R * Math.sin(a), zs] as V3; }); return (<><Line points={pts} color="#000000" lineWidth={1.4} dashed dashSize={0.5} gapSize={0.35} depthTest={false} /></>); })()}
       <TextSprite text="Sensor" position={[0, -1.1, zs - 0.1]} bg="rgba(0,70,160,0.9)" />
       {fovOutline.edges.map((pts, i) => <Line key={`e${i}`} points={pts} color="#000000" lineWidth={1.8} depthTest={false} />)}
       <lineSegments geometry={lineGeom} raycast={() => null}><lineBasicMaterial color="#007aff" transparent opacity={0.2} /></lineSegments>
@@ -391,7 +392,6 @@ export default function Tab0() {
         <Slider label="Vertical field of view" value={vFov} min={0} max={90} step={1} unit="°" onChange={setVFov} />
         <Slider label="Horizontal resolution (columns of beams)" value={nH} min={1} max={81} step={1} onChange={setNH} />
         <Slider label="Vertical resolution (beams per column)" value={nV} min={1} max={41} step={1} onChange={setNV} />
-        <Slider label="Maximum range" value={maxRange} min={5} max={100} step={1} unit=" m" onChange={setMaxRange} />
         <Slider label="Beam divergence" value={div} min={0.5} max={100} step={0.5} unit=" mrad" onChange={setDiv} />
       </Section>
       <Section title="Surface">
