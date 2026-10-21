@@ -21,7 +21,8 @@ test.describe('LiDAR Learning Lab', () => {
     await page.getByTestId('view-home').click();
     await expect(page.getByTestId('view-top')).toHaveCount(0);
     await go(page, 1);
-    for (const v of ['top', 'front', 'side', 'home']) await page.getByTestId(`view-${v}`).click();
+    await page.getByTestId('view-home').click();
+    await expect(page.getByTestId('view-front')).toHaveCount(0);
     await page.getByTestId('toggle-panel').click();
     await expect(page.getByTestId('right-panel')).toHaveClass(/closed/);
     await page.getByTestId('toggle-panel').click();
