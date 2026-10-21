@@ -40,6 +40,12 @@ test.describe('LiDAR Learning Lab', () => {
     await page.getByTestId('mat-glass').click();
     await expect(page.getByTestId('person-points')).toContainText('0 points · gap');
     await page.getByTestId('mat-white').click();
+    await page.getByTestId('raw-toggle').click();
+    await expect(page.getByTestId('raw-view')).toContainText('DATA ascii');
+    await expect(page.getByTestId('raw-view')).toContainText('FIELDS x y z intensity');
+    await page.getByTestId('raw-toggle').click();
+    await page.getByTestId('points-only').click();
+    await page.getByTestId('points-only').click();
     await page.getByTestId('play-pause').click();
     await expect(page.getByTestId('play-pause')).toHaveAttribute('aria-label', 'Play the light pulse');
     await page.getByTestId('nav-toggle').click();

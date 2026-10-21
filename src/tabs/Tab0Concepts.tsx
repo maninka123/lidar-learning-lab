@@ -13,7 +13,9 @@ import { makeRng } from '../core/rng';
 import { viridis, turbo } from '../core/colorize';
 import { D2R } from '../core/math';
 import { useLab } from '../state/store';
-import { Play, Pause } from '../ui/icons';
+import { Play, Pause, FileText, Dots, X } from '../ui/icons';
+import { writePCD } from '../io/pcd';
+import { downloadBlob } from '../io/load';
 
 const C = 299_792_458; // m/s
 const MAX_RANGE = 40; // fixed sensor maximum range (m)
@@ -192,6 +194,8 @@ export default function Tab0() {
   const [pulseOn, setPulseOn] = useState(true);
   const closeCard = () => { setSel(null); setPulseOn(false); };
   const showAxes = useLab((s) => s.view.showAxes);
+  const [pointsOnly, setPointsOnly] = useState(false);
+  const [rawOpen, setRawOpen] = useState(false);
   const [pane, setPane] = useState<'notes' | 'controls'>('notes');
   const [active, setActive] = useState<string | null>(null);
   const prev = useRef<Record<string, number> | null>(null);
@@ -241,19 +245,20 @@ export default function Tab0() {
   const spacingH = focus ? focus.r * Math.tan(dAz * D2R) : 0;
   const hits = beams.filter((b) => b.hit);
   
+  const shown = useMemo(() => (pointsOnly ? beams.filter((b) => b.hit) : beams), [beams, pointsOnly]);
   const hitGeom = useMemo(() => {
     const g = new THREE.BufferGeometry();
-    const p = new Float32Array(beams.length * 3), c = new Float32Array(beams.length * 3);
+    const p = new Float32Array(shown.length * 3), c = new Float32Array(shown.length * 3);
     const rmax = Math.max(1, ...hits.map((b) => b.r));
-    beams.forEach((b, i) => {
+    shown.forEach((b, i) => {
       p.set(b.p, i * 3);
-      const col = b.hit ? [230, 30, 40] : [200, 200, 200];
+      const col = pointsOnly ? viridis(Math.min(1, 0.05 + b.I * 0.7)) : b.hit ? [230, 30, 40] : [200, 200, 200];
       c.set([col[0] / 255, col[1] / 255, col[2] / 255], i * 3);
     });
     g.setAttribute('position', new THREE.BufferAttribute(p, 3)); g.setAttribute('color', new THREE.BufferAttribute(c, 3));
     g.computeBoundingSphere();
     return g;
-  }, [beams, colourBy, rho]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [shown, pointsOnly]); // eslint-disable-line react-hooks/exhaustive-deps
   // thin outline of the field of view, drawn only where it lands on an object (no lines into empty space)
   const fovOutline = useMemo(() => {
     const rs = new RayScene(scene), h = newHit();
@@ -290,8 +295,19 @@ export default function Tab0() {
   }, [focus, rho, D]);
   const spotCurve = useMemo(() => Array.from({ length: 40 }, (_, k) => spot(1 + k * (Math.max(D * 1.5, 30) / 39)) * 100), [div, D]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  const rawText = useMemo(() => {
+    if (!rawOpen) return '';
+    const ok = beams.filter((b) => b.hit);
+    const positions = new Float32Array(ok.length * 3), intensity = new Float32Array(ok.length);
+    ok.forEach((b, i) => { positions.set(b.p, i * 3); intensity[i] = b.I; });
+    const buf = writePCD({ id: 'raw', name: 'lidar_scan', count: ok.length, positions, intensity, meta: { kind: 'simulated', source: 'concept page', units: 'm' } }, false);
+    return new TextDecoder().decode(buf);
+  }, [rawOpen, beams]);
+  const rawLines = useMemo(() => rawText.split('\n').filter((l) => l.length), [rawText]);
+
   const viewport = (
     <Viewport home={[-3.5, -9.5, 5.5]} target={[D / 2.4, 0, 1.5]} threshold={0.18} id="concept" hideGrid hideAxes>
+      {!pointsOnly && (<>
       <SceneLayer scene={scene} opacity={0.55} showCeiling interactive={false} hide={['person']} />
       <PersonModel px={Math.min(5, D * 0.45)} />
       {/* sensor */}
@@ -329,8 +345,9 @@ export default function Tab0() {
         </mesh>
       )}
       {beams.length <= 520 && beams.filter((b) => b.hit).map((b) => <Footprint key={b.i} b={b} radius={spot(b.r) / 2} active={active === 'spot'} />)}
-      <points geometry={hitGeom} frustumCulled={false} onClick={(e) => { e.stopPropagation(); const idx = e.index; if (idx !== undefined) setSel((cur) => (cur === idx ? null : idx)); setPulseOn(true); }}>
-        <pointsMaterial vertexColors size={6} sizeAttenuation={false} map={roundPointTexture()} alphaTest={0.5} />
+      </>)}
+      <points geometry={hitGeom} frustumCulled={false} onClick={(e) => { e.stopPropagation(); const k = e.index; const idx = k !== undefined ? shown[k]?.i : undefined; if (idx !== undefined) setSel((cur) => (cur === idx ? null : idx)); setPulseOn(true); }}>
+        <pointsMaterial vertexColors size={pointsOnly ? 7 : 6} sizeAttenuation={false} map={roundPointTexture()} alphaTest={0.5} />
       </points>
       {sel !== null && focus && (focus.hit
         ? <CardSprite position={focus.p} lines={[`Point #${focus.i + 1}`]} table={{ head: ['x (m)', 'y (m)', 'z (m)', 'intensity'], row: [focus.p[0].toFixed(2), focus.p[1].toFixed(2), focus.p[2].toFixed(2), focus.I.toFixed(3)] }} onClose={closeCard} />
@@ -340,7 +357,7 @@ export default function Tab0() {
             : [`Point #${focus.i + 1}: no return`, `Intensity  ${focus.IGeo.toFixed(3)} < ${DETECT}`, 'Too little light came back']} />
           : <CardSprite accent="#666666" position={focus.p} lines={[`Point #${focus.i + 1}: no return`, 'This beam hit nothing']} onClose={closeCard} />)}
       {focus?.hit && <mesh position={focus.p} raycast={() => null}><ringGeometry args={[0.14, 0.2, 24]} /><meshBasicMaterial color="#ff9f0a" side={THREE.DoubleSide} depthTest={false} /></mesh>}
-      {pulseOn && focus?.hit && <Pulse from={new THREE.Vector3(0, 0, zs)} to={new THREE.Vector3(...focus.p)} slow={slow} playing={playing} onTick={setPhase} />}
+      {!pointsOnly && pulseOn && focus?.hit && <Pulse from={new THREE.Vector3(0, 0, zs)} to={new THREE.Vector3(...focus.p)} slow={slow} playing={playing} onTick={setPhase} />}
     </Viewport>
   );
 
@@ -430,11 +447,25 @@ export default function Tab0() {
       controls={controls}
       learn={null}
       simple
-      viewExtras={<button className="btn icon primary" style={{ width: 38, height: 38, borderRadius: 19, padding: 0 }} onClick={() => setPlaying(!playing)} data-testid="play-pause" aria-label={playing ? 'Pause the light pulse' : 'Play the light pulse'} title={playing ? 'Pause' : 'Play'}>{playing ? <Pause size={18} /> : <Play size={18} />}</button>}
+      viewExtras={<><button className="btn icon primary" style={{ width: 38, height: 38, borderRadius: 19, padding: 0 }} onClick={() => setPlaying(!playing)} data-testid="play-pause" aria-label={playing ? 'Pause the light pulse' : 'Play the light pulse'} title={playing ? 'Pause' : 'Play'}>{playing ? <Pause size={18} /> : <Play size={18} />}</button><Btn sm icon={<Dots size={15} />} variant={pointsOnly ? 'primary' : ''} onClick={() => setPointsOnly(!pointsOnly)} testId="points-only">{pointsOnly ? 'Show scene' : 'Point cloud'}</Btn><Btn sm icon={<FileText size={15} />} variant={rawOpen ? 'primary' : ''} onClick={() => setRawOpen(!rawOpen)} testId="raw-toggle">Raw</Btn></>}
       overlays={
         <>
           <KindLegend items={[{ color: '#007aff', label: 'Laser beams' }, { color: '#34c759', label: 'Beam divergence / spot' }, { color: '#ff9f0a', label: 'Selected point' }]} />
           <div className="sr-only" data-testid="concept-point-info" aria-live="polite">{focus?.hit ? `${sel !== null ? `Point ${focus.i + 1}` : 'Middle beam'}: position ${focus.p.map((v) => v.toFixed(2)).join(', ')} m, range ${focus.r.toFixed(2)} m, reflectivity ${focus.rho.toFixed(2)}, Intensity ${focus.I.toFixed(3)}` : 'No return'}</div>
+          {rawOpen && (
+            <div className="overlay glass-strong card" style={{ left: 12, top: 168, bottom: 12, width: 'min(520px, calc(100% - 230px))', display: 'flex', flexDirection: 'column', gap: 8, padding: '0.7rem 0.8rem', zIndex: 5 }} data-testid="raw-view">
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <b style={{ flex: 1 }}>lidar_scan.pcd <span className="caption">· the file a LiDAR scan is stored in</span></b>
+                <Btn sm onClick={() => downloadBlob(new Blob([rawText], { type: 'text/plain' }), 'lidar_scan.pcd')}>Download</Btn>
+                <button className="btn sm icon" onClick={() => setRawOpen(false)} aria-label="Close raw view" style={{ width: 32 }}><X size={15} /></button>
+              </div>
+              <div className="mono" style={{ flex: 1, overflow: 'auto', fontSize: '0.8125rem', lineHeight: 1.55, background: 'var(--fill)', borderRadius: 12, padding: '0.6rem 0.8rem', whiteSpace: 'pre' }}>
+                {rawLines.slice(0, 11 + 400).map((l, i) => <div key={i} style={{ color: i < 11 ? '#0a60c9' : 'var(--text)' }}>{l}</div>)}
+                {rawLines.length > 411 && <div className="caption">… {rawLines.length - 11 - 400} more points not shown</div>}
+              </div>
+              <span className="caption">Blue = header (describes the data). Each row below it is one point: x y z intensity.</span>
+            </div>
+          )}
           <FrontInsets beams={beams} scene={scene} hFov={hFov} vFov={vFov} D={D} zs={zs} />
           <div className="overlay" style={{ right: 12, bottom: 12, display: 'grid', gap: 8, justifyItems: 'end' }} data-testid="stats-card">
             {pulseOn && lesson === 'tof' && focus?.hit && <div className="glass card" style={{ minWidth: 210, padding: '0.45rem 0.8rem' }}><div className="caption">Stopwatch (slowed down) · {phase < 0.5 ? 'going out' : 'coming back'}</div><div className="mono" style={{ fontSize: '1.3rem', fontWeight: 650 }}>{clock.toFixed(1)} ns</div></div>}

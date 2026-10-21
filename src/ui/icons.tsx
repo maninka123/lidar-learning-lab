@@ -57,3 +57,5 @@ export const Layers = mk(<path d="M12 3l9 5-9 5-9-5zM3 13l9 5 9-5M3 17.5l9 5 9-5
 export const Sparkles = mk(<path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8zM19 16l.8 2.2L22 19l-2.2.8L19 22l-.8-2.2L16 19l2.2-.8z" />);
 export const SkipForward = mk(<path d="M5 5l9 7-9 7zM18 5v14" />);
 export const Wand = mk(<path d="M4 20L16 8M14 4l1 2 2 1-2 1-1 2-1-2-2-1 2-1zM19 12l.7 1.3L21 14l-1.3.7L19 16l-.7-1.3L17 14l1.3-.7z" />);
+export const FileText = mk(<path d="M6 3h8l4 4v14H6zM14 3v4h4M9 12h6M9 16h6M9 8h2" />);
+export const Dots = mk(<><circle cx="6" cy="7" r="1.6" /><circle cx="13" cy="5" r="1.6" /><circle cx="18" cy="10" r="1.6" /><circle cx="9" cy="13" r="1.6" /><circle cx="16" cy="17" r="1.6" /><circle cx="6" cy="18" r="1.6" /></>);
