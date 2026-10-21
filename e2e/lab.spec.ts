@@ -71,27 +71,52 @@ test.describe('LiDAR Learning Lab', () => {
     await page.getByTestId('points-only').click();
     await page.getByTestId('points-only').click();
     await expect(page.getByText('Vertical FOV', { exact: true })).toBeVisible();
+    await page.evaluate(() => window.__lab.getState().setPreset('rot4'));
+    await page.getByTestId('sensor-picker').locator('select').selectOption('c64');
+    await expect.poll(() => state(page, (s) => s.sensorPresetId)).toBe('rot64');
+    await expect(page.getByTestId('sensor-hdl64e')).toBeVisible();
+    await page.getByTestId('sensor-hdl64e').click();
+    await expect.poll(() => state(page, (s) => s.sensorPresetId)).toBe('hdl64e');
     await page.evaluate(() => window.__lab.getState().setPreset('planar'));
     await expect(page.getByText('Vertical FOV', { exact: true })).toHaveCount(0);
     await page.evaluate(() => window.__lab.getState().setPreset('rot32'));
+    await page.getByRole('button', { name: 'View', exact: true }).click();
     await page.getByTestId('log-scan').click();
     await expect(page.getByTestId('scan-log')).toBeVisible();
   });
 
-  test('tab 2: pick points, measure, colour modes and export', async ({ page }) => {
+  test('tab 1: prism (Livox-style) scans keep filling in automatically', async ({ page }) => {
     await go(page, 1);
+    await page.evaluate(() => window.__lab.getState().setPreset('avia'));
     await page.getByTestId('run-scan').click();
-    await expect.poll(() => state(page, (s) => !!s.clouds.scan)).toBe(true);
+    await expect.poll(() => state(page, (s) => s.clouds.scan?.count ?? 0)).toBeGreaterThan(1000);
+    const n1 = await state(page, (s) => s.clouds.scan.count);
+    await expect.poll(() => state(page, (s) => s.clouds.scan?.count ?? 0), { timeout: 60000 }).toBeGreaterThan(n1 * 2);
+    await expect(page.getByTestId('run-scan')).toContainText(/Stop|Run scan/);
+    await page.getByRole('button', { name: 'Single sweep', exact: true }).click();
+    await expect.poll(() => state(page, (s) => s.accumulate)).toBe(false);
+  });
+
+  test('tab 2: real point clouds - load, compare, align, pick, raw and export', async ({ page }) => {
     await go(page, 2);
-    await page.getByTestId('pick-mode').click();
-    await page.evaluate(() => {
-      const s = window.__lab.getState(); const c = s.clouds.scan;
-      const picks = [0, 500, 1500, 4000, 9000].map((i) => ({ cloudId: c.id, index: i, pos: [c.positions[i * 3], c.positions[i * 3 + 1], c.positions[i * 3 + 2]] }));
-      s.patch({ picks });
-    });
-    await expect(page.getByTestId('distance-table')).toContainText('Path length');
-    await expect(page.getByTestId('point-info')).toContainText('Intensity');
-    await expect(page.getByTestId('point-info')).toContainText('RGB');
+    await expect(page.getByTestId('stats-card')).toContainText('112,586', { timeout: 30000 });
+    await expect(page.getByRole('button', { name: 'Exercise' })).toHaveCount(0);
+    await page.getByTestId('real-lamp').click();
+    await expect(page.getByTestId('stats-card')).toContainText('1,771');
+    await page.getByTestId('real-room1').click();
+    await page.getByRole('button', { name: 'Overlay', exact: true }).click();
+    await page.getByTestId('real-align').click();
+    await expect(page.getByText('Registered with ICP')).toBeVisible({ timeout: 60000 });
+    await page.getByRole('button', { name: 'Side by side', exact: true }).click();
+    await expect.poll(() => state(page, (s) => s.realCompared)).toBe(true);
+    await page.getByTestId('tls-vs-mls').click();
+    await expect(page.getByTestId('tls-mls-table')).toBeVisible({ timeout: 90000 });
+    await page.getByTestId('real-room1').click();
+    await page.getByTestId('raw-toggle').click();
+    await expect(page.getByTestId('raw-view')).toContainText('FIELDS x y z');
+    await page.getByTestId('raw-toggle').click();
+    await page.evaluate(() => { const s = window.__lab.getState(); const c = s.clouds.explorer; s.patch({ picks: [0, 900].map((i) => ({ cloudId: c.id, index: i, pos: [c.positions[i * 3], c.positions[i * 3 + 1], c.positions[i * 3 + 2]] })) }); });
+    await expect(page.getByTestId('distance-table')).toContainText('P1');
     const [dl] = await Promise.all([page.waitForEvent('download'), (async () => { await page.getByTestId('export-menu').click(); await page.getByTestId('export-ply').click(); })()]);
     expect(dl.suggestedFilename()).toMatch(/\.ply$/);
   });
@@ -183,7 +208,6 @@ test.describe('LiDAR Learning Lab', () => {
     await page.getByTestId('environment-menu').click();
     await page.getByTestId('env-B').click();
     await expect.poll(() => state(page, (s) => s.sceneId)).toBe('B');
-    await page.getByTestId('environment-menu').click();
     await page.getByTestId('env-A').click();
     await expect.poll(() => state(page, (s) => s.sceneId)).toBe('A');
   });

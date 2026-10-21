@@ -18,7 +18,7 @@ const Tab9 = lazy(() => import('./tabs/Tab9Challenges'));
 const TABS: { label: string; icon: ReactNode; el: ReactNode }[] = [
   { label: 'What is LiDAR?', icon: <Info size={18} />, el: <Tab0 /> },
   { label: 'Scanner Simulator', icon: <Radar size={18} />, el: <Tab1 /> },
-  { label: 'Point Cloud Explorer', icon: <Boxes size={18} />, el: <Tab2 /> },
+  { label: 'Real Point Clouds', icon: <Boxes size={18} />, el: <Tab2 /> },
   { label: 'TLS & MLS Laboratory', icon: <Route size={18} />, el: <Tab3 /> },
   { label: 'SLAM & Registration', icon: <GitMerge size={18} />, el: <Tab4 /> },
   { label: 'Point Cloud Processing', icon: <Filter size={18} />, el: <Tab5 /> },

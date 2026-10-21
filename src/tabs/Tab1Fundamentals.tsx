@@ -8,39 +8,67 @@ import { Btn, Callout, Eq, NumberField, Section, Select, Seg, Slider, MiniSlider
 import { DisplaySection, KindLegend } from '../ui/shared';
 import { SceneFromStore, CloudFromStore, PickLayer, targetOf, countInstance, useSpacing } from './common';
 import { SensorMarker, RayLines } from '../ui/three';
-import { PRESETS, getPreset, raysPerSweep, pointsPerSecond, isSteered } from '../sensor/presets';
+import { FAMILIES, FAMILY_GROUPS, familyLabel, familyOf, getPreset, raysPerSweep, pointsPerSecond, isSteered } from '../sensor/presets';
 import { sweepDirections } from '../sensor/simulate';
-import { runScan } from '../state/actions';
+import { runScan, stopLive } from '../state/actions';
 import { RawViewer } from '../ui/RawViewer';
 import { writePCD } from '../io/pcd';
-import { Dots, FileText } from '../ui/icons';
+import { Dots, FileText, Pause } from '../ui/icons';
 import { Plan2D } from '../ui/Plan2D';
 import { D2R } from '../core/math';
 
 function PatternPreview({ sensor }: { sensor: import("../sensor/presets").SensorConfig }) {
-  const sweeps = 1;
   const ref = useRef<HTMLCanvasElement>(null);
+  const steered = sensor.pattern === 'risley' || sensor.pattern === 'solidstate'; // only these change from sweep to sweep
   useEffect(() => {
     const cv = ref.current; if (!cv) return;
     const W = 340, H = 190, dpr = window.devicePixelRatio || 1;
     cv.width = W * dpr; cv.height = H * dpr;
     const g = cv.getContext('2d')!; g.scale(dpr, dpr);
-    g.fillStyle = '#11131a'; g.fillRect(0, 0, W, H);
     const hh = Math.min(180, sensor.hFov / 2), v0 = Math.min(sensor.vMin, sensor.vMax - 1), v1 = Math.max(sensor.vMax, sensor.vMin + 1);
     const X = (a: number) => 10 + ((a * 180 / Math.PI + hh) / (2 * hh)) * (W - 20), Y = (e: number) => H - 14 - ((e * 180 / Math.PI - v0) / (v1 - v0)) * (H - 28);
-    const cols = ['#64d2ff', '#ff9f0a', '#30d158', '#bf5af2', '#ff453a'];
-    for (let sw = 0; sw < sweeps; sw++) {
-      const d = sweepDirections(sensor, sw, Math.max(1, Math.ceil(raysPerSweep(sensor) / 5000)));
-      g.fillStyle = cols[sw % cols.length];
-      for (let k = 0; k < d.n; k++) g.fillRect(X(d.az[k]) - 0.7, Y(d.el[k]) - 0.7, 1.5, 1.5);
-    }
-    g.fillStyle = '#9aa'; g.font = '12px -apple-system, sans-serif';
-    g.fillText(`azimuth ±${hh.toFixed(0)}°`, 10, H - 2); g.fillText(`elevation ${v0.toFixed(0)}…${v1.toFixed(0)}°`, W - 130, 12);
-  }, [sensor, sweeps]);
+    const stride = Math.max(1, Math.ceil(raysPerSweep(sensor) / 4000));
+    const maxSweeps = steered ? 6 : 1;
+    const sweepsDirs = Array.from({ length: maxSweeps }, (_, sw) => sweepDirections(sensor, sw, stride));
+    const cols = ['#64d2ff', '#ff9f0a', '#30d158', '#bf5af2', '#ff453a', '#ffd60a'];
+    const SW_MS = steered ? 1400 : 3200; // time to draw one sweep
+    let raf = 0; const t0 = performance.now();
+    const frame = (now: number) => {
+      const t = (now - t0) / SW_MS, cycle = t % maxSweeps, cur = Math.floor(cycle), frac = cycle - cur;
+      g.fillStyle = '#11131a'; g.fillRect(0, 0, W, H);
+      for (let sw = 0; sw <= cur; sw++) {
+        const d = sweepsDirs[sw], upto = sw < cur ? d.n : Math.floor(d.n * frac);
+        g.fillStyle = sw < cur ? cols[sw % cols.length] + '99' : cols[sw % cols.length];
+        for (let k = 0; k < upto; k++) g.fillRect(X(d.az[k]) - 0.8, Y(d.el[k]) - 0.8, 1.7, 1.7);
+        if (sw === cur && upto > 0) { g.fillStyle = '#fff'; g.beginPath(); g.arc(X(d.az[upto - 1]), Y(d.el[upto - 1]), 3.5, 0, 7); g.fill(); }
+      }
+      g.fillStyle = '#9aa'; g.font = '12px -apple-system, sans-serif';
+      g.fillText(`azimuth ±${hh.toFixed(0)}°`, 10, H - 2); g.fillText(`elevation ${v0.toFixed(0)}…${v1.toFixed(0)}°`, W - 130, 12);
+      if (steered) g.fillText(`sweep ${cur + 1} of ${maxSweeps} · fills in each sweep`, 10, 14);
+      if (steered) raf = requestAnimationFrame(frame);
+    };
+    if (steered) raf = requestAnimationFrame(frame); else frame(t0 + SW_MS * 0.999);
+    return () => cancelAnimationFrame(raf);
+  }, [sensor, steered]);
   return (
     <div className="field">
-      <label>Scan-pattern preview (beam directions)</label>
-      <canvas ref={ref} style={{ width: '100%', height: 190, borderRadius: 12 }} aria-label="Scan pattern preview" />
+      <label>{steered ? 'Scan pattern (changes every sweep)' : 'Scan pattern (same every sweep)'}</label>
+      <canvas ref={ref} style={{ width: '100%', height: 190, borderRadius: 12 }} aria-label="Scan pattern" />
+    </div>
+  );
+}
+
+
+/** Generic scanner type first; then the commercial models of that type. */
+function SensorPicker({ value, onPick }: { value: string; onPick: (id: string) => void }) {
+  const fam = familyOf(value);
+  return (
+    <div style={{ display: 'grid', gap: 10 }} data-testid="sensor-picker">
+      <Select label="Scanner type" value={fam.id} options={FAMILIES.map((f) => ({ value: f.id, label: f.label }))} groups={FAMILY_GROUPS.map((g) => ({ label: g.label, options: g.ids.map((id) => ({ value: id, label: familyLabel(id) })) }))} onChange={(id) => onPick(FAMILIES.find((f) => f.id === id)!.models[0])} />
+      <div className="field">
+        <label>Sensor presets</label>
+        <div className="chip-row">{fam.models.map((m) => <button key={m} className="chip" aria-pressed={m === value} onClick={() => onPick(m)} data-testid={`sensor-${m}`}>{getPreset(m).name}</button>)}</div>
+      </div>
     </div>
   );
 }
@@ -49,11 +77,20 @@ export default function Tab1() {
   const s = useLab();
   const scene = getScene(s.sceneId);
   const preset = getPreset(s.sensorPresetId);
+  const [pane, setPane] = useState<'sensor' | 'position' | 'view'>('sensor');
   const [pointsOnly, setPointsOnly] = useState(false);
   const [rawOpen, setRawOpen] = useState(false);
   const cloud = s.clouds['scan'];
-  const rawText = useMemo(() => (rawOpen && cloud ? new TextDecoder().decode(writePCD(cloud, false)) : ''), [rawOpen, cloud]);
+  const rawText = useMemo(() => {
+    if (!rawOpen || !cloud) return '';
+    // a real LiDAR file keeps just what the sensor measured: x y z + intensity (TLS: x y z + colour)
+    const colour = s.sensor.pattern === 'panoramic' && !!cloud.colors;
+    const slim = { id: 'raw', name: 'scan', count: cloud.count, positions: cloud.positions, meta: cloud.meta, ...(colour ? { colors: cloud.colors } : { intensity: cloud.intensity }) };
+    return new TextDecoder().decode(writePCD(slim as typeof cloud, false));
+  }, [rawOpen, cloud, s.sensor.pattern]);
   const [mode, setMode] = useState<'3d' | '2d'>('3d');
+  useEffect(() => () => stopLive(), []);
+  useEffect(() => { stopLive(); }, [s.sensorPresetId]);
   const spacing = useSpacing(cloud);
   // keep the scan in step with the scanner: re-scan shortly after the pose changes (only if a scan already exists)
   const poseKey = `${s.pose.x}|${s.pose.y}|${s.pose.z}|${s.pose.yaw}|${s.pose.pitch}`;
@@ -76,8 +113,6 @@ export default function Tab1() {
 
   const stats = [
     { k: 'Points', v: cloud ? fmtN(cloud.count) : '—', s: info ? `${fmtN(info.stats.rays)} rays · ${fmtN(info.stats.misses)} no-return` : `${fmtN(rps * s.scanOpts.sweeps)} rays planned` },
-    { k: 'Point spacing', v: spacing ? `${(spacing * 100).toFixed(1)} cm` : '—', s: `${(10 * Math.tan(sensor.hRes * D2R) * 100).toFixed(1)} cm at 10 m (horizontal)` },
-    { k: 'Target hits', v: target ? fmtN(hits) : '—', s: target ? `${target.name}` : '' },
     { k: 'Surface coverage', v: cov ? `${cov.coveredPct.toFixed(1)} %` : '—', s: cov?.vis ? `${((100 * cov.vis.occluded) / cov.total).toFixed(0)} % occluded` : undefined },
   ];
 
@@ -89,7 +124,7 @@ export default function Tab1() {
   const viewport = mode === '3d' ? (
     <Viewport home={scene.cameraHome} target={scene.cameraTarget}>
       {!pointsOnly && <SceneFromStore annotate={false} />}
-      {cloud && <CloudFromStore cloud={cloud} mode={pointsOnly && cloud.intensity ? 'intensity' : undefined} />}
+      {cloud && <CloudFromStore cloud={cloud} mode={sensor.pattern === 'panoramic' && cloud.colors ? 'rgb' : 'flat'} colorOpts={{ flat: [230, 30, 40] }} />}
       {!pointsOnly && <SensorMarker x={s.pose.x} y={s.pose.y} z={s.pose.z} yaw={s.pose.yaw} pitch={s.pose.pitch} sensor={sensor} label="Scanner" />}
       {!pointsOnly && s.view.showRays && info?.viz && <RayLines origin={info.viz.origin} ends={info.viz.ends} hit={info.viz.hit} />}
       <PickLayer />
@@ -109,16 +144,11 @@ export default function Tab1() {
 
   const controls = (
     <>
+      <Seg value={pane} onChange={setPane} options={[{ value: 'sensor', label: 'Sensor' }, { value: 'position', label: 'Position' }, { value: 'view', label: 'View' }]} label="Controls section" />
+      {pane === 'sensor' && (<>
       <Section title="Sensor preset">
-        <Select value={s.sensorPresetId} options={PRESETS.map((p) => ({ value: p.id, label: p.name }))} onChange={s.setPreset} />
+        <SensorPicker value={s.sensorPresetId} onPick={(id) => { stopLive(); s.setPreset(id); void runScan(); }} />
         <p className="hint">{preset.blurb}</p>
-        {preset.profile && (
-          <Callout kind="warn" title={`${preset.profile.vendor} profile — what is verified vs simplified`}>
-            <table className="table"><tbody>{preset.profile.verified.map((v) => <tr key={v.label}><td>{v.label}</td><td>{v.value}</td></tr>)}</tbody></table>
-            <b style={{ display: 'block', marginTop: 8 }}>Simplified in this simulator</b>
-            <ul style={{ margin: '4px 0 0', paddingLeft: '1.1rem' }}>{preset.profile.simplifications.map((t, i) => <li key={i}>{t}</li>)}</ul>
-          </Callout>
-        )}
         {solid && <Callout kind="warn">Steered-beam patterns (prism rosette, MEMS) are illustrative and do not reproduce any commercial scan pattern.</Callout>}
         <PatternPreview sensor={sensor} />
       </Section>
@@ -127,22 +157,25 @@ export default function Tab1() {
         {sensor.pattern === 'planar' && <p className="hint">2D scanner: a single beam sweeps one plane, so there is no vertical FOV or vertical resolution.</p>}
         <Slider label="Horizontal FOV" value={sensor.hFov} min={10} max={360} step={5} unit="°" onChange={(hFov) => s.setSensor({ hFov })} disabled={sensor.pattern === 'planar' && false} />
         {sensor.pattern !== 'planar' && <Slider label="Vertical FOV" value={Math.round((sensor.vMax - sensor.vMin) * 2) / 2} min={0} max={150} step={0.5} unit="°" onChange={(f) => { const mid = (sensor.vMin + sensor.vMax) / 2; s.setSensor({ vMin: mid - f / 2, vMax: mid + f / 2 }); }} />}
-        <Slider label="Horizontal resolution (angular step)" value={sensor.hRes} min={0.05} max={3} step={0.05} unit="°" format={(v) => v.toFixed(2)} onChange={(hRes) => s.setSensor({ hRes })} hint={solid ? 'For solid-state: sets the number of steered beams per sweep.' : undefined} />
+        {sensor.pattern !== 'rotating' && sensor.pattern !== 'panoramic' && <Slider label="Horizontal resolution (angular step)" value={sensor.hRes} min={0.05} max={3} step={0.05} unit="°" format={(v) => v.toFixed(2)} onChange={(hRes) => s.setSensor({ hRes })} hint={solid ? 'For solid-state: sets the number of steered beams per sweep.' : undefined} />}
         {sensor.pattern !== 'planar' && <Slider label={solid ? 'Beam density (lines)' : 'Vertical resolution (channels)'} value={sensor.channels} min={1} max={256} step={1} onChange={(channels) => s.setSensor({ channels })} />}
         <Slider label="Maximum range" value={sensor.maxRange} min={1} max={150} step={1} unit=" m" onChange={(maxRange) => s.setSensor({ maxRange })} />
       </Section>
 
-      <Section title="Run">
-        <div className="btn-row">
-          <Btn icon={<Plus size={16} />} onClick={logRow} disabled={!cloud} testId="log-scan">Add to comparison</Btn>
-          <Btn icon={<Trash2 size={16} />} onClick={() => { s.setCloud('scan', null); s.patch({ scanInfo: null }); }} disabled={!cloud}>Clear</Btn>
-        </div>
-        <Seg value={mode} onChange={setMode} options={[{ value: '3d', label: '3D view' }, { value: '2d', label: '2D plan' }]} />
-        <Toggle label="Show scanning rays" checked={s.view.showRays} onChange={(v) => s.setView({ showRays: v })} />
+      <Section title="Advanced" open={false}>
+        <Slider label="Minimum range" value={sensor.minRange} min={0} max={5} step={0.1} unit=" m" format={(v) => v.toFixed(1)} onChange={(minRange) => s.setSensor({ minRange })} />
+        <Slider label="Scan frequency" value={sensor.frequency} min={0.01} max={50} step={0.01} unit=" Hz" format={(v) => v.toFixed(2)} onChange={(frequency) => s.setSensor({ frequency })} />
+        <div className="field"><label>Returns per beam</label><Seg value={sensor.returns} options={[{ value: 1, label: '1' }, { value: 2, label: '2' }, { value: 3, label: '3' }]} onChange={(v) => s.setSensor({ returns: v as 1 | 2 | 3 })} /><span className="caption">Extra returns only appear where a beam partly passes through something (e.g. tree foliage in Scene C).</span></div>
+        <Slider label="Range noise (1σ)" value={sensor.noise} min={0} max={0.1} step={0.001} unit=" m" format={(v) => v.toFixed(3)} onChange={(noise) => s.setSensor({ noise })} />
+        <Toggle label="Override surface reflectivity" checked={sensor.reflectivityOverride !== null} onChange={(on) => s.setSensor({ reflectivityOverride: on ? 0.5 : null })} hint="Off: each material uses its own reflectivity." />
+        {sensor.reflectivityOverride !== null && <Slider label="Reflectivity (all surfaces)" value={sensor.reflectivityOverride} min={0.02} max={1} step={0.01} format={(v) => `${Math.round(v * 100)}%`} onChange={(v) => s.setSensor({ reflectivityOverride: v })} />}
+        <Slider label="Accumulated sweeps" value={s.scanOpts.sweeps} min={1} max={10} step={1} onChange={(sweeps) => s.patch({ scanOpts: { ...s.scanOpts, sweeps } })} hint="Accumulate several sweeps from the same pose." />
+        <NumberField label="Random seed" value={s.scanOpts.seed} step={1} onChange={(seed) => s.patch({ scanOpts: { ...s.scanOpts, seed: Math.round(seed) || 0 } })} />
       </Section>
 
-
-      <Section title="Sensor pose" open={false}>
+      </>)}
+      {pane === 'position' && (<>
+      <Section title="Sensor pose">
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem 1rem' }}>
           <MiniSlider label="X" value={s.pose.x} min={b.min[0] + 0.3} max={b.max[0] - 0.3} step={0.05} unit=" m" format={(v) => v.toFixed(1)} onChange={(x) => s.setPose({ x })} />
           <MiniSlider label="Y" value={s.pose.y} min={b.min[1] + 0.3} max={b.max[1] - 0.3} step={0.05} unit=" m" format={(v) => v.toFixed(1)} onChange={(y) => s.setPose({ y })} />
@@ -155,17 +188,16 @@ export default function Tab1() {
         </Btn>
       </Section>
 
-      <Section title="Advanced" open={false}>
-        <Slider label="Minimum range" value={sensor.minRange} min={0} max={5} step={0.1} unit=" m" format={(v) => v.toFixed(1)} onChange={(minRange) => s.setSensor({ minRange })} />
-        <Slider label="Scan frequency" value={sensor.frequency} min={0.01} max={50} step={0.01} unit=" Hz" format={(v) => v.toFixed(2)} onChange={(frequency) => s.setSensor({ frequency })} />
-        <div className="field"><label>Returns per beam</label><Seg value={sensor.returns} options={[{ value: 1, label: '1' }, { value: 2, label: '2' }, { value: 3, label: '3' }]} onChange={(v) => s.setSensor({ returns: v as 1 | 2 | 3 })} /><span className="caption">Extra returns only appear where a beam partly passes through something (e.g. tree foliage in Scene C).</span></div>
-        <Slider label="Range noise (1σ)" value={sensor.noise} min={0} max={0.1} step={0.001} unit=" m" format={(v) => v.toFixed(3)} onChange={(noise) => s.setSensor({ noise })} />
-        <Toggle label="Override surface reflectivity" checked={sensor.reflectivityOverride !== null} onChange={(on) => s.setSensor({ reflectivityOverride: on ? 0.5 : null })} hint="Off: each material uses its own reflectivity." />
-        {sensor.reflectivityOverride !== null && <Slider label="Reflectivity (all surfaces)" value={sensor.reflectivityOverride} min={0.02} max={1} step={0.01} format={(v) => `${Math.round(v * 100)}%`} onChange={(v) => s.setSensor({ reflectivityOverride: v })} />}
-        <Slider label="Accumulated sweeps" value={s.scanOpts.sweeps} min={1} max={10} step={1} onChange={(sweeps) => s.patch({ scanOpts: { ...s.scanOpts, sweeps } })} hint="Accumulate several sweeps from the same pose." />
-        <Slider label="Point budget" value={s.scanOpts.maxRays} min={5000} max={400000} step={5000} format={fmtN} onChange={(maxRays) => s.patch({ scanOpts: { ...s.scanOpts, maxRays } })} hint="Upper limit on rays per scan; the simulator coarsens the angular step to stay within it." />
-        <NumberField label="Random seed" value={s.scanOpts.seed} step={1} onChange={(seed) => s.patch({ scanOpts: { ...s.scanOpts, seed: Math.round(seed) || 0 } })} />
+      </>)}
+      {pane === 'view' && (<>
+      <Section title="Scan">
+        <div className="btn-row">
+          <Btn icon={<Plus size={16} />} onClick={logRow} disabled={!cloud} testId="log-scan">Add to comparison</Btn>
+          <Btn icon={<Trash2 size={16} />} onClick={() => { s.setCloud('scan', null); s.patch({ scanInfo: null }); }} disabled={!cloud}>Clear</Btn>
+        </div>
+        <Toggle label="Show scanning rays" checked={s.view.showRays} onChange={(v) => s.setView({ showRays: v })} />
       </Section>
+
 
       {s.scanLog.length > 0 && (
         <Section title="Comparison">
@@ -176,7 +208,8 @@ export default function Tab1() {
           <Btn sm onClick={() => useLab.setState({ scanLog: [] })}>Clear table</Btn>
         </Section>
       )}
-      <DisplaySection cloud={cloud} open={false} />
+      <DisplaySection cloud={cloud} hideColour />
+      </>)}
     </>
   );
 
@@ -208,8 +241,15 @@ export default function Tab1() {
       controls={controls}
       learn={learn}
       stats={stats}
-      viewExtras={<><Btn sm variant="primary" icon={<Play size={15} />} onClick={() => runScan()} busy={!!s.busy} testId="run-scan">Run scan</Btn><Btn sm icon={<Dots size={15} />} variant={pointsOnly ? 'primary' : ''} onClick={() => setPointsOnly(!pointsOnly)} testId="points-only">{pointsOnly ? 'Show scene' : 'Point cloud'}</Btn><Btn sm icon={<FileText size={15} />} variant={rawOpen ? 'primary' : ''} onClick={() => setRawOpen(!rawOpen)} disabled={!cloud} testId="raw-toggle">Raw</Btn></>}
-      overlays={<>{rawOpen && cloud && <RawViewer text={rawText} filename="scan.pcd" onClose={() => setRawOpen(false)} />}<KindLegend items={[{ color: '#8e8e93', label: 'Scene mesh (original geometry)', style: 'wire' }, { color: '#64d2ff', label: 'Simulated LiDAR points' }, { color: '#ff9f0a', label: 'Ray end-points' }]} /></>}
+      statsRow
+      noPanelTabs
+      topExtras={<Seg block={false} value={mode} onChange={setMode} options={[{ value: '3d', label: '3D' }, { value: '2d', label: '2D' }]} label="View" />}
+      viewExtras={<><Btn sm variant="primary" icon={s.live ? <Pause size={15} /> : <Play size={15} />} onClick={() => (s.live ? stopLive() : runScan())} busy={!!s.busy} testId="run-scan">{s.live ? 'Stop' : 'Run scan'}</Btn><Btn sm icon={<Dots size={15} />} variant={pointsOnly ? 'primary' : ''} onClick={() => setPointsOnly(!pointsOnly)} testId="points-only">{pointsOnly ? 'Show scene' : 'Point cloud'}</Btn><Btn sm icon={<FileText size={15} />} variant={rawOpen ? 'primary' : ''} onClick={() => setRawOpen(!rawOpen)} disabled={!cloud} testId="raw-toggle">Raw</Btn></>}
+      overlays={<>{(s.sensor.pattern === 'risley' || s.sensor.pattern === 'solidstate') && (
+        <div className="overlay glass card" style={{ right: 12, top: 70, padding: '0.35rem' }} data-testid="accumulate-toggle">
+          <Seg block={false} value={s.accumulate ? 'acc' : 'one'} onChange={(v) => { stopLive(); s.patch({ accumulate: v === 'acc' }); setTimeout(() => void runScan(), 0); }} label="Point cloud mode" options={[{ value: 'one', label: 'Single sweep' }, { value: 'acc', label: 'Building up' }]} />
+        </div>
+      )}{rawOpen && cloud && <RawViewer text={rawText} filename="scan.pcd" onClose={() => setRawOpen(false)} />}<KindLegend items={[{ color: '#8e8e93', label: 'Scene mesh (original geometry)', style: 'wire' }, { color: '#64d2ff', label: 'Simulated LiDAR points' }, { color: '#ff9f0a', label: 'Ray end-points' }]} /></>}
     />
   );
   void Badge; void useMemo;

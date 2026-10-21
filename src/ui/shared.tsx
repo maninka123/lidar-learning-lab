@@ -87,7 +87,7 @@ function ExportMenu() {
   );
 }
 
-export function TopBar({ title, minimal }: { title: string; minimal?: boolean }) {
+export function TopBar({ title, minimal, extra }: { title: string; minimal?: boolean; extra?: ReactNode }) {
   const s = useLab();
   const [confirm, setConfirm] = useState(false);
   useEffect(() => { if (confirm) { const t = setTimeout(() => setConfirm(false), 3000); return () => clearTimeout(t); } }, [confirm]);
@@ -95,6 +95,7 @@ export function TopBar({ title, minimal }: { title: string; minimal?: boolean })
     <header className="topbar glass">
       <h1>{title}</h1>
       {!minimal && <EnvironmentMenu />}
+      {extra}
       <div className="spacer" />
       {!minimal && <Btn icon={<Undo2 size={16} />} onClick={doUndo} disabled={s.undoCount === 0} title="Undo last action" testId="undo">Undo</Btn>}
       {!minimal && <Btn icon={<RotateCcw size={16} />} variant={confirm ? 'danger' : ''} onClick={() => { if (confirm) { s.resetAll(); setConfirm(false); s.notify('Everything reset.', 'info'); } else setConfirm(true); }} title="Reset the whole lab" testId="reset">{confirm ? 'Confirm reset' : 'Reset'}</Btn>}
@@ -121,9 +122,14 @@ export function ViewControls({ simple, extra }: { simple?: boolean; extra?: Reac
   );
 }
 
-export function StatsCard({ items, title = 'Live statistics' }: { items: { k: string; v: ReactNode; s?: string }[]; title?: string }) {
+export function StatsCard({ items, title = 'Live statistics', row }: { items: { k: string; v: ReactNode; s?: string }[]; title?: string; row?: boolean }) {
   const fps = useLab((s) => s.fps);
   const [open, setOpen] = useState(true);
+  if (row) return (
+    <div className="overlay" style={{ left: 12, bottom: 12, display: 'flex', gap: 8 }} data-testid="stats-card">
+      {items.map((it) => <div key={it.k} className="glass card" style={{ padding: '0.45rem 0.85rem', minWidth: 150 }}><div className="caption">{it.k}</div><div style={{ fontSize: '1.2rem', fontWeight: 650 }}>{it.v}</div>{it.s && <div className="caption">{it.s}</div>}</div>)}
+    </div>
+  );
   return (
     <div className="overlay glass card" style={{ left: 12, bottom: 12, width: open ? 'min(24rem, calc(100% - 24px))' : 'auto' }} data-testid="stats-card">
       <button className="section-head" onClick={() => setOpen(!open)} style={{ marginBottom: open ? 8 : 0, width: '100%' }}>
@@ -158,15 +164,15 @@ export function Toast() {
 }
 
 // ------------------------------------------------------------------ shared control sections
-export function DisplaySection({ cloud, extra, open = true }: { cloud?: PointCloud | null; extra?: ReactNode; open?: boolean }) {
+export function DisplaySection({ cloud, extra, open = true, hideColour }: { cloud?: PointCloud | null; extra?: ReactNode; open?: boolean; hideColour?: boolean }) {
   const v = useLab((s) => s.view);
   const setView = useLab((s) => s.setView);
   const modes = cloud ? availableModes(cloud) : (['height', 'flat'] as ColorMode[]);
   return (
     <Section title="Display" open={open}>
-      <Select label="Colour by" value={v.colorMode} options={modes.map((m) => ({ value: m, label: COLOR_MODE_LABEL[m] }))} onChange={(m) => { setView({ colorMode: m }); const u = useLab.getState().usedColorModes; if (!u.includes(m)) useLab.setState({ usedColorModes: [...u, m] }); }} />
+      {!hideColour && <Select label="Colour by" value={v.colorMode} options={modes.map((m) => ({ value: m, label: COLOR_MODE_LABEL[m] }))} onChange={(m) => { setView({ colorMode: m }); const u = useLab.getState().usedColorModes; if (!u.includes(m)) useLab.setState({ usedColorModes: [...u, m] }); }} />}
       <Slider label="Point size" value={v.pointSize} min={1} max={10} step={0.5} unit=" px" onChange={(x) => setView({ pointSize: x })} />
-      <Slider label="Render budget" value={v.renderBudget} min={10000} max={400000} step={5000} format={(x) => fmtN(x)} onChange={(x) => setView({ renderBudget: x })} hint="Upper limit of points drawn. Lower it on slow machines — the app also lowers it automatically when the frame rate drops." />
+      <Slider label="Render budget" value={v.renderBudget} min={10000} max={800000} step={10000} format={(x) => fmtN(x)} onChange={(x) => setView({ renderBudget: x })} hint="Upper limit of points drawn. Lower it on slow machines — the app also lowers it automatically when the frame rate drops." />
       <Seg value={v.background} onChange={(b) => setView({ background: b as Background })} options={[{ value: 'dark', label: 'Dark' }, { value: 'graphite', label: 'Graphite' }, { value: 'gray', label: 'Gray' }, { value: 'light', label: 'Light' }]} label="Background" />
       <Toggle label="Show scene geometry" checked={v.showScene} onChange={(x) => setView({ showScene: x })} />
       <Slider label="Scene opacity" value={v.sceneOpacity} min={0.05} max={1} step={0.05} format={(x) => `${Math.round(x * 100)}%`} onChange={(x) => setView({ sceneOpacity: x })} />

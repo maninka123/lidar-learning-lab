@@ -48,13 +48,13 @@ export function MiniSlider({ label, value, min, max, step = 1, unit = '', onChan
   );
 }
 
-export function Select<T extends string>({ label, value, options, onChange, hint }: { label?: string; value: T; options: { value: T; label: string }[]; onChange: (v: T) => void; hint?: string }) {
+export function Select<T extends string>({ label, value, options, groups, onChange, hint }: { label?: string; value: T; options: { value: T; label: string }[]; groups?: { label: string; options: { value: T; label: string }[] }[]; onChange: (v: T) => void; hint?: string }) {
   const id = `sel-${(label ?? 'x').replace(/\W+/g, '-')}`;
   return (
     <div className="field">
       {label && <label htmlFor={id}>{label}</label>}
       <select id={id} value={value} onChange={(e) => onChange(e.target.value as T)}>
-        {options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+        {groups ? groups.map((g) => <optgroup key={g.label} label={g.label}>{g.options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}</optgroup>) : options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
       </select>
       {hint && <span className="caption">{hint}</span>}
     </div>

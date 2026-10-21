@@ -56,9 +56,12 @@ export interface LabState {
   picks: Pick[];
   selectedObjectId: string | null;
   busy: string | null;
+  live: boolean;
+  accumulate: boolean;
   toast: { msg: string; kind: 'info' | 'ok' | 'warn' | 'error'; n: number } | null;
   scanInfo: { stats: ScanResult['stats']; viz?: ScanResult['viz']; coverage?: CoverageInfo | null } | null;
   usedColorModes: string[];
+  realCompared: boolean;
   scanLog: { label: string; hRes: number; channels: number; maxRange: number; points: number; spacing: number; coveragePct: number | null; occludedPct: number | null }[];
   exportsLog: { name: string; fmt: string; count: number }[];
   undoCount: number;
@@ -151,9 +154,12 @@ function initial() {
     picks: [] as Pick[],
     selectedObjectId: null as string | null,
     busy: null as string | null,
+    live: false,
+    accumulate: true,
     toast: null,
     scanInfo: null,
     usedColorModes: [] as string[],
+    realCompared: false,
     scanLog: [] as LabState['scanLog'],
     exportsLog: [] as LabState['exportsLog'],
     undoCount: 0,
@@ -212,7 +218,14 @@ export const useLab = create<LabState>((set, get) => ({
     });
   },
   setSensor: (p) => set({ sensor: { ...get().sensor, ...p } }),
-  setPreset: (id) => set({ sensorPresetId: id, sensor: presetToConfig(getPreset(id)) }),
+  setPreset: (id) => {
+    const tls = getPreset(id).pattern === 'panoramic';
+    set({
+      sensorPresetId: id, sensor: presetToConfig(getPreset(id)),
+      // a terrestrial scanner is slow and dense and also records colour: show RGB and allow more points
+      ...(tls ? { view: { ...get().view, colorMode: 'rgb' as const, renderBudget: Math.max(get().view.renderBudget, 600000) } } : {}),
+    });
+  },
   setPose: (p) => set({ pose: { ...get().pose, ...p } }),
   setView: (p) => set({ view: { ...get().view, ...p } }),
   setCloud: (id, c, activate = true) => {

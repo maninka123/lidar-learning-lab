@@ -11,6 +11,7 @@ export interface ScanRequest {
   sensor: SensorConfig;
   trajectory: PoseSample[]; // single sample => static station
   sweeps: number; // number of full sweeps to emit
+  sweepStart?: number; // index of the first sweep (non-repeating patterns differ per sweep)
   seed: number;
   maxRays: number; // point budget
   distortion: boolean; // assign one pose per sweep (shows motion distortion)
@@ -100,7 +101,8 @@ export function simulateScan(req: ScanRequest): ScanResult {
   const totalFull = perSweepFull * req.sweeps;
   const colStride = isSteered(sensor.pattern) ? 1 : Math.max(1, Math.ceil(totalFull / req.maxRays));
   let streamLimit = req.maxRays;
-  const dirsFirst = sweepDirections(sensor, 0, colStride);
+  const sw0 = req.sweepStart ?? 0;
+  const dirsFirst = sweepDirections(sensor, sw0, colStride);
   const perSweep = isSteered(sensor.pattern) ? Math.min(dirsFirst.n, Math.max(1, Math.floor(streamLimit / req.sweeps))) : dirsFirst.n;
   const reduced = colStride > 1 || perSweep < dirsFirst.n;
   const totalRays = perSweep * req.sweeps;
@@ -127,11 +129,11 @@ export function simulateScan(req: ScanRequest): ScanResult {
   const static_ = trajectory.length === 1;
 
   for (let sw = 0; sw < req.sweeps; sw++) {
-    const dirs = isSteered(sensor.pattern) ? sweepDirections(sensor, sw, 1) : dirsFirst;
-    const startPose = poseAt(trajectory, T0 + sw * sweepDur);
+    const dirs = isSteered(sensor.pattern) ? sweepDirections(sensor, sw0 + sw, 1) : dirsFirst;
+    const startPose = poseAt(trajectory, T0 + (sw0 + sw) * sweepDur);
     const startR = eulerToR(startPose.yaw, startPose.pitch, startPose.roll);
     for (let k = 0; k < perSweep; k++) {
-      const t = T0 + sw * sweepDur + (k / perSweep) * sweepDur;
+      const t = T0 + (sw0 + sw) * sweepDur + (k / perSweep) * sweepDur;
       const pose = static_ ? trajectory[0] : poseAt(trajectory, t);
       const R = static_ ? startR : eulerToR(pose.yaw, pose.pitch, pose.roll);
       const ce = Math.cos(dirs.el[k]), se = Math.sin(dirs.el[k]);

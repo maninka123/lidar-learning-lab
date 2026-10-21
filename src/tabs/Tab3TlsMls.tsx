@@ -60,7 +60,7 @@ export default function Tab3() {
   const scene = getScene(s.sceneId);
   const [mode, setMode] = useState<Mode>('tls');
   const [tlsId, setTlsId] = useState('tls');
-  const [tlsRes, setTlsRes] = useState(0.5);
+  const [tlsRes, setTlsRes] = useState(0.15);
   const [tripod, setTripod] = useState(1.5);
   const [mlsId, setMlsId] = useState('rot32');
   const [tool, setTool] = useState<'station' | 'waypoint' | null>(null);
@@ -73,7 +73,7 @@ export default function Tab3() {
   const [mlsCov, setMlsCov] = useState<(CoverageInfo & { unobservedArea: number }) | null>(null);
   const b = scene.bounds;
 
-  const tlsSensor: SensorConfig = useMemo(() => ({ ...presetToConfig(getPreset(tlsId)), hRes: tlsRes, channels: Math.round(120 / (tlsRes * 3.2)) }), [tlsId, tlsRes]);
+  const tlsSensor: SensorConfig = useMemo(() => ({ ...presetToConfig(getPreset(tlsId)), hRes: tlsRes, channels: Math.round(150 / (tlsRes * 3.2)) }), [tlsId, tlsRes]);
   const mlsSensor: SensorConfig = useMemo(() => presetToConfig(getPreset(mlsId)), [mlsId]);
 
   // Tool clicks (3D scene or plan) arrive through the shared interaction state
@@ -97,7 +97,7 @@ export default function Tab3() {
     const id = st.stations.length + 1;
     st.patch({ busy: `Scanning station ${id}…` });
     try {
-      const res = await runTask('scan', { scene: getScene(st.sceneId), sensor: tlsSensor, trajectory: staticPose(x, y, tripod, stationYaw * D2R), sweeps: 1, seed: st.scanOpts.seed + id, maxRays: 120000, distortion: false, scanId: id, name: `Station ${id}` });
+      const res = await runTask('scan', { scene: getScene(st.sceneId), sensor: tlsSensor, trajectory: staticPose(x, y, tripod, stationYaw * D2R), sweeps: 1, seed: st.scanOpts.seed + id, maxRays: 700000, distortion: false, scanId: id, name: `Station ${id}` });
       const rng = makeRng(1000 + id);
       const e = st.stationRegErr;
       const err: Rigid = { R: eulerToR(e.deg * D2R * rng.gauss(), e.deg * D2R * rng.gauss() * 0.3, 0), t: [e.t * rng.gauss(), e.t * rng.gauss(), e.t * rng.gauss() * 0.3] };
@@ -206,7 +206,7 @@ export default function Tab3() {
   const viewport = (
     <Viewport home={scene.cameraHome} target={scene.cameraTarget}>
       <SceneFromStore />
-      {mode !== 'mls' && merged && <CloudFromStore cloud={merged} mode={s.view.colorMode === 'height' ? 'scan' : s.view.colorMode} pickable={false} />}
+      {mode !== 'mls' && merged && <CloudFromStore cloud={merged} mode={s.view.colorMode === 'height' ? 'rgb' : s.view.colorMode} pickable={false} />}
       {mode === 'mls' && mlsShown && <CloudFromStore cloud={mlsShown} pickable={false} />}
       {mode === 'compare' && s.mls && <CloudFromStore cloud={s.mls.cloud} mode="flat" colorOpts={{ flat: [255, 159, 10] }} pickable={false} />}
       {mode !== 'mls' && missingOn && missingCloud && <CloudLayer cloud={missingCloud} mode="flat" colorOpts={{ flat: [255, 69, 58] }} size={4} budget={40000} pickable={false} />}
@@ -258,8 +258,8 @@ export default function Tab3() {
       {mode === 'tls' && (
         <>
           <Section title="Scanner on tripod">
-            <Select label="Scanner" value={tlsId} options={['tls', 'rot64', 'vlp16'].map((id) => ({ value: id, label: getPreset(id).name }))} onChange={setTlsId} />
-            <Slider label="Angular step" value={tlsRes} min={0.2} max={2} step={0.05} unit="°" format={(v) => v.toFixed(2)} onChange={setTlsRes} hint={`${fmtN(Math.round(360 / tlsRes) * tlsSensor.channels)} rays per station (budget 120 000)`} />
+            <Select label="Scanner" value={tlsId} options={['tls', 'faro', 'x7', 'blk360'].map((id) => ({ value: id, label: getPreset(id).name }))} onChange={setTlsId} />
+            <Slider label="Angular step" value={tlsRes} min={0.2} max={2} step={0.05} unit="°" format={(v) => v.toFixed(2)} onChange={setTlsRes} hint={`${fmtN(Math.round(360 / tlsRes) * tlsSensor.channels)} rays per station (budget 700 000)`} />
             <Slider label="Tripod height" value={tripod} min={0.5} max={Math.max(1.6, b.max[2] - 0.3)} step={0.05} unit=" m" format={(v) => v.toFixed(2)} onChange={setTripod} />
             <Slider label="Station heading" value={stationYaw} min={-180} max={180} step={5} unit="°" onChange={setStationYaw} />
             <div className="btn-row">
@@ -294,7 +294,7 @@ export default function Tab3() {
       {mode !== 'tls' && (
         <>
           <Section title="Mobile platform">
-            <Select label="Scanner" value={mlsId} options={['rot16', 'rot32', 'vlp16', 'rot64'].map((id) => ({ value: id, label: getPreset(id).name }))} onChange={setMlsId} />
+            <Select label="Scanner" value={mlsId} options={['rot16', 'hdl32e', 'rot32', 'rot64', 'rs16'].map((id) => ({ value: id, label: getPreset(id).name }))} onChange={setMlsId} />
             <Seg value={String(s.mlsOpts.height)} onChange={(v) => s.patch({ mlsOpts: { ...s.mlsOpts, height: parseFloat(v) } })} options={[{ value: '1', label: 'Trolley 1.0 m' }, { value: '1.5', label: 'Handheld 1.5 m' }, { value: '1.8', label: 'Vehicle 1.8 m' }]} />
             <Slider label="Platform speed" value={s.mlsOpts.speed} min={0.2} max={4} step={0.1} unit=" m/s" format={(v) => v.toFixed(1)} onChange={(speed) => s.patch({ mlsOpts: { ...s.mlsOpts, speed } })} />
             <Toggle label="Show motion distortion" checked={s.mlsOpts.distortion} onChange={(distortion) => s.patch({ mlsOpts: { ...s.mlsOpts, distortion } })} hint="ON: every point of a sweep is placed with the sweep-start pose, as if the platform did not move during the rotation. Compare with OFF (each point uses its own time-stamped pose)." />

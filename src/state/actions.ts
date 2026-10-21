@@ -4,11 +4,18 @@ import { runTask } from '../engine/client';
 import { staticPose } from '../sensor/simulate';
 import { PointCloud, attributesOf } from '../core/pointcloud';
 import { downloadCloud, ExportFormat, loadFile } from '../io/load';
-import { PRESETS, presetToConfig } from '../sensor/presets';
+import { PRESETS, presetToConfig, raysPerSweep } from '../sensor/presets';
+import { concatClouds } from '../core/pointcloud';
 
 export const sceneOf = () => getScene(useLab.getState().sceneId);
 
-export async function runScan(opts: { id?: string; name?: string; withCoverage?: boolean } = {}) {
+let liveToken = 0;
+/** Point budget adjusts automatically: all rays the sensor fires, up to a cap that keeps the browser responsive. */
+export const autoRays = (sensor: Parameters<typeof raysPerSweep>[0], sweeps = 1) => Math.min(900000, Math.max(5000, raysPerSweep(sensor) * sweeps));
+export const stopLive = () => { liveToken++; useLab.setState({ live: false }); };
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+export async function runScan(opts: { id?: string; name?: string; withCoverage?: boolean; live?: boolean } = {}) {
   const s = useLab.getState();
   if (s.busy) return null;
   const scene = getScene(s.sceneId);
@@ -16,13 +23,15 @@ export async function runScan(opts: { id?: string; name?: string; withCoverage?:
   try {
     const res = await runTask('scan', {
       scene, sensor: s.sensor, trajectory: staticPose(s.pose.x, s.pose.y, s.pose.z, s.pose.yaw, -s.pose.pitch), sweeps: s.scanOpts.sweeps, seed: s.scanOpts.seed,
-      maxRays: s.scanOpts.maxRays, distortion: false, scanId: 0, wantViz: true, name: opts.name ?? `Scan · ${s.sensor.name}`,
+      maxRays: autoRays(s.sensor, s.scanOpts.sweeps), distortion: false, scanId: 0, wantViz: true, name: opts.name ?? `Scan · ${s.sensor.name}`,
     });
     const st = useLab.getState();
     st.setCloud(opts.id ?? 'scan', res.cloud);
     st.patch({ scanInfo: { stats: res.stats, viz: res.viz, coverage: null }, picks: [] });
     if (res.stats.reduced) st.notify(`Point budget reached — angular resolution thinned to ${res.stats.effectiveHRes.toFixed(2)}°.`, 'warn');
-    if (opts.withCoverage !== false) void computeScanCoverage();
+    if (opts.withCoverage !== false && !(opts.live !== false && s.accumulate && (s.sensor.pattern === 'risley' || s.sensor.pattern === 'solidstate'))) void computeScanCoverage();
+    // Non-repeating scanners (prism / Livox-style) keep filling in: keep adding sweeps automatically.
+    if (opts.live !== false && s.accumulate && (s.sensor.pattern === 'risley' || s.sensor.pattern === 'solidstate')) void accumulateLive(res.cloud, 12);
     return res;
   } catch (e) {
     useLab.getState().notify(`Scan failed: ${(e as Error).message}`, 'error');
@@ -105,4 +114,23 @@ export function clearPicks() {
   if (!prev.length) return;
   useLab.setState({ picks: [] });
   pushUndo('clear picks', () => useLab.setState({ picks: prev }));
+}
+
+/** Adds one sweep at a time so a non-repeating pattern visibly fills in. Stops when the token changes. */
+async function accumulateLive(first: PointCloud, total: number) {
+  const token = ++liveToken;
+  useLab.setState({ live: true });
+  let acc = first;
+  for (let k = 1; k < total; k++) {
+    await sleep(260);
+    if (token !== liveToken) return;
+    const s = useLab.getState();
+    if (!s.clouds['scan']) break;
+    const scene = getScene(s.sceneId);
+    const res = await runTask('scan', { scene, sensor: s.sensor, trajectory: staticPose(s.pose.x, s.pose.y, s.pose.z, s.pose.yaw, -s.pose.pitch), sweeps: 1, sweepStart: k, seed: s.scanOpts.seed + k * 31, maxRays: autoRays(s.sensor, 1), distortion: false, scanId: 0, name: first.name });
+    if (token !== liveToken) return;
+    acc = concatClouds([acc, res.cloud], first.name, {});
+    useLab.getState().setCloud('scan', acc);
+  }
+  if (token === liveToken) { useLab.setState({ live: false }); void computeScanCoverage(); }
 }

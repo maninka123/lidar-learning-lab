@@ -13,25 +13,29 @@ export interface TabFrameProps {
   overlays?: ReactNode;
   hideViewControls?: boolean;
   viewExtras?: ReactNode;
+  statsRow?: boolean;
+  hideExercise?: boolean;
+  noPanelTabs?: boolean;
+  topExtras?: ReactNode;
   simple?: boolean; // controls only: no Exercise / Learn panes, minimal top bar
 }
 
-export function TabFrame({ title, tab, viewport, controls, learn, stats, overlays, hideViewControls, simple, viewExtras }: TabFrameProps) {
+export function TabFrame({ title, tab, viewport, controls, learn, stats, overlays, hideViewControls, simple, viewExtras, statsRow, hideExercise, noPanelTabs, topExtras }: TabFrameProps) {
   const open = useLab((s) => s.rightOpen);
   const [pane, setPane] = useState<'controls' | 'exercise' | 'learn'>('controls');
   return (
     <>
-      <TopBar title={title} minimal={simple} />
+      <TopBar title={title} minimal={simple} extra={topExtras} />
       <div className="tab-body">
         <div className="stage" data-testid="stage">
           {viewport}
           {!hideViewControls && <ViewControls simple={simple} extra={viewExtras} />}
-          {stats && <StatsCard items={stats} />}
+          {stats && <StatsCard items={stats} row={statsRow} />}
           {overlays}
         </div>
         <aside className={`right glass ${open ? '' : 'closed'}`} aria-label="Experiment controls" data-testid="right-panel">
-          {!simple && <div style={{ padding: '0.8rem 1rem 0.4rem' }}>
-            <Seg value={pane} onChange={setPane} label="Panel" options={[{ value: 'controls', label: 'Controls' }, { value: 'exercise', label: 'Exercise' }, { value: 'learn', label: 'Learn' }]} />
+          {!simple && !noPanelTabs && <div style={{ padding: '0.8rem 1rem 0.4rem' }}>
+            <Seg value={pane} onChange={setPane} label="Panel" options={hideExercise ? [{ value: 'controls', label: 'Controls' }, { value: 'learn', label: 'Learn' }] : [{ value: 'controls', label: 'Controls' }, { value: 'exercise', label: 'Exercise' }, { value: 'learn', label: 'Learn' }]} />
           </div>}
           <div className="right-body" key={pane}>
             <div className="fade-in" style={{ display: 'grid', gap: 0 }}>

@@ -1,195 +1,238 @@
-import { useMemo, useState } from 'react';
-import { useLab, pushUndo } from '../state/store';
-import { getScene } from '../scenes';
-import { className, classColor } from '../scenes/classes';
+import { ReactNode, useEffect, useMemo, useState } from 'react';
+import { useLab } from '../state/store';
 import { Viewport } from '../ui/Viewport';
 import { TabFrame } from '../ui/TabFrame';
-import { Badge, Btn, Callout, Eq, Section, Select, Slider, Stat, cloudBadge, fmtN } from '../ui/controls';
-import { DatasetInfo, DisplaySection, KindLegend } from '../ui/shared';
-import { SceneFromStore, CloudFromStore, PickLayer } from './common';
-import { Crosshair, Download, Play, Scissors, Trash2, Undo2, Upload } from '../ui/icons';
-import { activeCloud, clearPicks, exampleCloud, exportCloudFile, runScan, uploadCloud } from '../state/actions';
-import { cloudBounds, PointCloud, attributesOf } from '../core/pointcloud';
-import { cropBox } from '../processing/ops';
-import { turbo, viridis, COLOR_MODE_LABEL } from '../core/colorize';
-import { Vec3 } from '../core/math';
+import { Badge, Btn, Callout, Section, Select, Seg, Slider, fmtN } from '../ui/controls';
+import { RawViewer } from '../ui/RawViewer';
+import { CloudLayer, PickLayer } from '../ui/three';
+import { Crosshair, Download, FileText, Trash2, Undo2, Upload, Play } from '../ui/icons';
+import { clearPicks, exportCloudFile, uploadCloud } from '../state/actions';
+import { cloudBounds, PointCloud, attributesOf, transformCloud } from '../core/pointcloud';
+import { availableModes, COLOR_MODE_LABEL, ColorMode } from '../core/colorize';
+import { parsePointCloud } from '../io/load';
+import { writePCD } from '../io/pcd';
+import { runTask } from '../engine/client';
+import { useSpacing } from './common';
+import { getScene } from '../scenes';
+import { FAMILIES, getPreset, presetToConfig } from '../sensor/presets';
+import { staticPose, PoseSample } from '../sensor/simulate';
+import { autoRays } from '../state/actions';
 
-function ColorBar({ cloud, mode }: { cloud: PointCloud; mode: string }) {
-  const info = useMemo(() => {
-    if (mode === 'height' || mode === 'range') {
-      let lo = Infinity, hi = -Infinity;
-      for (let i = 0; i < cloud.count; i++) { const v = mode === 'height' ? cloud.positions[i * 3 + 2] : cloud.ranges?.[i] ?? 0; if (v < lo) lo = v; if (v > hi) hi = v; }
-      return { fn: turbo, lo, hi, unit: 'm' };
-    }
-    if (mode === 'intensity') return { fn: viridis, lo: 0, hi: 1, unit: '(relative)' };
-    return null;
-  }, [cloud, mode]);
-  if (!info) return null;
-  const stops = Array.from({ length: 12 }, (_, i) => { const c = info.fn(i / 11); return `rgb(${c[0]},${c[1]},${c[2]}) ${(i / 11) * 100}%`; }).join(',');
-  return (
-    <div className="overlay glass card" style={{ right: 12, bottom: 12, width: 220 }}>
-      <div className="caption" style={{ marginBottom: 4 }}>{COLOR_MODE_LABEL[mode as keyof typeof COLOR_MODE_LABEL]}</div>
-      <div style={{ height: 10, borderRadius: 6, background: `linear-gradient(90deg,${stops})` }} />
-      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8125rem', marginTop: 4 }} className="mono"><span>{info.lo.toFixed(2)}</span><span>{info.unit}</span><span>{info.hi.toFixed(2)}</span></div>
-    </div>
+const simCache = new Map<string, PointCloud>();
+const SIM_SETS: RealSet[] = [
+  { id: 'sim-tls', label: 'TLS (tripod), same room', file: '', blurb: 'Simulated tripod laser scanner in Scene A: one static station, very dense, with colour.' },
+  { id: 'sim-mls', label: 'MLS (walking), same room', file: '', blurb: 'Simulated mobile scanner (32-channel) walked across Scene A: many sweeps from a moving pose, sparser, no colour.' },
+];
+
+function Pictogram({ kind }: { kind: 'tls' | 'mls' }) {
+  return kind === 'tls' ? (
+    <svg viewBox="0 0 64 64" width="56" height="56" aria-label="Tripod scanner"><path d="M32 30 L18 58 M32 30 L46 58 M32 30 L32 58" stroke="#444" strokeWidth="2.5" fill="none" strokeLinecap="round" /><rect x="22" y="10" width="20" height="20" rx="5" fill="#0a84ff" /><circle cx="32" cy="20" r="5" fill="#fff" /></svg>
+  ) : (
+    <svg viewBox="0 0 64 64" width="56" height="56" aria-label="Moving scanner"><rect x="8" y="38" width="48" height="12" rx="4" fill="#8e8e93" /><circle cx="18" cy="52" r="5" fill="#333" /><circle cx="46" cy="52" r="5" fill="#333" /><rect x="26" y="22" width="12" height="12" rx="3" fill="#ff9f0a" /><path d="M20 20 L12 16 M44 20 L52 16 M20 28 L10 28 M44 28 L54 28" stroke="#ff9f0a" strokeWidth="2" strokeLinecap="round" /></svg>
   );
 }
 
+interface RealSet { id: string; label: string; file: string; blurb: string }
+
+const SETS: RealSet[] = [
+  { id: 'room1', label: 'Room scan 1', file: 'room_scan1.pcd', blurb: 'A real scan of a room (112 586 points) from the Point Cloud Library tutorial data. Only x, y, z were recorded: no colour, no intensity.' },
+  { id: 'room2', label: 'Room scan 2', file: 'room_scan2.pcd', blurb: 'A second real scan of the same room from a different pose (112 624 points). Compare it with scan 1: the two overlap but are not aligned.' },
+  { id: 'lamp', label: 'Lamppost', file: 'lamppost.pcd', blurb: 'A very small real scan (1 771 points): you can see individual points and how sparse a LiDAR sample can be.' },
+];
+
+const cache = new Map<string, PointCloud>();
+async function loadSet(set: RealSet): Promise<PointCloud> {
+  const hit = cache.get(set.id);
+  if (hit) return hit;
+  const res = await fetch(`${import.meta.env.BASE_URL}data/${set.file}`);
+  if (!res.ok) throw new Error(`Could not load ${set.file}`);
+  const c = parsePointCloud(await res.arrayBuffer(), set.file);
+  c.name = set.label;
+  c.meta = { ...c.meta, kind: 'measured', source: `Point Cloud Library sample data: ${set.file}`, license: 'BSD-3-Clause (PointCloudLibrary/data)', description: set.blurb, coordinateFrame: 'Sensor frame as recorded, metres' };
+  cache.set(set.id, c);
+  return c;
+}
+
+const centre = (c: PointCloud): [number, number, number] => { const b = cloudBounds(c); return [(b.min[0] + b.max[0]) / 2, (b.min[1] + b.max[1]) / 2, (b.min[2] + b.max[2]) / 2]; };
+const sizeOf = (c: PointCloud) => { const b = cloudBounds(c); return Math.max(b.max[0] - b.min[0], b.max[1] - b.min[1], b.max[2] - b.min[2], 0.5); };
+
 export default function Tab2() {
   const s = useLab();
-  const scene = getScene(s.sceneId);
-  const cloud = activeCloud();
-  const ids = Object.keys(s.clouds);
+  const [aId, setAId] = useState('room1');
+  const [bId, setBId] = useState('room2');
+  const [mode, setMode] = useState<'single' | 'split' | 'overlay'>('single');
+  const [A, setA] = useState<PointCloud | null>(null);
+  const [B, setB] = useState<PointCloud | null>(null);
+  const [uploaded, setUploaded] = useState<PointCloud | null>(null);
+  const [aligned, setAligned] = useState<{ cloud: PointCloud; before: number; after: number } | null>(null);
+  const [rawOpen, setRawOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [colour, setColour] = useState<ColorMode | 'auto'>('auto');
+  const [size, setSize] = useState(2.5);
+
+  const [simReady, setSimReady] = useState(simCache.size === 2);
+  const sets = useMemo<RealSet[]>(() => [...SETS, ...(simReady ? SIM_SETS : []), ...(uploaded ? [{ id: 'upload', label: uploaded.name, file: '', blurb: 'Your own file.' }] : [])], [uploaded, simReady]);
+  const resolve = (id: string) => (id === 'upload' && uploaded ? Promise.resolve(uploaded) : simCache.has(id) ? Promise.resolve(simCache.get(id)!) : loadSet(SETS.find((x) => x.id === id)!));
+
+  useEffect(() => { let on = true; resolve(aId).then((c) => { if (on) { setA(c); setAligned(null); useLab.getState().setCloud('explorer', c); } }).catch((e) => useLab.getState().notify(e.message, 'error')); return () => { on = false; }; }, [aId, uploaded]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (mode === 'single') return; let on = true; resolve(bId).then((c) => { if (on) { setB(c); setAligned(null); } }).catch((e) => useLab.getState().notify(e.message, 'error')); return () => { on = false; }; }, [bId, mode, uploaded]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (mode !== 'single' && aId !== bId) useLab.setState({ realCompared: true }); }, [mode, aId, bId]);
+
+  const info = sets.find((x) => x.id === aId);
+  const spacing = useSpacing(A);
+  const spacingB = useSpacing(B);
+  const modes = A ? availableModes(A).filter((m) => ['height', 'xyz', 'rgb', 'flat'].includes(m)) : (['height'] as ColorMode[]);
+  const effMode: ColorMode = colour !== 'auto' && modes.includes(colour) ? colour : A?.colors ? 'rgb' : 'height';
+  const home = useMemo<[number, number, number]>(() => { if (!A) return [4, -4, 3]; const c = centre(A), k = sizeOf(A); return [c[0] + k * 0.9, c[1] - k * 0.9, c[2] + k * 0.7]; }, [A]);
+  const target = useMemo<[number, number, number]>(() => (A ? centre(A) : [0, 0, 0]), [A]);
+  const threshold = A ? Math.max(0.01, sizeOf(A) / 350) : 0.05;
+  const budget = s.view.renderBudget;
+
   const last = s.picks[s.picks.length - 1];
-  const b = useMemo(() => (cloud ? cloudBounds(cloud) : null), [cloud]);
-  const [crop, setCrop] = useState<{ min: Vec3; max: Vec3 } | null>(null);
-  const c = crop ?? (b ? { min: b.min as Vec3, max: b.max as Vec3 } : null);
-
   const dists = s.picks.slice(1).map((p, i) => Math.hypot(p.pos[0] - s.picks[i].pos[0], p.pos[1] - s.picks[i].pos[1], p.pos[2] - s.picks[i].pos[2]));
-  const total = dists.reduce((a, d) => a + d, 0);
 
-  const info = (() => {
-    if (!cloud || !last || last.cloudId !== cloud.id) return null;
-    const i = last.index;
-    return {
-      pos: last.pos,
-      range: cloud.ranges?.[i],
-      intensity: cloud.intensity?.[i],
-      rgb: cloud.colors ? [cloud.colors[i * 3], cloud.colors[i * 3 + 1], cloud.colors[i * 3 + 2]] : null,
-      cls: cloud.labels ? cloud.labels[i] : null,
-      normal: cloud.normals ? [cloud.normals[i * 3], cloud.normals[i * 3 + 1], cloud.normals[i * 3 + 2]] : null,
-    };
-  })();
+  const rawText = useMemo(() => {
+    if (!rawOpen || !A) return '';
+    const slim = { id: 'raw', name: A.name, count: A.count, positions: A.positions, meta: A.meta, ...(A.colors ? { colors: A.colors } : {}) } as PointCloud;
+    return new TextDecoder().decode(writePCD(slim, false));
+  }, [rawOpen, A]);
 
-  const viewport = (
-    <Viewport home={scene.cameraHome} target={scene.cameraTarget} threshold={0.06}>
-      <SceneFromStore interactive={s.interaction === 'select'} />
-      {cloud && <CloudFromStore cloud={cloud} />}
-      <PickLayer radius={0.045} />
+  async function tlsVsMls() {
+    setBusy(true);
+    try {
+      const scene = getScene('A');
+      const tlsCfg = presetToConfig(getPreset('tls')), mlsCfg = presetToConfig(getPreset('rot32'));
+      const traj: PoseSample[] = [{ t: 0, x: -3, y: -1.8, z: 1.5, yaw: 0.45, pitch: 0, roll: 0 }, { t: 8, x: 3, y: 1.8, z: 1.5, yaw: 0.45, pitch: 0, roll: 0 }];
+      const [tls, mls] = await Promise.all([
+        runTask('scan', { scene, sensor: tlsCfg, trajectory: staticPose(0, 0, 1.5, 0), sweeps: 1, seed: 3, maxRays: autoRays(tlsCfg), distortion: false, scanId: 0, name: SIM_SETS[0].label }),
+        runTask('scan', { scene, sensor: mlsCfg, trajectory: traj, sweeps: 80, seed: 4, maxRays: autoRays(mlsCfg, 80), distortion: false, scanId: 0, name: SIM_SETS[1].label }),
+      ]);
+      const mlsCloud = { ...mls.cloud, colors: undefined };
+      simCache.set('sim-tls', tls.cloud); simCache.set('sim-mls', mlsCloud);
+      setSimReady(true); setAId('sim-tls'); setBId('sim-mls'); setMode('split');
+    } finally { setBusy(false); }
+  }
+
+  async function align() {
+    if (!A || !B) return;
+    setBusy(true);
+    try {
+      const r = await runTask('icp', { src: B.positions, nSrc: B.count, dst: A.positions, nDst: A.count, opts: { maxIterations: 60, tolerance: 1e-6, maxCorrDist: Math.max(0.2, sizeOf(A) / 8), sampleMax: 4000 } });
+      setAligned({ cloud: transformCloud(B, r.T, `${B.name} (aligned)`), before: r.history[0]?.rmse ?? 0, after: r.finalRmse });
+    } finally { setBusy(false); }
+  }
+
+  const layer = (c: PointCloud | null, m: ColorMode, flat?: [number, number, number], pickable = true): ReactNode =>
+    c ? <CloudLayer cloud={c} mode={m} colorOpts={{ flat }} size={size} budget={budget} pickable={pickable} /> : null;
+
+  const viewport = mode === 'split' ? (
+    <div style={{ position: 'absolute', inset: 0, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
+      <div style={{ position: 'relative' }}><Viewport id="real-a" group="real" label={`A · ${info?.label ?? ''}`} labelPos="bl" home={home} target={target} threshold={threshold}>{layer(A, effMode)}<PickLayer radius={threshold * 1.5} /></Viewport></div>
+      <div style={{ position: 'relative' }}><Viewport id="real-b" group="real" primary={false} label={`B · ${sets.find((x) => x.id === bId)?.label ?? ''}`} labelPos="bl" home={home} target={target} threshold={threshold}>{layer(B, B?.colors ? 'rgb' : 'height', undefined, false)}</Viewport></div>
+    </div>
+  ) : (
+    <Viewport home={home} target={target} threshold={threshold}>
+      {mode === 'overlay' ? <>{layer(A, 'flat', [10, 132, 255])}{layer(aligned?.cloud ?? B, 'flat', aligned ? [48, 180, 80] : [255, 159, 10], false)}</> : layer(A, effMode, [10, 132, 255])}
+      <PickLayer radius={threshold * 1.5} />
     </Viewport>
   );
 
   const stats = [
-    { k: 'Points', v: cloud ? fmtN(cloud.count) : '—', s: cloud ? attributesOf(cloud).join(' · ') : undefined },
-    { k: 'Picked', v: s.picks.length, s: dists.length ? `path ${total.toFixed(3)} m` : 'click points to measure' },
-    { k: 'Last distance', v: dists.length ? `${dists[dists.length - 1].toFixed(3)} m` : '—' },
-    { k: 'Colour mode', v: COLOR_MODE_LABEL[s.view.colorMode] },
+    { k: 'Points', v: A ? fmtN(A.count) : '…', s: A ? ['x y z', ...(A.colors ? ['rgb'] : []), ...(A.intensity ? ['intensity'] : [])].join(' + ').replace(' + ', ' ') : undefined },
+    { k: 'Typical point spacing', v: spacing ? (spacing < 0.1 ? `${(spacing * 100).toFixed(1)} cm` : `${spacing.toFixed(2)} m`) : '—' },
   ];
 
   const controls = (
     <>
-      <Section title="Point cloud">
-        {ids.length > 0 ? (
-          <Select value={cloud?.id ? (ids.find((k) => s.clouds[k].id === cloud.id) ?? ids[0]) : ids[0]} options={ids.map((k) => ({ value: k, label: `${s.clouds[k].name} (${fmtN(s.clouds[k].count)})` }))} onChange={(k) => s.patch({ activeCloudId: k, picks: [] })} />
-        ) : <p className="hint">No cloud yet. Generate a scan, load an example or upload a file.</p>}
-        <div className="btn-row">
-          <Btn variant="primary" icon={<Play size={16} />} onClick={() => runScan()} busy={!!s.busy}>Scan this scene</Btn>
-          <label className="btn" style={{ cursor: 'pointer' }}><Upload size={16} />Upload
-            <input type="file" accept=".ply,.pcd,.las,.laz" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) void uploadCloud(f); e.target.value = ''; }} />
-          </label>
-        </div>
-        <div className="field"><label>Example clouds</label><div className="chip-row"><button className="chip" onClick={() => exampleCloud('A')}>Room</button><button className="chip" onClick={() => exampleCloud('B')}>Workshop</button><button className="chip" onClick={() => exampleCloud('C')}>Street</button></div><span className="caption">Synthetic scans made by this simulator (MIT). Upload accepts PLY, PCD, LAS.</span></div>
-        {cloud && <div className="btn-row">
-          <Btn icon={<Download size={16} />} onClick={() => exportCloudFile(cloud, 'ply')}>PLY</Btn>
-          <Btn icon={<Download size={16} />} onClick={() => exportCloudFile(cloud, 'pcd')}>PCD</Btn>
-        </div>}
-        {cloud && <DatasetInfo cloud={cloud} />}
+      <Section title="Real point clouds">
+        <div className="chip-row" data-testid="real-sets">{sets.map((x) => <button key={x.id} className="chip" aria-pressed={aId === x.id} onClick={() => setAId(x.id)} data-testid={`real-${x.id}`}>{x.label}</button>)}</div>
+        {A && (
+          <div className="callout" data-testid="dataset-info" style={{ gap: 6 }}>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}><b>{A.name}</b><Badge kind={A.meta.kind === 'measured' ? 'measured' : 'sim'} /></div>
+            <span>{info?.blurb ?? A.meta.description}</span>
+            <span className="caption">{A.meta.license ?? (A.meta.kind === 'simulated' ? 'Simulated by this app' : 'Your own file')} · columns: {['x', 'y', 'z', ...(A.colors ? ['rgb'] : []), ...(A.intensity ? ['intensity'] : [])].join(' ')}</span>
+          </div>
+        )}
+        <label className="btn" style={{ cursor: 'pointer' }}><Upload size={16} />Upload your own (PLY, PCD, LAS)
+          <input type="file" accept=".ply,.pcd,.las,.laz" hidden onChange={async (e) => { const f = e.target.files?.[0]; if (f) { const c = await uploadCloud(f); if (c) { setUploaded(c); setAId('upload'); } } e.target.value = ''; }} />
+        </label>
       </Section>
 
-      <DisplaySection cloud={cloud} />
+      <Section title="MLS vs TLS (same room)">
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, textAlign: 'center' }}>
+          <div className="callout" style={{ justifyItems: 'center' }}><Pictogram kind="tls" /><b>TLS</b><span className="caption">tripod, static, one long scan</span></div>
+          <div className="callout" style={{ justifyItems: 'center' }}><Pictogram kind="mls" /><b>MLS</b><span className="caption">moving, many short sweeps</span></div>
+        </div>
+        <Btn icon={<Play size={16} />} onClick={tlsVsMls} busy={busy} testId="tls-vs-mls">Scan the same room both ways</Btn>
+        {simReady && A && B && aId === 'sim-tls' && bId === 'sim-mls' && (
+          <table className="table" data-testid="tls-mls-table"><thead><tr><th></th><th>TLS</th><th>MLS</th></tr></thead><tbody>
+            <tr><td>Points</td><td>{fmtN(A.count)}</td><td>{fmtN(B.count)}</td></tr>
+            <tr><td>Point spacing</td><td>{spacing ? `${(spacing * 100).toFixed(1)} cm` : '—'}</td><td>{spacingB ? `${(spacingB * 100).toFixed(1)} cm` : '—'}</td></tr>
+            <tr><td>Colour</td><td>yes (RGB)</td><td>no</td></tr>
+            <tr><td>Acquisition</td><td>≈ 50 s, static</td><td>8 s, moving</td></tr>
+            <tr><td>Strength</td><td>fine detail</td><td>fast, large areas</td></tr>
+          </tbody></table>
+        )}
+        <span className="caption">The two bundled room scans above are real data; this comparison is simulated so both are the same room.</span>
+      </Section>
 
-      <Section title="Inspect & measure">
+      <Section title="Compare">
+        <Seg value={mode} onChange={setMode} options={[{ value: 'single', label: 'One' }, { value: 'split', label: 'Side by side' }, { value: 'overlay', label: 'Overlay' }]} label="Compare mode" />
+        {mode !== 'single' && (
+          <>
+            <Select label="Compare with (B)" value={bId} options={sets.map((x) => ({ value: x.id, label: x.label }))} onChange={setBId} />
+            {mode === 'overlay' && (
+              <>
+                <p className="hint">Blue = A, orange = B. Two scans from different viewpoints do not line up until they are registered.</p>
+                <Btn icon={<Play size={16} />} onClick={align} busy={busy} disabled={!A || !B || aId === bId} testId="real-align">Align B to A (ICP)</Btn>
+                {aligned && <Callout kind="good" title="Registered with ICP">Alignment error (RMSE) {aligned.before.toFixed(3)} → {aligned.after.toFixed(3)} m. Green = B after alignment.</Callout>}
+              </>
+            )}
+          </>
+        )}
+      </Section>
+
+      <Section title="Look & measure">
+        <Select label="Colour by" value={effMode} options={modes.map((m) => ({ value: m, label: COLOR_MODE_LABEL[m] }))} onChange={(m) => setColour(m)} />
+        <Slider label="Point size" value={size} min={1} max={8} step={0.5} unit=" px" onChange={setSize} />
         <Btn icon={<Crosshair size={16} />} variant={s.interaction === 'pick-points' ? 'primary' : ''} onClick={() => s.patch({ interaction: s.interaction === 'pick-points' ? 'select' : 'pick-points' })} testId="pick-mode" block>
-          {s.interaction === 'pick-points' ? 'Picking… click points in the view' : 'Pick points'}
+          {s.interaction === 'pick-points' ? 'Picking… click points in the view' : 'Pick points to measure'}
         </Btn>
         <div className="btn-row">
-          <Btn sm icon={<Undo2 size={15} />} onClick={() => { const p = s.picks.slice(0, -1); s.patch({ picks: p }); }} disabled={!s.picks.length}>Remove last</Btn>
+          <Btn sm icon={<Undo2 size={15} />} onClick={() => s.patch({ picks: s.picks.slice(0, -1) })} disabled={!s.picks.length}>Remove last</Btn>
           <Btn sm icon={<Trash2 size={15} />} onClick={clearPicks} disabled={!s.picks.length}>Clear</Btn>
         </div>
-        {info ? (
-          <div className="callout" data-testid="point-info">
-            <b>Selected point P{s.picks.length}</b>
-            <table className="table"><tbody>
-              <tr><td>X, Y, Z</td><td className="mono">{info.pos.map((v) => v.toFixed(3)).join(', ')} m</td></tr>
-              {info.range !== undefined && <tr><td>Range</td><td className="mono">{info.range.toFixed(3)} m</td></tr>}
-              {info.intensity !== undefined && <tr><td>Intensity</td><td className="mono">{info.intensity.toFixed(3)} <span className="caption">(relative)</span></td></tr>}
-              {info.rgb && <tr><td>RGB</td><td className="mono"><span style={{ display: 'inline-block', width: 12, height: 12, borderRadius: 3, background: `rgb(${info.rgb.join(',')})`, verticalAlign: -1, marginRight: 6 }} />{info.rgb.join(', ')}</td></tr>}
-              {info.cls !== null && <tr><td>Class</td><td><span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: 3, background: `rgb(${classColor(info.cls).join(',')})`, marginRight: 6 }} />{className(info.cls)} <span className="caption">(ground truth)</span></td></tr>}
-              {info.normal && <tr><td>Normal</td><td className="mono">{info.normal.map((v) => v.toFixed(2)).join(', ')}</td></tr>}
-            </tbody></table>
-          </div>
-        ) : <p className="hint">Attributes of the last picked point appear here — only those the cloud actually has.</p>}
+        {last && (
+          <table className="table" data-testid="point-info"><thead><tr><th>x (m)</th><th>y (m)</th><th>z (m)</th></tr></thead>
+            <tbody><tr>{last.pos.map((v, i) => <td key={i} className="mono">{v.toFixed(3)}</td>)}</tr></tbody></table>
+        )}
         {dists.length > 0 && (
-          <table className="table" data-testid="distance-table">
-            <thead><tr><th>Segment</th><th>Distance</th></tr></thead>
-            <tbody>
-              {dists.map((d, i) => <tr key={i}><td>P{i + 1} → P{i + 2}</td><td className="mono">{d.toFixed(3)} m</td></tr>)}
-              {s.picks.length > 2 && <tr><td>P1 ↔ P{s.picks.length}</td><td className="mono">{Math.hypot(s.picks[0].pos[0] - last.pos[0], s.picks[0].pos[1] - last.pos[1], s.picks[0].pos[2] - last.pos[2]).toFixed(3)} m</td></tr>}
-              <tr><td><b>Path length</b></td><td className="mono"><b>{total.toFixed(3)} m</b></td></tr>
-            </tbody>
-          </table>
+          <table className="table" data-testid="distance-table"><thead><tr><th>Segment</th><th>Distance</th></tr></thead>
+            <tbody>{dists.map((d, i) => <tr key={i}><td>P{i + 1} → P{i + 2}</td><td className="mono">{d.toFixed(3)} m</td></tr>)}</tbody></table>
         )}
       </Section>
 
-      <Section title="Clipping & cropping" open={false}>
-        <div className="field"><label>View clip (does not change data)</label></div>
-        <label className="toggle"><span className="lbl">Clip height slab</span><input type="checkbox" checked={s.view.clipOn} onChange={(e) => s.setView({ clipOn: e.target.checked })} /><span className="sw" /></label>
-        {s.view.clipOn && b && (
-          <>
-            <Slider label="Keep above Z" value={Math.max(s.view.clipMin, b.min[2])} min={b.min[2]} max={b.max[2]} step={0.05} unit=" m" format={(v) => v.toFixed(2)} onChange={(v) => s.setView({ clipMin: v })} />
-            <Slider label="Keep below Z" value={Math.min(s.view.clipMax, b.max[2])} min={b.min[2]} max={b.max[2]} step={0.05} unit=" m" format={(v) => v.toFixed(2)} onChange={(v) => s.setView({ clipMax: v })} />
-          </>
-        )}
-        {c && b && (
-          <>
-            <div className="field" style={{ marginTop: 6 }}><label>Crop box (creates a new cloud)</label></div>
-            {(['X', 'Y', 'Z'] as const).map((ax, a) => (
-              <div key={ax} style={{ display: 'grid', gap: 6 }}>
-                <Slider label={`${ax} min`} value={c.min[a]} min={b.min[a]} max={b.max[a]} step={0.05} unit=" m" format={(v) => v.toFixed(2)} onChange={(v) => setCrop({ min: c.min.map((m, k) => (k === a ? v : m)) as Vec3, max: c.max })} />
-                <Slider label={`${ax} max`} value={c.max[a]} min={b.min[a]} max={b.max[a]} step={0.05} unit=" m" format={(v) => v.toFixed(2)} onChange={(v) => setCrop({ min: c.min, max: c.max.map((m, k) => (k === a ? v : m)) as Vec3 })} />
-              </div>
-            ))}
-            <Btn icon={<Scissors size={16} />} onClick={() => {
-              if (!cloud) return;
-              const out = cropBox(cloud, c.min, c.max);
-              const prevActive = s.activeCloudId;
-              s.setCloud('cropped', out);
-              pushUndo('crop', () => { useLab.getState().setCloud('cropped', null); useLab.setState({ activeCloudId: prevActive }); });
-              s.notify(`Cropped to ${fmtN(out.count)} points (original kept).`, 'ok');
-            }} block>Crop to new cloud</Btn>
-          </>
-        )}
+      <Section title="File">
+        <div className="btn-row">
+          <Btn icon={<Download size={16} />} onClick={() => A && exportCloudFile(A, 'ply')} disabled={!A}>PLY</Btn>
+          <Btn icon={<Download size={16} />} onClick={() => A && exportCloudFile(A, 'pcd')} disabled={!A}>PCD</Btn>
+        </div>
       </Section>
-    </>
-  );
-
-  const learn = (
-    <>
-      <Callout kind="edu" title="Intensity is not colour">
-        Intensity is the strength of the returned laser pulse (near-infrared). RGB comes from a camera or from material colour. A white wall can return weak intensity at a grazing angle; a dark but retro-reflective surface can return strong intensity.
-      </Callout>
-      <Eq note="simplified educational model used by this simulator — not a calibrated return">I ≈ ρ · cos θ ÷ (1 + (r / r₀)²)</Eq>
-      <Callout kind="warn" title="What the model leaves out">Real intensity also depends on laser power, receiver gain, atmospheric loss, beam divergence and sensor-specific calibration.</Callout>
-      <Callout title="Colour modes"><b>Height</b> and <b>range</b> are computed from geometry. <b>Semantic class</b> shows the ground-truth label stored with simulated data (or the label uploaded in your file) — it is not a prediction. <b>Normals</b> are ground-truth for simulated scans until you estimate them in Tab 5.</Callout>
-      <Callout title="File formats">PLY (ascii/binary), PCD (ascii/binary/compressed) and uncompressed LAS are read. Exports keep every attribute the cloud has. LAZ must be converted to LAS first.</Callout>
     </>
   );
 
   return (
     <TabFrame
-      title="Point Cloud Explorer"
+      title="Real Point Clouds"
       tab={2}
       viewport={viewport}
       controls={controls}
-      learn={learn}
+      learn={null}
       stats={stats}
-      overlays={
-        <>
-          {cloud && <ColorBar cloud={cloud} mode={s.view.colorMode} />}
-          <KindLegend items={[{ color: '#8e8e93', label: 'Original mesh geometry', style: 'wire' }, { color: '#64d2ff', label: cloud ? (cloud.meta.kind === 'measured' ? 'Measured point cloud' : 'Simulated LiDAR points') : 'Point cloud' }, { color: '#ffd60a', label: 'Picked points' }]} />
-        </>
-      }
+      statsRow
+      noPanelTabs
+      viewExtras={<Btn sm icon={<FileText size={15} />} variant={rawOpen ? 'primary' : ''} onClick={() => setRawOpen(!rawOpen)} disabled={!A} testId="raw-toggle">Raw</Btn>}
+      overlays={rawOpen && A ? <RawViewer text={rawText} filename={`${A.name.replace(/\W+/g, '_')}.pcd`} onClose={() => setRawOpen(false)} /> : null}
     />
   );
-  void Badge; void cloudBadge; void Stat;
 }

@@ -1,4 +1,4 @@
-import { PointCloud } from '../core/pointcloud';
+import { PointCloud, selectPoints } from '../core/pointcloud';
 import { columnsToCloud, exportProps } from './ply';
 
 function lzfDecompress(input: Uint8Array, outLen: number): Uint8Array {
@@ -86,7 +86,14 @@ export function parsePCD(buf: ArrayBuffer, name = 'cloud.pcd'): PointCloud {
     }
     props.push({ name: 'red', type: 'uint8' }, { name: 'green', type: 'uint8' }, { name: 'blue', type: 'uint8' });
   }
-  return columnsToCloud(cols, props, n, name, 'PCD');
+  const cloud = columnsToCloud(cols, props, n, name, 'PCD');
+  // organised clouds (depth cameras) contain NaN points for pixels without a measurement: drop them
+  const keep: number[] = [];
+  for (let i = 0; i < cloud.count; i++) { const k = i * 3; if (Number.isFinite(cloud.positions[k]) && Number.isFinite(cloud.positions[k + 1]) && Number.isFinite(cloud.positions[k + 2])) keep.push(i); }
+  if (keep.length === cloud.count) return cloud;
+  const out = selectPoints(cloud, keep, cloud.name);
+  (out.meta.notes ??= []).push(`${cloud.count - keep.length} NaN (no-measurement) points removed.`);
+  return out;
 }
 
 export function writePCD(c: PointCloud, binary = true): ArrayBuffer {
