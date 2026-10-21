@@ -43,7 +43,7 @@ test.describe('LiDAR Learning Lab', () => {
     await page.getByTestId('play-pause').click();
     await expect(page.getByTestId('play-pause')).toContainText('Play');
     await page.getByRole('button', { name: 'Notes', exact: true }).click();
-    for (const l of ['Beam divergence', 'Field of view', 'Time of flight']) await page.getByRole('button', { name: l, exact: true }).click();
+    for (const l of ['Field of view', 'Beam divergence', 'Time of flight']) await page.getByRole('button', { name: l, exact: true }).click();
   });
 
   test('tab 1: simulated scan produces points and coverage statistics', async ({ page }) => {

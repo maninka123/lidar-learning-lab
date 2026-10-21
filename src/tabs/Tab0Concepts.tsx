@@ -355,7 +355,7 @@ export default function Tab0() {
       <Seg value={pane} onChange={setPane} options={[{ value: 'notes', label: 'Notes' }, { value: 'controls', label: 'Controls' }]} label="Panel section" />
       {pane === 'notes' && (
         <div style={{ display: 'grid', gap: 12, paddingTop: 12 }}>
-          <Seg value={lesson} onChange={setLesson} options={[{ value: 'tof', label: 'Time of flight' }, { value: 'div', label: 'Beam divergence' }, { value: 'fov', label: 'Field of view' }]} label="Lesson" />
+          <Seg value={lesson} onChange={setLesson} options={[{ value: 'tof', label: 'Time of flight' }, { value: 'fov', label: 'Field of view' }, { value: 'div', label: 'Beam divergence' }]} label="Lesson" />
           {lessonBox}
         </div>
       )}
