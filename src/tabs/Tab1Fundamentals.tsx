@@ -18,7 +18,7 @@ import { Plan2D } from '../ui/Plan2D';
 import { D2R } from '../core/math';
 
 function PatternPreview({ sensor }: { sensor: import("../sensor/presets").SensorConfig }) {
-  const [sweeps, setSweeps] = useState(1);
+  const sweeps = 1;
   const ref = useRef<HTMLCanvasElement>(null);
   useEffect(() => {
     const cv = ref.current; if (!cv) return;
@@ -41,7 +41,6 @@ function PatternPreview({ sensor }: { sensor: import("../sensor/presets").Sensor
     <div className="field">
       <label>Scan-pattern preview (beam directions)</label>
       <canvas ref={ref} style={{ width: '100%', height: 190, borderRadius: 12 }} aria-label="Scan pattern preview" />
-      <Slider label="Sweeps overlaid" value={sweeps} min={1} max={5} step={1} onChange={setSweeps} hint="Prism scanners fill in as sweeps accumulate; arrays and rotating heads repeat the same pattern." />
     </div>
   );
 }
@@ -137,8 +136,7 @@ export default function Tab1() {
 
       <Section title="Scan geometry">
         <Slider label="Horizontal FOV" value={sensor.hFov} min={10} max={360} step={5} unit="°" onChange={(hFov) => s.setSensor({ hFov })} disabled={sensor.pattern === 'planar' && false} />
-        <Slider label="Lowest beam elevation" value={sensor.vMin} min={-90} max={sensor.vMax} step={0.5} unit="°" onChange={(vMin) => s.setSensor({ vMin })} />
-        <Slider label="Highest beam elevation" value={sensor.vMax} min={sensor.vMin} max={90} step={0.5} unit="°" onChange={(vMax) => s.setSensor({ vMax })} hint={`Vertical FOV ${(sensor.vMax - sensor.vMin).toFixed(1)}°`} />
+        <Slider label="Vertical FOV" value={Math.round((sensor.vMax - sensor.vMin) * 2) / 2} min={0} max={150} step={0.5} unit="°" onChange={(f) => { const mid = (sensor.vMin + sensor.vMax) / 2; s.setSensor({ vMin: mid - f / 2, vMax: mid + f / 2 }); }} hint={`Centred at ${((sensor.vMin + sensor.vMax) / 2).toFixed(1)}° elevation`} />
         <Slider label="Angular resolution" value={sensor.hRes} min={0.05} max={3} step={0.05} unit="°" format={(v) => v.toFixed(2)} onChange={(hRes) => s.setSensor({ hRes })} hint={solid ? 'For solid-state: sets the number of steered beams per sweep.' : undefined} />
         <Slider label={solid ? 'Beam density (lines)' : 'Vertical channels'} value={sensor.channels} min={1} max={256} step={1} onChange={(channels) => s.setSensor({ channels })} />
         <Slider label="Minimum range" value={sensor.minRange} min={0} max={5} step={0.1} unit=" m" format={(v) => v.toFixed(1)} onChange={(minRange) => s.setSensor({ minRange })} />
