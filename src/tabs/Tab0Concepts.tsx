@@ -272,7 +272,6 @@ export default function Tab0() {
             <group key={name}>
               <Line points={[[0, 0, 0], end]} color={col} lineWidth={3} depthTest={false} />
               <Head at={end} dir={end} color={col} size={0.3} />
-              <TextSprite text={name} position={[end[0] * 1.14, end[1] * 1.14, end[2] * 1.14 + 0.12]} bg={col} />
             </group>
           ))}
         </group>
