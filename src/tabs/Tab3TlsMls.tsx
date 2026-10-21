@@ -4,7 +4,11 @@ import { getScene } from '../scenes';
 import { Viewport } from '../ui/Viewport';
 import { TabFrame } from '../ui/TabFrame';
 import { Btn, Callout, Seg, Section, Select, Slider, Toggle, fmtN } from '../ui/controls';
-import { DisplaySection, KindLegend } from '../ui/shared';
+import { SensorPicker } from '../ui/SensorPicker';
+import { RawViewer } from '../ui/RawViewer';
+import { writePCD } from '../io/pcd';
+import { Dots, FileText } from '../ui/icons';
+import { autoRays } from '../state/actions';
 import { SceneFromStore, CloudFromStore } from './common';
 import { SensorMarker, PolyLine, Marker, CloudLayer } from '../ui/three';
 import { Plan2D } from '../ui/Plan2D';
@@ -55,14 +59,12 @@ function buildTrajectory(wps: [number, number][], speed: number, z: number): { t
   return { traj, duration: t, length: len };
 }
 
-export default function Tab3() {
+export default function Tab3({ labSwitch }: { labSwitch?: React.ReactNode }) {
   const s = useLab();
   const scene = getScene(s.sceneId);
   const [mode, setMode] = useState<Mode>('tls');
-  const [tlsId, setTlsId] = useState('tls');
-  const [tlsRes, setTlsRes] = useState(0.15);
   const [tripod, setTripod] = useState(1.5);
-  const [mlsId, setMlsId] = useState('rot32');
+  const [mlsId, setMlsId] = useState('rot16');
   const [tool, setTool] = useState<'station' | 'waypoint' | null>(null);
   const [missingOn, setMissingOn] = useState(true);
   const [overlapOn, setOverlapOn] = useState(true);
@@ -73,7 +75,7 @@ export default function Tab3() {
   const [mlsCov, setMlsCov] = useState<(CoverageInfo & { unobservedArea: number }) | null>(null);
   const b = scene.bounds;
 
-  const tlsSensor: SensorConfig = useMemo(() => ({ ...presetToConfig(getPreset(tlsId)), hRes: tlsRes, channels: Math.round(150 / (tlsRes * 3.2)) }), [tlsId, tlsRes]);
+  const tlsSensor: SensorConfig = useMemo(() => presetToConfig(getPreset('tls')), []);
   const mlsSensor: SensorConfig = useMemo(() => presetToConfig(getPreset(mlsId)), [mlsId]);
 
   // Tool clicks (3D scene or plan) arrive through the shared interaction state
@@ -97,7 +99,7 @@ export default function Tab3() {
     const id = st.stations.length + 1;
     st.patch({ busy: `Scanning station ${id}…` });
     try {
-      const res = await runTask('scan', { scene: getScene(st.sceneId), sensor: tlsSensor, trajectory: staticPose(x, y, tripod, stationYaw * D2R), sweeps: 1, seed: st.scanOpts.seed + id, maxRays: 700000, distortion: false, scanId: id, name: `Station ${id}` });
+      const res = await runTask('scan', { scene: getScene(st.sceneId), sensor: tlsSensor, trajectory: staticPose(x, y, tripod, stationYaw * D2R), sweeps: 1, seed: st.scanOpts.seed + id, maxRays: autoRays(tlsSensor), distortion: false, scanId: id, name: `Station ${id}` });
       const rng = makeRng(1000 + id);
       const e = st.stationRegErr;
       const err: Rigid = { R: eulerToR(e.deg * D2R * rng.gauss(), e.deg * D2R * rng.gauss() * 0.3, 0), t: [e.t * rng.gauss(), e.t * rng.gauss(), e.t * rng.gauss() * 0.3] };
@@ -133,6 +135,9 @@ export default function Tab3() {
   }
 
   const [mlsBusy, setMlsBusy] = useState(false);
+  const [pointsOnly, setPointsOnly] = useState(false);
+  const [rawOpen, setRawOpen] = useState(false);
+  const [colourBy, setColourBy] = useState<'auto' | 'height' | 'scan' | 'intensity'>('auto');
   async function runMls() {
     const st = useLab.getState();
     if (st.waypoints.length < 2) { st.notify('Add at least two waypoints.', 'warn'); return; }
@@ -140,7 +145,7 @@ export default function Tab3() {
     try {
       const { traj, duration, length } = buildTrajectory(st.waypoints, st.mlsOpts.speed, st.mlsOpts.height);
       const sweeps = Math.max(1, Math.ceil(duration * mlsSensor.frequency));
-      const res = await runTask('scan', { scene: getScene(st.sceneId), sensor: mlsSensor, trajectory: traj, sweeps, seed: st.scanOpts.seed + 77, maxRays: 220000, distortion: st.mlsOpts.distortion, scanId: 0, name: 'MLS accumulated scan' });
+      const res = await runTask('scan', { scene: getScene(st.sceneId), sensor: mlsSensor, trajectory: traj, sweeps, seed: st.scanOpts.seed + 77, maxRays: autoRays(mlsSensor, sweeps), distortion: st.mlsOpts.distortion, scanId: 0, name: 'MLS accumulated scan' });
       const cloud = res.cloud;
       cloud.meta = { ...cloud.meta, description: `Moving sensor along ${st.waypoints.length} waypoints at ${st.mlsOpts.speed} m/s; sweep poses applied per point${st.mlsOpts.distortion ? ' (distortion mode: one pose per sweep)' : ''}.` };
       useLab.setState({ mls: { cloud, coverage: null, sceneId: st.sceneId, seconds: duration, length } });
@@ -203,18 +208,25 @@ export default function Tab3() {
     return c && c.length ? ({ id: 'overlap', name: 'overlap', count: c.length / 3, positions: c, meta: { kind: 'estimated', source: 'coverage', units: 'm' } } as PointCloud) : null;
   }, [covInfo]);
 
+  const rawText = useMemo(() => {
+    const c = mode === 'mls' ? s.mls?.cloud : merged;
+    if (!rawOpen || !c) return '';
+    const slim = { id: 'raw', name: 'scan', count: c.count, positions: c.positions, meta: c.meta, ...(mode === 'mls' ? { intensity: c.intensity } : { colors: c.colors }) } as PointCloud;
+    return new TextDecoder().decode(writePCD(slim, false));
+  }, [rawOpen, mode, merged, s.mls]);
+
   const viewport = (
     <Viewport home={scene.cameraHome} target={scene.cameraTarget}>
-      <SceneFromStore />
-      {mode !== 'mls' && merged && <CloudFromStore cloud={merged} mode={s.view.colorMode === 'height' ? 'rgb' : s.view.colorMode} pickable={false} />}
-      {mode === 'mls' && mlsShown && <CloudFromStore cloud={mlsShown} pickable={false} />}
+      {!pointsOnly && <SceneFromStore />}
+      {mode !== 'mls' && merged && <CloudFromStore cloud={merged} mode={colourBy === 'auto' ? 'rgb' : colourBy === 'intensity' ? 'rgb' : colourBy} pickable={false} />}
+      {mode === 'mls' && mlsShown && <CloudFromStore cloud={mlsShown} mode={colourBy === 'auto' ? 'height' : colourBy} pickable={false} />}
       {mode === 'compare' && s.mls && <CloudFromStore cloud={s.mls.cloud} mode="flat" colorOpts={{ flat: [255, 159, 10] }} pickable={false} />}
-      {mode !== 'mls' && missingOn && missingCloud && <CloudLayer cloud={missingCloud} mode="flat" colorOpts={{ flat: [255, 69, 58] }} size={4} budget={40000} pickable={false} />}
-      {mode !== 'mls' && overlapOn && overlapCloud && <CloudLayer cloud={overlapCloud} mode="flat" colorOpts={{ flat: [48, 209, 88] }} size={3} budget={20000} pickable={false} />}
-      {s.stations.map((st) => <SensorMarker key={st.id} x={st.pose.x} y={st.pose.y} z={st.pose.z} yaw={st.pose.yaw} sensor={tlsSensor} label={`Station ${st.id}`} showFov={false} color="#0a84ff" />)}
-      {(mode === 'mls' || mode === 'compare') && <PolyLine pts={wpPts} color="#ff9f0a" width={3} />}
-      {(mode === 'mls' || mode === 'compare') && wpPts.map((p, i) => <Marker key={i} p={p} color="#ff9f0a" r={0.07} label={`${i + 1}`} />)}
-      {mode === 'mls' && platformAt && <SensorMarker x={platformAt.x} y={platformAt.y} z={platformAt.z} yaw={platformAt.yaw} sensor={mlsSensor} color="#30d158" label="Platform" />}
+      {!pointsOnly && mode !== 'mls' && missingOn && missingCloud && <CloudLayer cloud={missingCloud} mode="flat" colorOpts={{ flat: [255, 69, 58] }} size={4} budget={40000} pickable={false} />}
+      {!pointsOnly && mode !== 'mls' && overlapOn && overlapCloud && <CloudLayer cloud={overlapCloud} mode="flat" colorOpts={{ flat: [48, 209, 88] }} size={3} budget={20000} pickable={false} />}
+      {!pointsOnly && mode !== 'mls' && s.stations.map((st) => <SensorMarker key={st.id} x={st.pose.x} y={st.pose.y} z={st.pose.z} yaw={st.pose.yaw} sensor={tlsSensor} label={`Station ${st.id}`} showFov={false} color="#0a84ff" />)}
+      {!pointsOnly && (mode === 'mls' || mode === 'compare') && <PolyLine pts={wpPts} color="#ff9f0a" width={3} />}
+      {!pointsOnly && (mode === 'mls' || mode === 'compare') && wpPts.map((p, i) => <Marker key={i} p={p} color="#ff9f0a" r={0.07} label={`${i + 1}`} />)}
+      {!pointsOnly && mode === 'mls' && platformAt && <SensorMarker x={platformAt.x} y={platformAt.y} z={platformAt.z} yaw={platformAt.yaw} sensor={mlsSensor} color="#30d158" label="Platform" />}
     </Viewport>
   );
 
@@ -252,21 +264,19 @@ export default function Tab3() {
   const controls = (
     <>
       <Seg value={mode} onChange={(m) => { setMode(m); setTool(null); }} options={[{ value: 'tls', label: 'Static (TLS)' }, { value: 'mls', label: 'Moving (MLS)' }, { value: 'compare', label: 'Compare' }]} label="Mode" />
-      <Callout kind="edu" title="Deployment vs sensing">TLS and MLS are <b>deployment methods</b> (tripod vs moving platform). Mechanical, MEMS, flash and rotating-mirror describe the <b>sensing architecture</b> inside the scanner.</Callout>
       <Section title="Floor plan">{plan}</Section>
 
       {mode === 'tls' && (
         <>
           <Section title="Scanner on tripod">
-            <Select label="Scanner" value={tlsId} options={['tls', 'faro', 'x7', 'blk360'].map((id) => ({ value: id, label: getPreset(id).name }))} onChange={setTlsId} />
-            <Slider label="Angular step" value={tlsRes} min={0.2} max={2} step={0.05} unit="°" format={(v) => v.toFixed(2)} onChange={setTlsRes} hint={`${fmtN(Math.round(360 / tlsRes) * tlsSensor.channels)} rays per station (budget 700 000)`} />
+            <p className="hint"><b>Leica RTC360</b>: a tripod laser scanner, 360° × 150° with equal angular steps, records colour.</p>
             <Slider label="Tripod height" value={tripod} min={0.5} max={Math.max(1.6, b.max[2] - 0.3)} step={0.05} unit=" m" format={(v) => v.toFixed(2)} onChange={setTripod} />
             <Slider label="Station heading" value={stationYaw} min={-180} max={180} step={5} unit="°" onChange={setStationYaw} />
             <div className="btn-row">
               <Btn variant={tool === 'station' ? 'primary' : ''} icon={<Crosshair size={16} />} onClick={() => setTool(tool === 'station' ? null : 'station')} testId="tool-station">{tool === 'station' ? 'Click the plan or scene…' : 'Place station by clicking'}</Btn>
               <Btn icon={<Plus size={16} />} onClick={() => addStation(s.pose.x, s.pose.y)} busy={!!s.busy} testId="add-station-here">Scan at scanner pose</Btn>
             </div>
-            <span className="caption">The scanner pose is the one set in Tab 1 ({s.pose.x.toFixed(1)}, {s.pose.y.toFixed(1)}).</span>
+            <span className="caption">The scanner position is the one set in the Scanner Simulator ({s.pose.x.toFixed(1)}, {s.pose.y.toFixed(1)}).</span>
           </Section>
           <Section title="Registration quality">
             <Slider label="Pose error per station (translation)" value={s.stationRegErr.t} min={0} max={0.3} step={0.01} unit=" m" format={(v) => v.toFixed(2)} onChange={(t) => s.patch({ stationRegErr: { ...s.stationRegErr, t } })} />
@@ -294,7 +304,7 @@ export default function Tab3() {
       {mode !== 'tls' && (
         <>
           <Section title="Mobile platform">
-            <Select label="Scanner" value={mlsId} options={['rot16', 'hdl32e', 'rot32', 'rot64', 'rs16'].map((id) => ({ value: id, label: getPreset(id).name }))} onChange={setMlsId} />
+            <SensorPicker value={mlsId} onPick={setMlsId} only={['planar', 'c4', 'c8', 'c16', 'c32', 'c64', 'c128', 'prism', 'mems', 'array']} />
             <Seg value={String(s.mlsOpts.height)} onChange={(v) => s.patch({ mlsOpts: { ...s.mlsOpts, height: parseFloat(v) } })} options={[{ value: '1', label: 'Trolley 1.0 m' }, { value: '1.5', label: 'Handheld 1.5 m' }, { value: '1.8', label: 'Vehicle 1.8 m' }]} />
             <Slider label="Platform speed" value={s.mlsOpts.speed} min={0.2} max={4} step={0.1} unit=" m/s" format={(v) => v.toFixed(1)} onChange={(speed) => s.patch({ mlsOpts: { ...s.mlsOpts, speed } })} />
             <Toggle label="Show motion distortion" checked={s.mlsOpts.distortion} onChange={(distortion) => s.patch({ mlsOpts: { ...s.mlsOpts, distortion } })} hint="ON: every point of a sweep is placed with the sweep-start pose, as if the platform did not move during the rotation. Compare with OFF (each point uses its own time-stamped pose)." />
@@ -333,28 +343,30 @@ export default function Tab3() {
           <p className="hint">Orange points = MLS, per-station colours = TLS. Red points mark regions the TLS stations never saw.</p>
         </Section>
       )}
-      <DisplaySection cloud={merged ?? s.mls?.cloud} />
-    </>
-  );
-
-  const learn = (
-    <>
-      <Callout kind="edu" title="Static scanning (TLS)">A tripod scanner measures from fixed stations. Occlusions are filled by adding stations; overlapping areas allow the scans to be registered (ICP or targets) into one frame.</Callout>
-      <Callout kind="edu" title="Mobile scanning (MLS)">The scanner moves while it rotates, so every point has its own sensor pose. If you place all points of a sweep with one pose you get motion distortion.</Callout>
-      <Callout title="Registration errors">Use the pose-error sliders to simulate imperfect station poses. The merged cloud then shows doubled walls until ICP repairs it.</Callout>
-      <Callout kind="warn" title="Teaching approximation">MLS poses here come from the ideal trajectory. A real system estimates them with SLAM / GNSS-IMU, which adds drift (see Tab 4).</Callout>
+      <Section title="Point colours">
+        <Seg value={colourBy} onChange={setColourBy} label="Colour points by" options={mode === 'mls' ? [{ value: 'auto', label: 'Height' }, { value: 'intensity', label: 'Intensity' }, { value: 'scan', label: 'Sweep' }] : [{ value: 'auto', label: 'Real colour' }, { value: 'height', label: 'Height' }, { value: 'scan', label: 'Station' }]} />
+        <p className="hint">{mode === 'mls' ? 'Height: blue = low, red = high. Sweep: each rotation of the scanner gets its own colour.' : 'Real colour: the scanner’s camera colour. Station: each scan position gets its own colour, so you can see where scans overlap.'}</p>
+      </Section>
     </>
   );
 
   return (
     <TabFrame
-      title="TLS & MLS Laboratory"
+      title="SLAM & Registration"
       tab={4}
       viewport={viewport}
       controls={controls}
-      learn={learn}
+      learn={null}
+      noPanelTabs
+      statsRow
       stats={stats}
-      overlays={<KindLegend items={[{ color: '#8e8e93', label: 'Original mesh', style: 'wire' }, { color: '#64d2ff', label: 'Simulated scans (per-station colour)' }, { color: '#ff453a', label: 'Missing regions' }, { color: '#30d158', label: 'Overlap' }, { color: '#ff9f0a', label: 'Trajectory / MLS' }]} />}
+      topExtras={labSwitch}
+      viewExtras={<>
+        <Btn sm variant="primary" icon={<Play size={15} />} onClick={() => (mode === 'mls' ? runMls() : addStation(s.pose.x, s.pose.y))} busy={mode === 'mls' ? mlsBusy : !!s.busy} testId="run-lab-scan">{mode === 'mls' ? 'Generate scan' : 'Scan station'}</Btn>
+        <Btn sm icon={<Dots size={15} />} variant={pointsOnly ? 'primary' : ''} onClick={() => setPointsOnly(!pointsOnly)} testId="points-only">{pointsOnly ? 'Show scene' : 'Point cloud'}</Btn>
+        <Btn sm icon={<FileText size={15} />} variant={rawOpen ? 'primary' : ''} onClick={() => setRawOpen(!rawOpen)} disabled={!(mode === 'mls' ? s.mls : merged)} testId="raw-toggle">Raw</Btn>
+      </>}
+      overlays={rawOpen && (mode === 'mls' ? s.mls?.cloud : merged) ? <RawViewer text={rawText} filename={mode === 'mls' ? 'mls_scan.pcd' : 'tls_scan.pcd'} onClose={() => setRawOpen(false)} /> : null}
     />
   );
   void colorize;

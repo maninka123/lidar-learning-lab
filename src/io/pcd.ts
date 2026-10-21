@@ -87,6 +87,11 @@ export function parsePCD(buf: ArrayBuffer, name = 'cloud.pcd'): PointCloud {
     props.push({ name: 'red', type: 'uint8' }, { name: 'green', type: 'uint8' }, { name: 'blue', type: 'uint8' });
   }
   const cloud = columnsToCloud(cols, props, n, name, 'PCD');
+  // projected (UTM) coordinates are too large for float32 precision: re-centre on the cloud's centre
+  { let mx = 0; for (let i = 0; i < n; i++) mx = Math.max(mx, Math.abs(cols.x[i]), Math.abs(cols.y[i])); 
+    if (mx > 5000) { let cx = 0, cy = 0, cz = 0; for (let i = 0; i < n; i++) { cx += cols.x[i]; cy += cols.y[i]; cz += cols.z[i]; } cx /= n; cy /= n; cz /= n;
+      for (let i = 0; i < n; i++) { cloud.positions[i * 3] = cols.x[i] - cx; cloud.positions[i * 3 + 1] = cols.y[i] - cy; cloud.positions[i * 3 + 2] = cols.z[i] - cz; }
+      (cloud.meta.notes ??= []).push(`Coordinates re-centred by (${cx.toFixed(1)}, ${cy.toFixed(1)}, ${cz.toFixed(1)}) m for display precision.`); } }
   // organised clouds (depth cameras) contain NaN points for pixels without a measurement: drop them
   const keep: number[] = [];
   for (let i = 0; i < cloud.count; i++) { const k = i * 3; if (Number.isFinite(cloud.positions[k]) && Number.isFinite(cloud.positions[k + 1]) && Number.isFinite(cloud.positions[k + 2])) keep.push(i); }

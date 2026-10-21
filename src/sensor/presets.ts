@@ -30,7 +30,7 @@ export interface SensorPreset extends SensorConfig {
 
 export const PRESETS: SensorPreset[] = [
   {
-    id: 'tls', group: 'Terrestrial (TLS) · Mechanical', name: "Leica RTC360", pattern: 'panoramic', hFov: 360, vMin: -60, vMax: 90, hRes: 0.12, channels: 220, minRange: 0.5, maxRange: 130, frequency: 0.02, returns: 1, noise: 0.002, reflectivityOverride: null,
+    id: 'tls', group: 'Terrestrial (TLS) · Mechanical', name: "Leica RTC360", pattern: 'panoramic', hFov: 360, vMin: -60, vMax: 90, hRes: 0.3, channels: 500, minRange: 0.5, maxRange: 130, frequency: 0.02, returns: 1, noise: 0.002, reflectivityOverride: null,
     blurb: "Tripod laser scanner, 360\u00b0 \u00d7 300\u00b0 field of view. Records colour as well as intensity.",
     examples: [
       { label: "High density \u00b7 0.1\u00b0", patch: { hRes: 0.1, channels: 300 } },
@@ -39,7 +39,7 @@ export const PRESETS: SensorPreset[] = [
     ],
   },
   {
-    id: 'faro', group: 'Terrestrial (TLS) · Mechanical', name: "FARO Focus Premium", pattern: 'panoramic', hFov: 360, vMin: -60, vMax: 90, hRes: 0.12, channels: 220, minRange: 0.5, maxRange: 350, frequency: 0.02, returns: 1, noise: 0.001, reflectivityOverride: null,
+    id: 'faro', group: 'Terrestrial (TLS) · Mechanical', name: "FARO Focus Premium", pattern: 'panoramic', hFov: 360, vMin: -60, vMax: 90, hRes: 0.3, channels: 500, minRange: 0.5, maxRange: 350, frequency: 0.02, returns: 1, noise: 0.001, reflectivityOverride: null,
     blurb: "Tripod laser scanner, 360\u00b0 \u00d7 300\u00b0 field of view. Records colour as well as intensity.",
     examples: [
       { label: "High density \u00b7 0.1\u00b0", patch: { hRes: 0.1, channels: 300 } },

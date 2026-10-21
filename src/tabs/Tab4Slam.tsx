@@ -22,10 +22,10 @@ const REG_SENSOR: SensorConfig = { ...presetToConfig(PRESETS.find((p) => p.id ==
 
 const errTransform = (r: ReturnType<typeof useLab.getState>['reg']): Rigid => rigidFromEuler(r.errT[0], r.errT[1], r.errT[2], r.errYawDeg * D2R, r.errPitchDeg * D2R, r.errRollDeg * D2R);
 
-export default function Tab4() {
+export default function Tab4({ lab, labSwitch }: { lab: 'slam' | 'reg'; labSwitch?: React.ReactNode }) {
   const s = useLab();
   const scene = getScene(s.sceneId);
-  const [mode, setMode] = useState<'slam' | 'reg'>('slam');
+  const mode = lab;
   const [busy, setBusy] = useState(false);
   const [view, setView] = useState<'before' | 'after' | 'both'>('both');
   const p = s.slamParams;
@@ -133,7 +133,6 @@ export default function Tab4() {
 
   const controls = (
     <>
-      <Seg value={mode} onChange={setMode} options={[{ value: 'slam', label: 'SLAM drift & loop closure' }, { value: 'reg', label: 'Registration (ICP)' }]} label="Lab" />
       {mode === 'slam' ? (
         <>
           <Callout kind="warn" title="Teaching approximation">
@@ -218,24 +217,15 @@ export default function Tab4() {
     </>
   );
 
-  const learn = (
-    <>
-      <Callout kind="edu" title="Why drift happens">Each step adds a small error. Because the next pose is built on the previous one, errors accumulate — a tiny heading bias bends the whole trajectory.</Callout>
-      <Callout kind="edu" title="ICP in four lines">Match every source point to its nearest target point, solve the best rigid transform for those pairs, apply it, repeat until the error stops falling.</Callout>
-      <Eq note="minimise the sum of squared point-pair distances">min<sub>R,t</sub> Σ ‖ R pᵢ + t − qᵢ ‖²</Eq>
-      <Eq note="RMSE over the n matched pairs">RMSE = √( (1/n) Σ ‖ R pᵢ + t − qᵢ ‖² )</Eq>
-      <Callout title="Fitness">Fraction of source points with a neighbour inside the correspondence distance — a proxy for overlap.</Callout>
-      <Callout kind="warn" title="Limits">ICP needs a decent starting pose and overlap. In long flat corridors or featureless walls it can slide along the surface.</Callout>
-    </>
-  );
-
   return (
     <TabFrame
       title="SLAM & Registration"
       tab={5}
       viewport={viewport}
       controls={controls}
-      learn={learn}
+      learn={null}
+      noPanelTabs
+      topExtras={labSwitch}
       stats={stats}
       overlays={<KindLegend items={mode === 'slam' ? [{ color: '#30d158', label: 'Ground-truth trajectory' }, { color: '#ff453a', label: 'Estimated (drifting)', style: 'dash' }, { color: '#0a84ff', label: 'After loop closure' }] : [{ color: '#0a84ff', label: 'Scan A (reference)' }, { color: '#ff9f0a', label: 'Scan B (misaligned)' }, { color: '#30d158', label: 'Scan B after ICP' }]} />}
     />

@@ -8,8 +8,7 @@ const Tab0 = lazy(() => import('./tabs/Tab0Concepts'));
 const Tab1 = lazy(() => import('./tabs/Tab1Fundamentals'));
 const Tab2 = lazy(() => import('./tabs/Tab2Explorer'));
 const TabCmp = lazy(() => import('./tabs/TabCompareSensors'));
-const Tab3 = lazy(() => import('./tabs/Tab3TlsMls'));
-const Tab4 = lazy(() => import('./tabs/Tab4Slam'));
+const TabMap = lazy(() => import('./tabs/TabMapping'));
 const Tab5 = lazy(() => import('./tabs/Tab5Processing'));
 const Tab6 = lazy(() => import('./tabs/Tab6Segmentation'));
 const Tab7 = lazy(() => import('./tabs/Tab7Recon'));
@@ -20,9 +19,8 @@ const TABS: { label: string; icon: ReactNode; el: ReactNode }[] = [
   { label: 'What is LiDAR?', icon: <Info size={18} />, el: <Tab0 /> },
   { label: 'Scanner Simulator', icon: <Radar size={18} />, el: <Tab1 /> },
   { label: 'Compare Sensors', icon: <Layers size={18} />, el: <TabCmp /> },
-  { label: 'Real Point Clouds', icon: <Boxes size={18} />, el: <Tab2 /> },
-  { label: 'TLS & MLS Laboratory', icon: <Route size={18} />, el: <Tab3 /> },
-  { label: 'SLAM & Registration', icon: <GitMerge size={18} />, el: <Tab4 /> },
+  { label: 'Point Cloud Gallery', icon: <Boxes size={18} />, el: <Tab2 /> },
+  { label: 'SLAM & Registration', icon: <GitMerge size={18} />, el: <TabMap /> },
   { label: 'Point Cloud Processing', icon: <Filter size={18} />, el: <Tab5 /> },
   { label: 'Clustering & Segmentation', icon: <Network size={18} />, el: <Tab6 /> },
   { label: 'Image to 3D', icon: <Camera size={18} />, el: <Tab7 /> },

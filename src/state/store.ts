@@ -61,7 +61,8 @@ export interface LabState {
   toast: { msg: string; kind: 'info' | 'ok' | 'warn' | 'error'; n: number } | null;
   scanInfo: { stats: ScanResult['stats']; viz?: ScanResult['viz']; coverage?: CoverageInfo | null } | null;
   usedColorModes: string[];
-  realCompared: boolean;
+  galleryViewed: string[];
+  galleryRaw: boolean;
   scanLog: { label: string; hRes: number; channels: number; maxRange: number; points: number; spacing: number; coveragePct: number | null; occludedPct: number | null }[];
   exportsLog: { name: string; fmt: string; count: number }[];
   undoCount: number;
@@ -159,7 +160,8 @@ function initial() {
     toast: null,
     scanInfo: null,
     usedColorModes: [] as string[],
-    realCompared: false,
+    galleryViewed: [] as string[],
+    galleryRaw: false,
     scanLog: [] as LabState['scanLog'],
     exportsLog: [] as LabState['exportsLog'],
     undoCount: 0,
@@ -171,7 +173,7 @@ function initial() {
     tlsCoverage: null,
     waypoints: [] as [number, number][],
     mls: null,
-    mlsOpts: { speed: 1, height: 1.5, distortion: false },
+    mlsOpts: { speed: 1.5, height: 1.5, distortion: false },
     mlsAnim: -1,
     pendingStation: null as [number, number] | null,
     slamParams: { ...DEFAULT_SLAM },

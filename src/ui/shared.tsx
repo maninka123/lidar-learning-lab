@@ -97,9 +97,9 @@ export function TopBar({ title, minimal, extra }: { title: string; minimal?: boo
       {!minimal && <EnvironmentMenu />}
       {extra}
       <div className="spacer" />
-      {!minimal && <Btn icon={<Undo2 size={16} />} onClick={doUndo} disabled={s.undoCount === 0} title="Undo last action" testId="undo">Undo</Btn>}
-      {!minimal && <Btn icon={<RotateCcw size={16} />} variant={confirm ? 'danger' : ''} onClick={() => { if (confirm) { s.resetAll(); setConfirm(false); s.notify('Everything reset.', 'info'); } else setConfirm(true); }} title="Reset the whole lab" testId="reset">{confirm ? 'Confirm reset' : 'Reset'}</Btn>}
-      <Btn icon={<Camera size={16} />} onClick={takeScreenshot} title="Save a screenshot of the 3D view" testId="screenshot">Screenshot</Btn>
+      {!minimal && <Btn icon={<Undo2 size={16} />} onClick={doUndo} disabled={s.undoCount === 0} title="Undo last action" testId="undo">{extra ? '' : 'Undo'}</Btn>}
+      {!minimal && <Btn icon={<RotateCcw size={16} />} variant={confirm ? 'danger' : ''} onClick={() => { if (confirm) { s.resetAll(); setConfirm(false); s.notify('Everything reset.', 'info'); } else setConfirm(true); }} title="Reset the whole lab" testId="reset">{extra ? '' : confirm ? 'Confirm reset' : 'Reset'}</Btn>}
+      <Btn icon={<Camera size={16} />} onClick={takeScreenshot} title="Save a screenshot of the 3D view" testId="screenshot">{extra ? '' : 'Screenshot'}</Btn>
       {!minimal && <ExportMenu />}
       <Btn icon={s.rightOpen ? <PanelRightClose size={17} /> : <PanelRightOpen size={17} />} onClick={() => s.patch({ rightOpen: !s.rightOpen })} title="Toggle the controls panel" testId="toggle-panel" />
     </header>

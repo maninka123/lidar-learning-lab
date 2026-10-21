@@ -29,21 +29,18 @@ export const CHALLENGES: Challenge[] = [
     },
   },
   {
-    id: 2, tab: 3, title: 'Load and export a point cloud',
-    goal: 'Open a real point cloud (or upload your own) with at least 5 000 points and export it as PLY or PCD.',
-    steps: ['Open Real Point Clouds and pick a dataset.', 'Look at it, pick a few points and read their x, y, z.', 'Export it as PLY or PCD from the toolbar or the File section.'],
-    outcome: 'A point cloud file is just a table: one row per point with x, y, z and optional columns such as colour or intensity.',
-    check: (s) => {
-      const e = s.exportsLog.filter((x) => x.count >= 5000);
-      return { done: e.length > 0, detail: e.length ? `Exported ${e[e.length - 1].name} (${e[e.length - 1].count.toLocaleString()} points, ${e[e.length - 1].fmt}).` : 'No export of ≥ 5 000 points yet.' };
-    },
+    id: 2, tab: 3, title: 'Explore real TLS and MLS scans',
+    goal: 'Open a real TLS scan and a real MLS scan in the Point Cloud Gallery and orbit both.',
+    steps: ['Open Point Cloud Gallery.', 'Orbit the scan and read the scanner’s type and field of view.', 'Notice how a single line scanner needs many profiles to make a 3D surface.'],
+    outcome: 'A real scan is noisy and incomplete compared with a simulation, and a line scanner only becomes 3D after processing.',
+    check: (s) => { const t = s.galleryViewed.includes('riegl'), m = s.galleryViewed.includes('orbis'); return { done: t && m, detail: `TLS scan opened: ${t ? 'yes' : 'no'}; MLS scan opened: ${m ? 'yes' : 'no'}.` }; },
   },
   {
-    id: 3, tab: 3, title: 'Compare two real scans',
-    goal: 'Show two different real point clouds together (side by side or overlay) and measure at least one distance.',
-    steps: ['Open Real Point Clouds.', 'Choose Compare, then Side by side or Overlay with Room scan 1 and Room scan 2.', 'Pick two points and read the distance.'],
-    outcome: 'Real scans from different viewpoints overlap but do not line up until they are registered.',
-    check: (s) => ({ done: s.realCompared && s.picks.length >= 2, detail: `Compared two datasets: ${s.realCompared ? 'yes' : 'no'}; points picked: ${s.picks.length} (need 2).` }),
+    id: 3, tab: 3, title: 'Read a point cloud file',
+    goal: 'Open the Raw view of a real scan and find the header and the first data rows.',
+    steps: ['In the Point Cloud Gallery press Raw.', 'Find FIELDS, POINTS and DATA in the blue header.', 'Read the first few rows: one point per row.'],
+    outcome: 'A point cloud file is a header plus one row of numbers per point.',
+    check: (s) => ({ done: s.galleryRaw, detail: s.galleryRaw ? 'Raw view opened.' : 'Open the Raw view.' }),
   },
   {
     id: 4, tab: 4, title: 'Create TLS and MLS scans of the same room',
@@ -56,7 +53,7 @@ export const CHALLENGES: Challenge[] = [
     },
   },
   {
-    id: 5, tab: 5, title: 'Correct a misaligned scan',
+    id: 5, tab: 4, title: 'Correct a misaligned scan',
     goal: 'Apply a rigid error to scan B, run ICP, and reduce the RMSE by at least 50 % with a recovered pose within 3 cm and 1° of the truth.',
     steps: ['Build scans A and B.', 'Apply the translation/rotation error.', 'Run ICP and scrub through iterations.'],
     outcome: 'ICP needs a reasonable initial guess and enough overlap; the residual RMSE does not reach zero because of noise and sampling.',
@@ -68,7 +65,7 @@ export const CHALLENGES: Challenge[] = [
     },
   },
   {
-    id: 6, tab: 6, title: 'Add noise, then clean the point cloud',
+    id: 6, tab: 5, title: 'Add noise, then clean the point cloud',
     goal: 'Inject noise and outliers, then clean them so ≥ 90 % of the outliers are removed while ≥ 85 % of the original points survive.',
     steps: ['Add “Inject outliers” (and optionally Gaussian noise).', 'Add Statistical or Radius outlier removal.', 'Tune parameters until the quality bar is met.'],
     outcome: 'Filters trade removing outliers against deleting real geometry. Parameters depend on point density.',
@@ -80,7 +77,7 @@ export const CHALLENGES: Challenge[] = [
     },
   },
   {
-    id: 7, tab: 7, title: 'Segment the floor and three objects',
+    id: 7, tab: 6, title: 'Segment the floor and three objects',
     goal: 'Remove the ground with RANSAC and cluster so that at least three ground-truth objects are recovered (IoU ≥ 0.5, purity ≥ 0.7).',
     steps: ['Use a simulated scan as input.', 'Enable ground removal; pick Euclidean clustering or DBSCAN.', 'Tune radius / epsilon and min cluster size.'],
     outcome: 'Geometric clustering does not know object classes; parameter choices cause over- or under-segmentation.',
@@ -92,7 +89,7 @@ export const CHALLENGES: Challenge[] = [
     },
   },
   {
-    id: 8, tab: 8, title: 'Compare LiDAR with reconstructed 3D geometry',
+    id: 8, tab: 7, title: 'Compare LiDAR with reconstructed 3D geometry',
     goal: 'Align the image-derived reconstruction to the LiDAR cloud, read the error statistics, and tick the four observations you can verify.',
     steps: ['Generate LiDAR and a reconstruction.', 'Align them (scale + ICP).', 'Inspect the error map and tick observations: occlusion, missing geometry, texture differences, geometric inaccuracy.'],
     outcome: 'Distances are only meaningful after valid alignment (including scale). Each method fails differently.',
@@ -102,7 +99,7 @@ export const CHALLENGES: Challenge[] = [
     },
   },
   {
-    id: 9, tab: 9, title: 'Answer a spatial question with the scene graph',
+    id: 9, tab: 8, title: 'Answer a spatial question with the scene graph',
     goal: 'Ask the graph a question and answer: “Which object is closest to the scanner?”',
     steps: ['Build the scene graph.', 'Ask the closest-object question.', 'Pick your answer in the quiz box.'],
     outcome: 'Answers come from computed geometry, not guesses; measurements are traceable to node positions.',

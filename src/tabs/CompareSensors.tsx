@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLab } from '../state/store';
 import { getScene } from '../scenes';
 import { Viewport } from '../ui/Viewport';
-import { SceneLayer, CloudLayer, SensorMarker } from '../ui/three';
+import { CloudLayer } from '../ui/three';
 import { FAMILIES, FAMILY_GROUPS, familyLabel, getPreset, presetToConfig } from '../sensor/presets';
 import { staticPose } from '../sensor/simulate';
 import { runTask } from '../engine/client';
@@ -50,10 +50,8 @@ export function CompareSensors({ panels, onChange }: { panels: CmpPanel[]; onCha
         const cloud = entry && entry !== 'busy' ? entry.cloud : null;
         return (
           <div key={p.key} style={{ position: 'relative', minHeight: 0 }} data-testid={`cmp-panel-${i}`}>
-            <Viewport id={`cmp-${p.key}`} group="cmp" primary={i === 0} home={scene.cameraHome} target={scene.cameraTarget}>
-              <SceneLayer scene={scene} opacity={0.14} showCeiling={false} interactive={false} />
+            <Viewport id={`cmp-${p.key}`} group="cmp" primary={i === 0} hideAxes hideGrid bgOverride="#ffffff" home={scene.cameraHome} target={scene.cameraTarget}>
               {cloud && <CloudLayer cloud={cloud} mode={cfg.pattern === 'panoramic' && cloud.colors ? 'rgb' : 'flat'} colorOpts={{ flat: [230, 30, 40] }} size={2.5} budget={500000} pickable={false} />}
-              <SensorMarker x={pose.x} y={pose.y} z={pose.z} yaw={pose.yaw} pitch={pose.pitch} sensor={presetToConfig(cfg)} showFov={false} />
             </Viewport>
             <div className="overlay glass card" style={{ left: 10, top: 10, display: 'flex', gap: 6, alignItems: 'center', padding: '0.3rem 0.4rem' }}>
               <select value={p.preset} onChange={(e) => onChange(panels.map((q) => (q.key === p.key ? { ...q, preset: e.target.value } : q)))} aria-label={`Sensor for view ${i + 1}`} data-testid={`cmp-select-${i}`} style={{ width: 'auto', minWidth: 190, minHeight: '2rem' }}>

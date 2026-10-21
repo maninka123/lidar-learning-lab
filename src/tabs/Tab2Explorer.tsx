@@ -1,238 +1,162 @@
-import { ReactNode, useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLab } from '../state/store';
 import { Viewport } from '../ui/Viewport';
 import { TabFrame } from '../ui/TabFrame';
-import { Badge, Btn, Callout, Section, Select, Seg, Slider, fmtN } from '../ui/controls';
+import { Badge, Callout, Select, fmtN } from '../ui/controls';
 import { RawViewer } from '../ui/RawViewer';
-import { CloudLayer, PickLayer } from '../ui/three';
-import { Crosshair, Download, FileText, Trash2, Undo2, Upload, Play } from '../ui/icons';
-import { clearPicks, exportCloudFile, uploadCloud } from '../state/actions';
-import { cloudBounds, PointCloud, attributesOf, transformCloud } from '../core/pointcloud';
-import { availableModes, COLOR_MODE_LABEL, ColorMode } from '../core/colorize';
+import { CloudLayer } from '../ui/three';
+import { Btn } from '../ui/controls';
+import { FileText } from '../ui/icons';
+import { cloudBounds, PointCloud } from '../core/pointcloud';
 import { parsePointCloud } from '../io/load';
 import { writePCD } from '../io/pcd';
-import { runTask } from '../engine/client';
-import { useSpacing } from './common';
-import { getScene } from '../scenes';
-import { FAMILIES, getPreset, presetToConfig } from '../sensor/presets';
-import { staticPose, PoseSample } from '../sensor/simulate';
-import { autoRays } from '../state/actions';
 
-const simCache = new Map<string, PointCloud>();
-const SIM_SETS: RealSet[] = [
-  { id: 'sim-tls', label: 'TLS (tripod), same room', file: '', blurb: 'Simulated tripod laser scanner in Scene A: one static station, very dense, with colour.' },
-  { id: 'sim-mls', label: 'MLS (walking), same room', file: '', blurb: 'Simulated mobile scanner (32-channel) walked across Scene A: many sweeps from a moving pose, sparser, no colour.' },
-];
-
-function Pictogram({ kind }: { kind: 'tls' | 'mls' }) {
-  return kind === 'tls' ? (
-    <svg viewBox="0 0 64 64" width="56" height="56" aria-label="Tripod scanner"><path d="M32 30 L18 58 M32 30 L46 58 M32 30 L32 58" stroke="#444" strokeWidth="2.5" fill="none" strokeLinecap="round" /><rect x="22" y="10" width="20" height="20" rx="5" fill="#0a84ff" /><circle cx="32" cy="20" r="5" fill="#fff" /></svg>
-  ) : (
-    <svg viewBox="0 0 64 64" width="56" height="56" aria-label="Moving scanner"><rect x="8" y="38" width="48" height="12" rx="4" fill="#8e8e93" /><circle cx="18" cy="52" r="5" fill="#333" /><circle cx="46" cy="52" r="5" fill="#333" /><rect x="26" y="22" width="12" height="12" rx="3" fill="#ff9f0a" /><path d="M20 20 L12 16 M44 20 L52 16 M20 28 L10 28 M44 28 L54 28" stroke="#ff9f0a" strokeWidth="2" strokeLinecap="round" /></svg>
-  );
+interface RealSet {
+  id: string; label: string; group: string; file: string; blurb: string; kind: string;
+  scanner: string; fov?: { h: number; vMin: number; vMax: number; ch: number }; specs?: string; source: string; license: string;
 }
-
-interface RealSet { id: string; label: string; file: string; blurb: string }
-
-const SETS: RealSet[] = [
-  { id: 'room1', label: 'Room scan 1', file: 'room_scan1.pcd', blurb: 'A real scan of a room (112 586 points) from the Point Cloud Library tutorial data. Only x, y, z were recorded: no colour, no intensity.' },
-  { id: 'room2', label: 'Room scan 2', file: 'room_scan2.pcd', blurb: 'A second real scan of the same room from a different pose (112 624 points). Compare it with scan 1: the two overlap but are not aligned.' },
-  { id: 'lamp', label: 'Lamppost', file: 'lamppost.pcd', blurb: 'A very small real scan (1 771 points): you can see individual points and how sparse a LiDAR sample can be.' },
+const PCL = 'Point Cloud Library sample data';
+/** Only clouds whose scanner is known are shown. */
+const ZEN = 'Zenodo';
+const REAL: RealSet[] = [
+  { id: 'riegl', label: 'Tree · RIEGL VZ-400 (TLS)', group: 'Terrestrial laser scanning (TLS)', file: 'riegl_vz400_tree.ply', kind: 'Terrestrial (tripod) scan', scanner: 'RIEGL VZ-400 terrestrial laser scanner', fov: { h: 360, vMin: -40, vMax: 60, ch: 1 }, specs: 'rotating mirror, 360° × 100°, range up to ≈ 600 m (datasheet, approx.)', blurb: 'One tree scanned from a tripod with a RIEGL VZ-400 in Russell Square, London. A TLS scan is very dense and has no colour here: only x, y, z.', source: `${ZEN} record 5076045 (UCL, Phil Wilkes), file RSQ01_2017_T102`, license: 'CC BY 4.0' },
+  { id: 'orbis', label: 'Tree · FARO Orbis + HESAI XT32 (MLS)', group: 'Mobile laser scanning (MLS)', file: 'faro_orbis_mls_tree.ply', kind: 'Mobile (handheld) scan', scanner: 'FARO Orbis handheld scanner with a HESAI XT32 lidar', fov: { h: 360, vMin: -16, vMax: 15, ch: 32 }, specs: '32 channels, 360° × 31°, range ≈ 120 m (datasheet, approx.)', blurb: 'One hardwood tree in a Québec forest, scanned by a person walking with a handheld mobile scanner (32-channel lidar + camera). The scan was georeferenced, processed and the tree was segmented from the plot, so it is processed data, not a raw sweep. It has colour and intensity.', source: `${ZEN} record 21515256 (Vandendaele, Havreljuk, Roussel et al.), file DUC0001-01_54`, license: 'CC BY 4.0' },
+  { id: 'lms400', label: 'Table scene · SICK LMS400 (line scanner)', group: 'Line scanner', file: 'table_scene_lms400.pcd', kind: 'Tabletop scene', scanner: 'SICK LMS400 (named in the file name)', fov: { h: 70, vMin: 0, vMax: 0, ch: 1 }, specs: 'single beam swept over ≈ 70° (datasheet, approx.)', blurb: 'A close-range scene recorded with a SICK LMS400 line scanner. One shot is only a single line (a profile). The 3D shape appears only after many profiles are combined using the scanner’s motion or pan-tilt: that is processing, not a single measurement. How this file was captured is not documented.', source: 'Point Cloud Library sample data (tutorials/table_scene_lms400.pcd)', license: 'BSD-3-Clause' },
 ];
 
+const REAL_UP: RealSet = { id: 'upload', label: 'Your file', group: 'Your file', file: '', kind: 'Uploaded file', scanner: 'not specified', blurb: 'The file you opened. Colour and intensity are shown if the file has them.', source: 'Your file', license: 'yours' };
 const cache = new Map<string, PointCloud>();
-async function loadSet(set: RealSet): Promise<PointCloud> {
-  const hit = cache.get(set.id);
+async function loadReal(r: RealSet): Promise<PointCloud> {
+  const hit = cache.get(r.id);
   if (hit) return hit;
-  const res = await fetch(`${import.meta.env.BASE_URL}data/${set.file}`);
-  if (!res.ok) throw new Error(`Could not load ${set.file}`);
-  const c = parsePointCloud(await res.arrayBuffer(), set.file);
-  c.name = set.label;
-  c.meta = { ...c.meta, kind: 'measured', source: `Point Cloud Library sample data: ${set.file}`, license: 'BSD-3-Clause (PointCloudLibrary/data)', description: set.blurb, coordinateFrame: 'Sensor frame as recorded, metres' };
-  cache.set(set.id, c);
+  const res = await fetch(`${import.meta.env.BASE_URL}data/${r.file}`);
+  if (!res.ok) throw new Error(`Could not load ${r.file}`);
+  const c = parsePointCloud(await res.arrayBuffer(), r.file);
+  c.name = r.label;
+  cache.set(r.id, c);
   return c;
 }
 
 const centre = (c: PointCloud): [number, number, number] => { const b = cloudBounds(c); return [(b.min[0] + b.max[0]) / 2, (b.min[1] + b.max[1]) / 2, (b.min[2] + b.max[2]) / 2]; };
 const sizeOf = (c: PointCloud) => { const b = cloudBounds(c); return Math.max(b.max[0] - b.min[0], b.max[1] - b.min[1], b.max[2] - b.min[2], 0.5); };
 
+/** Little annotated drawing of the sensor: top view (horizontal FOV) and side view (vertical FOV with its channels). */
+function ScannerFigure({ p }: { p: { hFov: number; vMin: number; vMax: number; channels: number } }) {
+  const ref = useRef<HTMLCanvasElement>(null);
+  useEffect(() => {
+    const cv = ref.current; if (!cv) return;
+    const W = 330, H = 150, dpr = window.devicePixelRatio || 1;
+    cv.width = W * dpr; cv.height = H * dpr;
+    const g = cv.getContext('2d')!; g.scale(dpr, dpr);
+    g.fillStyle = '#f7f7fa'; g.fillRect(0, 0, W, H);
+    const D = Math.PI / 180;
+    // --- top view
+    const cx = 80, cy = 78, R = 56;
+    g.fillStyle = 'rgba(10,132,255,.14)'; g.strokeStyle = '#0a60c9'; g.lineWidth = 2;
+    g.beginPath(); g.moveTo(cx, cy);
+    if (p.hFov >= 359) g.arc(cx, cy, R, 0, Math.PI * 2); else g.arc(cx, cy, R, -(p.hFov / 2) * D, (p.hFov / 2) * D);
+    g.closePath(); g.fill(); g.stroke();
+    g.fillStyle = '#0a60c9'; g.beginPath(); g.arc(cx, cy, 5, 0, 7); g.fill();
+    g.fillStyle = '#1d1d1f'; g.font = '600 13px -apple-system, sans-serif'; g.textAlign = 'center';
+    g.fillText('Top view', cx, 16); g.fillText(`${p.hFov >= 359 ? '360' : p.hFov.toFixed(p.hFov % 1 ? 1 : 0)}° horizontal`, cx, H - 8);
+    // --- side view with channels
+    const sx = 200, sy = 82, L = 58;
+    const lo = p.vMin * D, hi = p.vMax * D;
+    g.fillStyle = 'rgba(142,63,209,.14)'; g.strokeStyle = '#8e3fd1'; g.lineWidth = 2;
+    g.beginPath(); g.moveTo(sx, sy); g.lineTo(sx + L * Math.cos(hi), sy - L * Math.sin(hi)); g.lineTo(sx + L * Math.cos(lo), sy - L * Math.sin(lo)); g.closePath(); g.fill(); g.stroke();
+    const n = Math.min(p.channels, 32);
+    g.strokeStyle = 'rgba(142,63,209,.7)'; g.lineWidth = 1;
+    for (let i = 0; i < n; i++) { const a = n === 1 ? (lo + hi) / 2 : lo + ((hi - lo) * i) / (n - 1); g.beginPath(); g.moveTo(sx, sy); g.lineTo(sx + L * Math.cos(a), sy - L * Math.sin(a)); g.stroke(); }
+    g.fillStyle = '#8e3fd1'; g.beginPath(); g.arc(sx, sy, 5, 0, 7); g.fill();
+    g.fillStyle = '#1d1d1f'; g.fillText('Side view', sx + 36, 16);
+    g.fillText(`${(p.vMax - p.vMin).toFixed(p.vMax - p.vMin < 10 && (p.vMax - p.vMin) % 1 ? 1 : 0)}° vertical${p.channels > 1 ? ` · ${p.channels} ch` : ''}`, sx + 36, H - 8);
+  }, [p]);
+  return <canvas ref={ref} style={{ width: '100%', height: 150, borderRadius: 12 }} aria-label="Scanner field of view and channels" />;
+}
+
 export default function Tab2() {
   const s = useLab();
-  const [aId, setAId] = useState('room1');
-  const [bId, setBId] = useState('room2');
-  const [mode, setMode] = useState<'single' | 'split' | 'overlay'>('single');
-  const [A, setA] = useState<PointCloud | null>(null);
-  const [B, setB] = useState<PointCloud | null>(null);
-  const [uploaded, setUploaded] = useState<PointCloud | null>(null);
-  const [aligned, setAligned] = useState<{ cloud: PointCloud; before: number; after: number } | null>(null);
-  const [rawOpen, setRawOpen] = useState(false);
+  const [sel, setSel] = useState('orbis');
+  const [spec, setSpec] = useState({ name: '', channels: '', hFov: '', vFov: '' });
+  const [cloud, setCloud] = useState<PointCloud | null>(null);
   const [busy, setBusy] = useState(false);
-  const [colour, setColour] = useState<ColorMode | 'auto'>('auto');
-  const [size, setSize] = useState(2.5);
+  const [rawOpen, setRawOpen] = useState(false);
+  const [colour, setColour] = useState<'auto' | 'height' | 'intensity' | 'rgb'>('auto');
+  const entry = sel === 'upload' ? REAL_UP : REAL.find((e) => e.id === sel)!;
 
-  const [simReady, setSimReady] = useState(simCache.size === 2);
-  const sets = useMemo<RealSet[]>(() => [...SETS, ...(simReady ? SIM_SETS : []), ...(uploaded ? [{ id: 'upload', label: uploaded.name, file: '', blurb: 'Your own file.' }] : [])], [uploaded, simReady]);
-  const resolve = (id: string) => (id === 'upload' && uploaded ? Promise.resolve(uploaded) : simCache.has(id) ? Promise.resolve(simCache.get(id)!) : loadSet(SETS.find((x) => x.id === id)!));
+  useEffect(() => { const v = useLab.getState().galleryViewed; if (!v.includes(sel)) useLab.setState({ galleryViewed: [...v, sel] }); }, [sel]);
+  useEffect(() => {
+    let on = true; setBusy(true);
+    loadReal(entry).then((c) => { if (!on) return; setCloud(c); setBusy(false); }).catch((e) => { useLab.getState().notify(e.message, 'error'); setBusy(false); });
+    return () => { on = false; };
+  }, [sel]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  useEffect(() => { let on = true; resolve(aId).then((c) => { if (on) { setA(c); setAligned(null); useLab.getState().setCloud('explorer', c); } }).catch((e) => useLab.getState().notify(e.message, 'error')); return () => { on = false; }; }, [aId, uploaded]); // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => { if (mode === 'single') return; let on = true; resolve(bId).then((c) => { if (on) { setB(c); setAligned(null); } }).catch((e) => useLab.getState().notify(e.message, 'error')); return () => { on = false; }; }, [bId, mode, uploaded]); // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => { if (mode !== 'single' && aId !== bId) useLab.setState({ realCompared: true }); }, [mode, aId, bId]);
-
-  const info = sets.find((x) => x.id === aId);
-  const spacing = useSpacing(A);
-  const spacingB = useSpacing(B);
-  const modes = A ? availableModes(A).filter((m) => ['height', 'xyz', 'rgb', 'flat'].includes(m)) : (['height'] as ColorMode[]);
-  const effMode: ColorMode = colour !== 'auto' && modes.includes(colour) ? colour : A?.colors ? 'rgb' : 'height';
-  const home = useMemo<[number, number, number]>(() => { if (!A) return [4, -4, 3]; const c = centre(A), k = sizeOf(A); return [c[0] + k * 0.9, c[1] - k * 0.9, c[2] + k * 0.7]; }, [A]);
-  const target = useMemo<[number, number, number]>(() => (A ? centre(A) : [0, 0, 0]), [A]);
-  const threshold = A ? Math.max(0.01, sizeOf(A) / 350) : 0.05;
-  const budget = s.view.renderBudget;
-
-  const last = s.picks[s.picks.length - 1];
-  const dists = s.picks.slice(1).map((p, i) => Math.hypot(p.pos[0] - s.picks[i].pos[0], p.pos[1] - s.picks[i].pos[1], p.pos[2] - s.picks[i].pos[2]));
-
+  const home = useMemo<[number, number, number]>(() => { if (!cloud) return [4, -4, 3]; const c = centre(cloud), k = sizeOf(cloud); return [c[0] + k * 0.8, c[1] - k * 0.8, c[2] + k * 0.6]; }, [cloud]);
+  const target = useMemo<[number, number, number]>(() => (cloud ? centre(cloud) : [0, 0, 0]), [cloud]);
   const rawText = useMemo(() => {
-    if (!rawOpen || !A) return '';
-    const slim = { id: 'raw', name: A.name, count: A.count, positions: A.positions, meta: A.meta, ...(A.colors ? { colors: A.colors } : {}) } as PointCloud;
-    return new TextDecoder().decode(writePCD(slim, false));
-  }, [rawOpen, A]);
+    if (!rawOpen || !cloud) return '';
+    return new TextDecoder().decode(writePCD({ id: 'raw', name: cloud.name, count: cloud.count, positions: cloud.positions, meta: cloud.meta, ...(cloud.colors ? { colors: cloud.colors } : {}), ...(cloud.intensity ? { intensity: cloud.intensity } : {}) } as PointCloud, false));
+  }, [rawOpen, cloud]);
 
-  async function tlsVsMls() {
-    setBusy(true);
-    try {
-      const scene = getScene('A');
-      const tlsCfg = presetToConfig(getPreset('tls')), mlsCfg = presetToConfig(getPreset('rot32'));
-      const traj: PoseSample[] = [{ t: 0, x: -3, y: -1.8, z: 1.5, yaw: 0.45, pitch: 0, roll: 0 }, { t: 8, x: 3, y: 1.8, z: 1.5, yaw: 0.45, pitch: 0, roll: 0 }];
-      const [tls, mls] = await Promise.all([
-        runTask('scan', { scene, sensor: tlsCfg, trajectory: staticPose(0, 0, 1.5, 0), sweeps: 1, seed: 3, maxRays: autoRays(tlsCfg), distortion: false, scanId: 0, name: SIM_SETS[0].label }),
-        runTask('scan', { scene, sensor: mlsCfg, trajectory: traj, sweeps: 80, seed: 4, maxRays: autoRays(mlsCfg, 80), distortion: false, scanId: 0, name: SIM_SETS[1].label }),
-      ]);
-      const mlsCloud = { ...mls.cloud, colors: undefined };
-      simCache.set('sim-tls', tls.cloud); simCache.set('sim-mls', mlsCloud);
-      setSimReady(true); setAId('sim-tls'); setBId('sim-mls'); setMode('split');
-    } finally { setBusy(false); }
-  }
-
-  async function align() {
-    if (!A || !B) return;
-    setBusy(true);
-    try {
-      const r = await runTask('icp', { src: B.positions, nSrc: B.count, dst: A.positions, nDst: A.count, opts: { maxIterations: 60, tolerance: 1e-6, maxCorrDist: Math.max(0.2, sizeOf(A) / 8), sampleMax: 4000 } });
-      setAligned({ cloud: transformCloud(B, r.T, `${B.name} (aligned)`), before: r.history[0]?.rmse ?? 0, after: r.finalRmse });
-    } finally { setBusy(false); }
-  }
-
-  const layer = (c: PointCloud | null, m: ColorMode, flat?: [number, number, number], pickable = true): ReactNode =>
-    c ? <CloudLayer cloud={c} mode={m} colorOpts={{ flat }} size={size} budget={budget} pickable={pickable} /> : null;
-
-  const viewport = mode === 'split' ? (
-    <div style={{ position: 'absolute', inset: 0, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
-      <div style={{ position: 'relative' }}><Viewport id="real-a" group="real" label={`A · ${info?.label ?? ''}`} labelPos="bl" home={home} target={target} threshold={threshold}>{layer(A, effMode)}<PickLayer radius={threshold * 1.5} /></Viewport></div>
-      <div style={{ position: 'relative' }}><Viewport id="real-b" group="real" primary={false} label={`B · ${sets.find((x) => x.id === bId)?.label ?? ''}`} labelPos="bl" home={home} target={target} threshold={threshold}>{layer(B, B?.colors ? 'rgb' : 'height', undefined, false)}</Viewport></div>
-    </div>
-  ) : (
-    <Viewport home={home} target={target} threshold={threshold}>
-      {mode === 'overlay' ? <>{layer(A, 'flat', [10, 132, 255])}{layer(aligned?.cloud ?? B, 'flat', aligned ? [48, 180, 80] : [255, 159, 10], false)}</> : layer(A, effMode, [10, 132, 255])}
-      <PickLayer radius={threshold * 1.5} />
+  const viewport = (
+    <Viewport home={home} target={target} threshold={0.05} gridSize={Math.max(0.5, cloud ? sizeOf(cloud) / 10 : 1)}>
+      {cloud && <CloudLayer cloud={cloud} mode={colour === 'auto' ? (cloud.colors ? 'rgb' : 'height') : colour === 'intensity' && !cloud.intensity ? 'height' : colour === 'rgb' && !cloud.colors ? 'height' : colour} size={2} budget={s.view.renderBudget} pickable={false} />}
     </Viewport>
   );
 
-  const stats = [
-    { k: 'Points', v: A ? fmtN(A.count) : '…', s: A ? ['x y z', ...(A.colors ? ['rgb'] : []), ...(A.intensity ? ['intensity'] : [])].join(' + ').replace(' + ', ' ') : undefined },
-    { k: 'Typical point spacing', v: spacing ? (spacing < 0.1 ? `${(spacing * 100).toFixed(1)} cm` : `${spacing.toFixed(2)} m`) : '—' },
-  ];
-
   const controls = (
-    <>
-      <Section title="Real point clouds">
-        <div className="chip-row" data-testid="real-sets">{sets.map((x) => <button key={x.id} className="chip" aria-pressed={aId === x.id} onClick={() => setAId(x.id)} data-testid={`real-${x.id}`}>{x.label}</button>)}</div>
-        {A && (
-          <div className="callout" data-testid="dataset-info" style={{ gap: 6 }}>
-            <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}><b>{A.name}</b><Badge kind={A.meta.kind === 'measured' ? 'measured' : 'sim'} /></div>
-            <span>{info?.blurb ?? A.meta.description}</span>
-            <span className="caption">{A.meta.license ?? (A.meta.kind === 'simulated' ? 'Simulated by this app' : 'Your own file')} · columns: {['x', 'y', 'z', ...(A.colors ? ['rgb'] : []), ...(A.intensity ? ['intensity'] : [])].join(' ')}</span>
-          </div>
-        )}
-        <label className="btn" style={{ cursor: 'pointer' }}><Upload size={16} />Upload your own (PLY, PCD, LAS)
-          <input type="file" accept=".ply,.pcd,.las,.laz" hidden onChange={async (e) => { const f = e.target.files?.[0]; if (f) { const c = await uploadCloud(f); if (c) { setUploaded(c); setAId('upload'); } } e.target.value = ''; }} />
-        </label>
-      </Section>
-
-      <Section title="MLS vs TLS (same room)">
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, textAlign: 'center' }}>
-          <div className="callout" style={{ justifyItems: 'center' }}><Pictogram kind="tls" /><b>TLS</b><span className="caption">tripod, static, one long scan</span></div>
-          <div className="callout" style={{ justifyItems: 'center' }}><Pictogram kind="mls" /><b>MLS</b><span className="caption">moving, many short sweeps</span></div>
+    <div style={{ display: 'grid', gap: 12, paddingTop: 8 }}>
+      <div data-testid="gallery-select">
+        <Select<string> label="Point cloud" value={sel} onChange={setSel} options={REAL.map((r) => ({ value: r.id, label: r.label }))}
+          groups={[...['Terrestrial laser scanning (TLS)', 'Mobile laser scanning (MLS)', 'Line scanner'].map((g) => ({ label: g, options: REAL.filter((r) => r.group === g).map((r) => ({ value: r.id, label: r.label })) })), ...(sel === 'upload' ? [{ label: 'Your file', options: [{ value: 'upload', label: REAL_UP.label }] }] : [])]} />
+      </div>
+      <Select<string> label="Colour by" value={colour} onChange={(v) => setColour(v as typeof colour)} options={[{ value: 'auto', label: 'Automatic' }, { value: 'height', label: 'Height' }, ...(cloud?.intensity ? [{ value: 'intensity', label: 'Intensity' }] : []), ...(cloud?.colors ? [{ value: 'rgb', label: 'RGB colour' }] : [])]} />
+      <div className="callout" data-testid="gallery-info" style={{ gap: 8 }}>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}><b style={{ fontSize: '1.05rem' }}>{entry.label}</b><Badge kind="measured" /></div>
+        <span>{entry.blurb}</span>
+        {(entry.fov || (sel === 'upload' && spec.hFov)) && <ScannerFigure p={sel === 'upload' ? { hFov: parseFloat(spec.hFov) || 360, vMin: -(parseFloat(spec.vFov) || 0) / 2, vMax: (parseFloat(spec.vFov) || 0) / 2, channels: parseInt(spec.channels) || 1 } : { hFov: entry.fov!.h, vMin: entry.fov!.vMin, vMax: entry.fov!.vMax, channels: entry.fov!.ch }} />}
+        <table className="table"><tbody>
+          <tr><td>Type</td><td>{entry.kind}</td></tr>
+          <tr><td>Scanner</td><td>{sel === 'upload' ? (spec.name || 'not specified') : entry.scanner}</td></tr>
+          <tr><td>Field of view</td><td>{sel === 'upload' ? (spec.hFov ? `${spec.hFov}° × ${spec.vFov || '?'}°` : 'not specified') : `${entry.fov!.h}° × ${entry.fov!.vMax - entry.fov!.vMin}°`}</td></tr>
+          <tr><td>Channels</td><td>{sel === 'upload' ? (spec.channels || 'not specified') : entry.fov!.ch > 1 ? entry.fov!.ch : '1 (line / mirror scanner)'}</td></tr>
+          {entry.specs && sel !== 'upload' && <tr><td>Specs</td><td>{entry.specs}</td></tr>}
+          <tr><td>Points</td><td>{cloud ? fmtN(cloud.count) : '…'}</td></tr>
+          <tr><td>Columns</td><td>{cloud ? ['x', 'y', 'z', ...(cloud.colors ? ['rgb'] : []), ...(cloud.intensity ? ['intensity'] : [])].join(' ') : '…'}</td></tr>
+        </tbody></table>
+        <span className="caption">Source: {entry.source} · {entry.license}</span>
+        {cloud?.meta.notes?.map((n, i) => <span key={i} className="caption">• {n}</span>)}
+      </div>
+      <div className="callout" style={{ gap: 8 }}>
+        <b>Open your own scan</b>
+        <span className="caption">Only scans whose scanner is known are bundled. Open a PLY, PCD or LAS file and tell the gallery what scanner made it.</span>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+          <div className="field" style={{ gridColumn: '1 / -1' }}><label>Scanner name</label><input type="text" value={spec.name} placeholder="e.g. Ouster OS1-64" onChange={(e) => setSpec({ ...spec, name: e.target.value })} /></div>
+          <div className="field"><label>Channels</label><input type="number" value={spec.channels} onChange={(e) => setSpec({ ...spec, channels: e.target.value })} /></div>
+          <div className="field"><label>H FOV (°)</label><input type="number" value={spec.hFov} onChange={(e) => setSpec({ ...spec, hFov: e.target.value })} /></div>
+          <div className="field"><label>V FOV (°)</label><input type="number" value={spec.vFov} onChange={(e) => setSpec({ ...spec, vFov: e.target.value })} /></div>
         </div>
-        <Btn icon={<Play size={16} />} onClick={tlsVsMls} busy={busy} testId="tls-vs-mls">Scan the same room both ways</Btn>
-        {simReady && A && B && aId === 'sim-tls' && bId === 'sim-mls' && (
-          <table className="table" data-testid="tls-mls-table"><thead><tr><th></th><th>TLS</th><th>MLS</th></tr></thead><tbody>
-            <tr><td>Points</td><td>{fmtN(A.count)}</td><td>{fmtN(B.count)}</td></tr>
-            <tr><td>Point spacing</td><td>{spacing ? `${(spacing * 100).toFixed(1)} cm` : '—'}</td><td>{spacingB ? `${(spacingB * 100).toFixed(1)} cm` : '—'}</td></tr>
-            <tr><td>Colour</td><td>yes (RGB)</td><td>no</td></tr>
-            <tr><td>Acquisition</td><td>≈ 50 s, static</td><td>8 s, moving</td></tr>
-            <tr><td>Strength</td><td>fine detail</td><td>fast, large areas</td></tr>
-          </tbody></table>
-        )}
-        <span className="caption">The two bundled room scans above are real data; this comparison is simulated so both are the same room.</span>
-      </Section>
-
-      <Section title="Compare">
-        <Seg value={mode} onChange={setMode} options={[{ value: 'single', label: 'One' }, { value: 'split', label: 'Side by side' }, { value: 'overlay', label: 'Overlay' }]} label="Compare mode" />
-        {mode !== 'single' && (
-          <>
-            <Select label="Compare with (B)" value={bId} options={sets.map((x) => ({ value: x.id, label: x.label }))} onChange={setBId} />
-            {mode === 'overlay' && (
-              <>
-                <p className="hint">Blue = A, orange = B. Two scans from different viewpoints do not line up until they are registered.</p>
-                <Btn icon={<Play size={16} />} onClick={align} busy={busy} disabled={!A || !B || aId === bId} testId="real-align">Align B to A (ICP)</Btn>
-                {aligned && <Callout kind="good" title="Registered with ICP">Alignment error (RMSE) {aligned.before.toFixed(3)} → {aligned.after.toFixed(3)} m. Green = B after alignment.</Callout>}
-              </>
-            )}
-          </>
-        )}
-      </Section>
-
-      <Section title="Look & measure">
-        <Select label="Colour by" value={effMode} options={modes.map((m) => ({ value: m, label: COLOR_MODE_LABEL[m] }))} onChange={(m) => setColour(m)} />
-        <Slider label="Point size" value={size} min={1} max={8} step={0.5} unit=" px" onChange={setSize} />
-        <Btn icon={<Crosshair size={16} />} variant={s.interaction === 'pick-points' ? 'primary' : ''} onClick={() => s.patch({ interaction: s.interaction === 'pick-points' ? 'select' : 'pick-points' })} testId="pick-mode" block>
-          {s.interaction === 'pick-points' ? 'Picking… click points in the view' : 'Pick points to measure'}
-        </Btn>
-        <div className="btn-row">
-          <Btn sm icon={<Undo2 size={15} />} onClick={() => s.patch({ picks: s.picks.slice(0, -1) })} disabled={!s.picks.length}>Remove last</Btn>
-          <Btn sm icon={<Trash2 size={15} />} onClick={clearPicks} disabled={!s.picks.length}>Clear</Btn>
-        </div>
-        {last && (
-          <table className="table" data-testid="point-info"><thead><tr><th>x (m)</th><th>y (m)</th><th>z (m)</th></tr></thead>
-            <tbody><tr>{last.pos.map((v, i) => <td key={i} className="mono">{v.toFixed(3)}</td>)}</tr></tbody></table>
-        )}
-        {dists.length > 0 && (
-          <table className="table" data-testid="distance-table"><thead><tr><th>Segment</th><th>Distance</th></tr></thead>
-            <tbody>{dists.map((d, i) => <tr key={i}><td>P{i + 1} → P{i + 2}</td><td className="mono">{d.toFixed(3)} m</td></tr>)}</tbody></table>
-        )}
-      </Section>
-
-      <Section title="File">
-        <div className="btn-row">
-          <Btn icon={<Download size={16} />} onClick={() => A && exportCloudFile(A, 'ply')} disabled={!A}>PLY</Btn>
-          <Btn icon={<Download size={16} />} onClick={() => A && exportCloudFile(A, 'pcd')} disabled={!A}>PCD</Btn>
-        </div>
-      </Section>
-    </>
+      <label className="btn" style={{ cursor: 'pointer' }}>Open your own file (PLY, PCD, LAS)
+        <input type="file" accept=".ply,.pcd,.las" hidden onChange={async (e) => { const f = e.target.files?.[0]; if (!f) return; try { const c = parsePointCloud(await f.arrayBuffer(), f.name); c.name = f.name; cache.set('upload', c); REAL_UP.label = f.name; setSel('upload'); setCloud(c); } catch (err) { useLab.getState().notify((err as Error).message, 'error'); } e.target.value = ''; }} />
+      </label>
+      </div>
+    </div>
   );
 
   return (
     <TabFrame
-      title="Real Point Clouds"
+      title="Point Cloud Gallery"
       tab={3}
       viewport={viewport}
       controls={controls}
       learn={null}
-      stats={stats}
-      statsRow
+      simple
       noPanelTabs
-      viewExtras={<Btn sm icon={<FileText size={15} />} variant={rawOpen ? 'primary' : ''} onClick={() => setRawOpen(!rawOpen)} disabled={!A} testId="raw-toggle">Raw</Btn>}
-      overlays={rawOpen && A ? <RawViewer text={rawText} filename={`${A.name.replace(/\W+/g, '_')}.pcd`} onClose={() => setRawOpen(false)} /> : null}
+      viewExtras={<Btn sm icon={<FileText size={15} />} variant={rawOpen ? 'primary' : ''} onClick={() => { setRawOpen(!rawOpen); useLab.setState({ galleryRaw: true }); }} disabled={!cloud} testId="raw-toggle">Raw</Btn>}
+      overlays={<>
+        {busy && <div className="overlay glass card" style={{ left: 12, bottom: 12 }}>Loading…</div>}
+        {rawOpen && cloud && <RawViewer text={rawText} filename={`${entry.file}`} onClose={() => setRawOpen(false)} />}
+      </>}
     />
   );
 }
