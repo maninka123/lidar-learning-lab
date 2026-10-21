@@ -117,7 +117,7 @@ function CardSprite({ lines, table, position, accent = '#e61e28', onClose }: { l
   useEffect(() => () => tex.dispose(), [tex]);
   const k = (0.034 / 44 / 2) * 1.6; // screen-size scale per canvas pixel
   return (
-    <sprite position={position} scale={[w * k, h * k, 1]} center={new THREE.Vector2(1.04, -0.1)} renderOrder={60} onClick={(e) => { const uv = (e as unknown as { uv?: THREE.Vector2 }).uv; e.stopPropagation(); if (onClose && uv && uv.x > 0.82 && uv.y > 0.6) onClose(); }}>
+    <sprite position={position} scale={[w * k, h * k, 1]} center={new THREE.Vector2(1.04, -0.1)} renderOrder={60} userData={{ isCard: true }} onClick={(e) => { const uv = (e as unknown as { uv?: THREE.Vector2 }).uv; e.stopPropagation(); if (onClose && uv && uv.x > 0.82 && uv.y > 0.6) onClose(); }}>
       <spriteMaterial map={tex} sizeAttenuation={false} depthTest={false} transparent />
     </sprite>
   );
@@ -346,7 +346,7 @@ export default function Tab0() {
       )}
       {beams.length <= 520 && beams.filter((b) => b.hit).map((b) => <Footprint key={b.i} b={b} radius={spot(b.r) / 2} active={active === 'spot'} />)}
       </>)}
-      <points geometry={hitGeom} frustumCulled={false} onClick={(e) => { e.stopPropagation(); const k = e.index; const idx = k !== undefined ? shown[k]?.i : undefined; if (idx !== undefined) setSel((cur) => (cur === idx ? null : idx)); setPulseOn(true); }}>
+      <points geometry={hitGeom} frustumCulled={false} onClick={(e) => { e.stopPropagation(); const card = e.intersections.find((it) => (it.object as THREE.Object3D).userData?.isCard); if (card) { const uv = card.uv; if (uv && uv.x > 0.82 && uv.y > 0.6) closeCard(); return; } const k = e.index; const idx = k !== undefined ? shown[k]?.i : undefined; if (idx !== undefined) setSel((cur) => (cur === idx ? null : idx)); setPulseOn(true); }}>
         <pointsMaterial vertexColors size={pointsOnly ? 7 : 6} sizeAttenuation={false} map={roundPointTexture()} alphaTest={0.5} />
       </points>
       {sel !== null && focus && (focus.hit
