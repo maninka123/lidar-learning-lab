@@ -15,7 +15,7 @@ export async function runScan(opts: { id?: string; name?: string; withCoverage?:
   s.patch({ busy: 'Scanning…' });
   try {
     const res = await runTask('scan', {
-      scene, sensor: s.sensor, trajectory: staticPose(s.pose.x, s.pose.y, s.pose.z, s.pose.yaw, s.pose.pitch), sweeps: s.scanOpts.sweeps, seed: s.scanOpts.seed,
+      scene, sensor: s.sensor, trajectory: staticPose(s.pose.x, s.pose.y, s.pose.z, s.pose.yaw, -s.pose.pitch), sweeps: s.scanOpts.sweeps, seed: s.scanOpts.seed,
       maxRays: s.scanOpts.maxRays, distortion: false, scanId: 0, wantViz: true, name: opts.name ?? `Scan · ${s.sensor.name}`,
     });
     const st = useLab.getState();

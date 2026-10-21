@@ -64,6 +64,11 @@ test.describe('LiDAR Learning Lab', () => {
     await page.evaluate(() => window.__lab.getState().setSensor({ hRes: 1.5 }));
     await page.getByTestId('run-scan').click();
     await expect.poll(() => state(page, (s) => s.clouds.scan.count)).toBeLessThan(n1);
+    await page.getByTestId('raw-toggle').click();
+    await expect(page.getByTestId('raw-view')).toContainText('DATA ascii');
+    await page.getByTestId('raw-toggle').click();
+    await page.getByTestId('points-only').click();
+    await page.getByTestId('points-only').click();
     await page.getByTestId('log-scan').click();
     await expect(page.getByTestId('scan-log')).toBeVisible();
   });

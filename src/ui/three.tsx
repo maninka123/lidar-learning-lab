@@ -236,7 +236,7 @@ export function PickLayer({ radius = 0.05 }: { radius?: number }) {
 }
 
 // ------------------------------------------------------------------ sensor
-export function SensorMarker({ x, y, z, yaw, sensor, color = '#0a84ff', label, showFov = true }: { x: number; y: number; z: number; yaw: number; sensor?: SensorConfig; color?: string; label?: string; showFov?: boolean }) {
+export function SensorMarker({ x, y, z, yaw, pitch = 0, sensor, color = '#0a84ff', label, showFov = true }: { x: number; y: number; z: number; yaw: number; pitch?: number; sensor?: SensorConfig; color?: string; label?: string; showFov?: boolean }) {
   const fov = useMemo(() => {
     if (!sensor || !showFov) return null;
     const R = Math.min(sensor.maxRange, 3.5);
@@ -253,10 +253,12 @@ export function SensorMarker({ x, y, z, yaw, sensor, color = '#0a84ff', label, s
   }, [sensor?.hFov, sensor?.maxRange, showFov]);
   return (
     <group position={[x, y, z]} rotation={[0, 0, yaw]}>
+      <group rotation={[0, -pitch, 0]}>
       <mesh raycast={() => null} rotation={[Math.PI / 2, 0, 0]}><cylinderGeometry args={[0.08, 0.1, 0.16, 20]} /><meshStandardMaterial color={color} emissive={color} emissiveIntensity={0.5} /></mesh>
       <mesh position={[0.18, 0, 0]} rotation={[0, 0, -Math.PI / 2]} raycast={() => null}><coneGeometry args={[0.06, 0.16, 12]} /><meshBasicMaterial color="#ffffff" /></mesh>
-      <Line points={[[0, 0, 0], [0, 0, -z]]} color={color} lineWidth={1} dashed dashSize={0.08} gapSize={0.06} />
       {fov && <Line points={fov} color={color} lineWidth={1} transparent opacity={0.6} />}
+      </group>
+      <Line points={[[0, 0, 0], [0, 0, -z]]} color={color} lineWidth={1} dashed dashSize={0.08} gapSize={0.06} />
       {label && <TextSprite text={label} position={[0, 0, 0.35]} />}
     </group>
   );

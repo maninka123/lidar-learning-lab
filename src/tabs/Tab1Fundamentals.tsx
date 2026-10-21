@@ -11,6 +11,9 @@ import { SensorMarker, RayLines } from '../ui/three';
 import { PRESETS, getPreset, raysPerSweep, pointsPerSecond, isSteered } from '../sensor/presets';
 import { sweepDirections } from '../sensor/simulate';
 import { runScan } from '../state/actions';
+import { RawViewer } from '../ui/RawViewer';
+import { writePCD } from '../io/pcd';
+import { Dots, FileText } from '../ui/icons';
 import { Plan2D } from '../ui/Plan2D';
 import { D2R } from '../core/math';
 
@@ -47,9 +50,22 @@ export default function Tab1() {
   const s = useLab();
   const scene = getScene(s.sceneId);
   const preset = getPreset(s.sensorPresetId);
+  const [pointsOnly, setPointsOnly] = useState(false);
+  const [rawOpen, setRawOpen] = useState(false);
   const cloud = s.clouds['scan'];
+  const rawText = useMemo(() => (rawOpen && cloud ? new TextDecoder().decode(writePCD(cloud, false)) : ''), [rawOpen, cloud]);
   const [mode, setMode] = useState<'3d' | '2d'>('3d');
   const spacing = useSpacing(cloud);
+  // keep the scan in step with the scanner: re-scan shortly after the pose changes (only if a scan already exists)
+  const poseKey = `${s.pose.x}|${s.pose.y}|${s.pose.z}|${s.pose.yaw}|${s.pose.pitch}`;
+  const firstPose = useRef(poseKey);
+  useEffect(() => {
+    if (firstPose.current === poseKey) return;
+    firstPose.current = poseKey;
+    if (!useLab.getState().clouds['scan']) return;
+    const t = setTimeout(() => { if (!useLab.getState().busy) void runScan({ withCoverage: false }); }, 350);
+    return () => clearTimeout(t);
+  }, [poseKey]);
   const target = targetOf(s.sceneId);
   const hits = countInstance(cloud, target?.instanceId);
   const info = s.scanInfo;
@@ -64,8 +80,6 @@ export default function Tab1() {
     { k: 'Point spacing', v: spacing ? `${(spacing * 100).toFixed(1)} cm` : '—', s: `${(10 * Math.tan(sensor.hRes * D2R) * 100).toFixed(1)} cm at 10 m (horizontal)` },
     { k: 'Target hits', v: target ? fmtN(hits) : '—', s: target ? `${target.name}` : '' },
     { k: 'Surface coverage', v: cov ? `${cov.coveredPct.toFixed(1)} %` : '—', s: cov?.vis ? `${((100 * cov.vis.occluded) / cov.total).toFixed(0)} % occluded` : undefined },
-    { k: 'Scan time', v: info ? `${info.stats.ms.toFixed(0)} ms` : '—', s: `${(pointsPerSecond(sensor) / 1000).toFixed(0)}k pts/s nominal` },
-    { k: 'Data rate', v: `${(rps * sensor.frequency / 1000).toFixed(0)}k/s`, s: `${sensor.frequency} Hz × ${fmtN(rps)} rays` },
   ];
 
   const logRow = () => {
@@ -75,10 +89,10 @@ export default function Tab1() {
 
   const viewport = mode === '3d' ? (
     <Viewport home={scene.cameraHome} target={scene.cameraTarget}>
-      <SceneFromStore annotate={false} />
-      {cloud && <CloudFromStore cloud={cloud} />}
-      <SensorMarker x={s.pose.x} y={s.pose.y} z={s.pose.z} yaw={s.pose.yaw} sensor={sensor} label="Scanner" />
-      {s.view.showRays && info?.viz && <RayLines origin={info.viz.origin} ends={info.viz.ends} hit={info.viz.hit} />}
+      {!pointsOnly && <SceneFromStore annotate={false} />}
+      {cloud && <CloudFromStore cloud={cloud} mode={pointsOnly && cloud.intensity ? 'intensity' : undefined} />}
+      {!pointsOnly && <SensorMarker x={s.pose.x} y={s.pose.y} z={s.pose.z} yaw={s.pose.yaw} pitch={s.pose.pitch} sensor={sensor} label="Scanner" />}
+      {!pointsOnly && s.view.showRays && info?.viz && <RayLines origin={info.viz.origin} ends={info.viz.ends} hit={info.viz.hit} />}
       <PickLayer />
     </Viewport>
   ) : (
@@ -115,7 +129,7 @@ export default function Tab1() {
         <Slider label="Y" value={s.pose.y} min={b.min[1] + 0.3} max={b.max[1] - 0.3} step={0.05} unit=" m" format={(v) => v.toFixed(2)} onChange={(y) => s.setPose({ y })} />
         <Slider label="Height Z" value={s.pose.z} min={0.1} max={Math.max(2.8, b.max[2] - 0.2)} step={0.05} unit=" m" format={(v) => v.toFixed(2)} onChange={(z) => s.setPose({ z })} />
         <Slider label="Heading (yaw)" value={Math.round(s.pose.yaw / D2R)} min={-180} max={180} step={1} unit="°" onChange={(d) => s.setPose({ yaw: d * D2R })} />
-        <Slider label="Pitch" value={Math.round(s.pose.pitch / D2R)} min={-60} max={60} step={1} unit="°" onChange={(d) => s.setPose({ pitch: d * D2R })} />
+        <Slider label="Pitch" value={Math.round(s.pose.pitch / D2R)} min={-60} max={60} step={1} unit="°" onChange={(d) => s.setPose({ pitch: d * D2R })} hint="Positive tilts the scanner up. The scan refreshes automatically." />
         <Btn icon={<Crosshair size={16} />} variant={s.interaction === 'place-sensor' ? 'primary' : ''} onClick={() => s.patch({ interaction: s.interaction === 'place-sensor' ? 'select' : 'place-sensor' })} block>
           {s.interaction === 'place-sensor' ? 'Click a surface in the view…' : 'Click in the scene to place scanner'}
         </Btn>
@@ -193,7 +207,8 @@ export default function Tab1() {
       controls={controls}
       learn={learn}
       stats={stats}
-      overlays={<KindLegend items={[{ color: '#8e8e93', label: 'Scene mesh (original geometry)', style: 'wire' }, { color: '#64d2ff', label: 'Simulated LiDAR points' }, { color: '#ff9f0a', label: 'Ray end-points' }]} />}
+      viewExtras={<><Btn sm icon={<Dots size={15} />} variant={pointsOnly ? 'primary' : ''} onClick={() => setPointsOnly(!pointsOnly)} testId="points-only">{pointsOnly ? 'Show scene' : 'Point cloud'}</Btn><Btn sm icon={<FileText size={15} />} variant={rawOpen ? 'primary' : ''} onClick={() => setRawOpen(!rawOpen)} disabled={!cloud} testId="raw-toggle">Raw</Btn></>}
+      overlays={<>{rawOpen && cloud && <RawViewer text={rawText} filename="scan.pcd" onClose={() => setRawOpen(false)} />}<KindLegend items={[{ color: '#8e8e93', label: 'Scene mesh (original geometry)', style: 'wire' }, { color: '#64d2ff', label: 'Simulated LiDAR points' }, { color: '#ff9f0a', label: 'Ray end-points' }]} /></>}
     />
   );
   void Badge; void useMemo;
