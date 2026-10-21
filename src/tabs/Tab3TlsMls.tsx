@@ -145,14 +145,17 @@ export default function Tab3({ labSwitch }: { labSwitch?: React.ReactNode }) {
   const [colourBy, setColourBy] = useState<'auto' | 'height' | 'scan' | 'intensity'>('auto');
   async function runMls() {
     const st = useLab.getState();
-    if (st.waypoints.length < 2) { st.notify('Add at least two waypoints.', 'warn'); return; }
     setMlsBusy(true);
     try {
-      const { traj, duration, length } = buildTrajectory(st.waypoints, st.mlsOpts.speed, st.mlsOpts.height);
+      // no waypoints: a single scan (one sweep) from the scanner position; with waypoints: a moving scan along the path
+      const single = st.waypoints.length < 2;
+      const { traj, duration, length } = single
+        ? { traj: staticPose(st.pose.x, st.pose.y, st.mlsOpts.height, st.pose.yaw, -st.pose.pitch) as PoseSample[], duration: 1 / mlsSensor.frequency, length: 0 }
+        : buildTrajectory(st.waypoints, st.mlsOpts.speed, st.mlsOpts.height);
       const sweeps = Math.max(1, Math.ceil(duration * mlsSensor.frequency));
       const res = await runTask('scan', { scene: getScene(st.sceneId), sensor: mlsSensor, trajectory: traj, sweeps, seed: st.scanOpts.seed + 77, maxRays: autoRays(mlsSensor, sweeps), distortion: st.mlsOpts.distortion, scanId: 0, name: 'MLS accumulated scan' });
       const cloud = res.cloud;
-      cloud.meta = { ...cloud.meta, description: `Moving sensor along ${st.waypoints.length} waypoints at ${st.mlsOpts.speed} m/s; sweep poses applied per point${st.mlsOpts.distortion ? ' (distortion mode: one pose per sweep)' : ''}.` };
+      cloud.meta = { ...cloud.meta, description: single ? 'A single sweep from the scanner position (no waypoints).' : `Moving sensor along ${st.waypoints.length} waypoints at ${st.mlsOpts.speed} m/s; sweep poses applied per point${st.mlsOpts.distortion ? ' (distortion mode: one pose per sweep)' : ''}.` };
       useLab.setState({ mls: { cloud, coverage: null, sceneId: st.sceneId, seconds: duration, length } });
       useLab.getState().setCloud('mls', cloud);
       if (res.stats.reduced) useLab.getState().notify(`Point budget reached: angular step thinned to ${res.stats.effectiveHRes.toFixed(2)}°.`, 'warn');
@@ -327,7 +330,7 @@ export default function Tab3({ labSwitch }: { labSwitch?: React.ReactNode }) {
             <ol style={{ margin: 0, paddingLeft: '1.3rem', display: 'grid', gap: 2 }}>{s.waypoints.map(([x, y], i) => <li key={i} className="mono" style={{ fontSize: '0.875rem' }}>{x.toFixed(2)}, {y.toFixed(2)}</li>)}</ol>
             {traj && <p className="hint">{traj.length.toFixed(1)} m · {traj.duration.toFixed(1)} s · ~{fmtN(Math.round(pointsPerSecond(mlsSensor) * traj.duration))} nominal points</p>}
             <div className="btn-row">
-              <Btn variant="primary" icon={<Play size={16} />} onClick={runMls} busy={mlsBusy} disabled={s.waypoints.length < 2} testId="run-mls">Generate moving scan</Btn>
+              <Btn variant="primary" icon={<Play size={16} />} onClick={runMls} busy={mlsBusy} testId="run-mls">{s.waypoints.length < 2 ? 'Generate single scan' : 'Generate moving scan'}</Btn>
               <Btn icon={playing ? <Pause size={16} /> : <Play size={16} />} onClick={() => { if (!playing && s.mlsAnim >= 1) useLab.setState({ mlsAnim: 0 }); setPlaying(!playing); }} disabled={!traj}>{playing ? 'Pause' : 'Animate'}</Btn>
             </div>
             {traj && <Slider label="Playback" value={Math.max(0, s.mlsAnim)} min={0} max={1} step={0.01} format={(v) => `${(v * (traj.duration)).toFixed(1)} s`} onChange={(v) => s.patch({ mlsAnim: v })} />}
