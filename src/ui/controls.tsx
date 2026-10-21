@@ -36,6 +36,18 @@ export function Slider({ label, value, min, max, step = 1, unit = '', onChange, 
   );
 }
 
+/** Compact slider: label and value on one line, thin track below. */
+export function MiniSlider({ label, value, min, max, step = 1, unit = '', onChange, format, title }: { label: string; value: number; min: number; max: number; step?: number; unit?: string; onChange: (v: number) => void; format?: (v: number) => string; title?: string }) {
+  const p = ((value - min) / (max - min || 1)) * 100;
+  const id = `ms-${label.replace(/\W+/g, '-')}`;
+  return (
+    <div style={{ display: 'grid', gap: 0 }} title={title}>
+      <div className="field-top"><label htmlFor={id} style={{ fontSize: '0.875rem' }}>{label}</label><span className="val" style={{ fontSize: '0.875rem' }}>{format ? format(value) : value}{unit}</span></div>
+      <input id={id} type="range" min={min} max={max} step={step} value={value} style={{ ['--p' as string]: `${p}%`, height: '1.3rem' }} onChange={(e) => onChange(parseFloat(e.target.value))} />
+    </div>
+  );
+}
+
 export function Select<T extends string>({ label, value, options, onChange, hint }: { label?: string; value: T; options: { value: T; label: string }[]; onChange: (v: T) => void; hint?: string }) {
   const id = `sel-${(label ?? 'x').replace(/\W+/g, '-')}`;
   return (

@@ -4,7 +4,7 @@ import { useLab } from '../state/store';
 import { getScene } from '../scenes';
 import { Viewport } from '../ui/Viewport';
 import { TabFrame } from '../ui/TabFrame';
-import { Btn, Callout, Eq, NumberField, Section, Select, Seg, Slider, Toggle, Badge, fmtN } from '../ui/controls';
+import { Btn, Callout, Eq, NumberField, Section, Select, Seg, Slider, MiniSlider, Toggle, Badge, fmtN } from '../ui/controls';
 import { DisplaySection, KindLegend } from '../ui/shared';
 import { SceneFromStore, CloudFromStore, PickLayer, targetOf, countInstance, useSpacing } from './common';
 import { SensorMarker, RayLines } from '../ui/three';
@@ -123,35 +123,12 @@ export default function Tab1() {
         <PatternPreview sensor={sensor} />
       </Section>
 
-      <Section title="Sensor pose">
-        <Slider label="X" value={s.pose.x} min={b.min[0] + 0.3} max={b.max[0] - 0.3} step={0.05} unit=" m" format={(v) => v.toFixed(2)} onChange={(x) => s.setPose({ x })} />
-        <Slider label="Y" value={s.pose.y} min={b.min[1] + 0.3} max={b.max[1] - 0.3} step={0.05} unit=" m" format={(v) => v.toFixed(2)} onChange={(y) => s.setPose({ y })} />
-        <Slider label="Height Z" value={s.pose.z} min={0.1} max={Math.max(2.8, b.max[2] - 0.2)} step={0.05} unit=" m" format={(v) => v.toFixed(2)} onChange={(z) => s.setPose({ z })} />
-        <Slider label="Heading (yaw)" value={Math.round(s.pose.yaw / D2R)} min={-180} max={180} step={1} unit="°" onChange={(d) => s.setPose({ yaw: d * D2R })} />
-        <Slider label="Pitch" value={Math.round(s.pose.pitch / D2R)} min={-60} max={60} step={1} unit="°" onChange={(d) => s.setPose({ pitch: d * D2R })} hint="Positive tilts the scanner up. The scan refreshes automatically." />
-        <Btn icon={<Crosshair size={16} />} variant={s.interaction === 'place-sensor' ? 'primary' : ''} onClick={() => s.patch({ interaction: s.interaction === 'place-sensor' ? 'select' : 'place-sensor' })} block>
-          {s.interaction === 'place-sensor' ? 'Click a surface in the view…' : 'Click in the scene to place scanner'}
-        </Btn>
-      </Section>
-
-      <Section title="Scan geometry">
+      <Section title="Sensor characteristics">
         <Slider label="Horizontal FOV" value={sensor.hFov} min={10} max={360} step={5} unit="°" onChange={(hFov) => s.setSensor({ hFov })} disabled={sensor.pattern === 'planar' && false} />
-        <Slider label="Vertical FOV" value={Math.round((sensor.vMax - sensor.vMin) * 2) / 2} min={0} max={150} step={0.5} unit="°" onChange={(f) => { const mid = (sensor.vMin + sensor.vMax) / 2; s.setSensor({ vMin: mid - f / 2, vMax: mid + f / 2 }); }} hint={`Centred at ${((sensor.vMin + sensor.vMax) / 2).toFixed(1)}° elevation`} />
-        <Slider label="Angular resolution" value={sensor.hRes} min={0.05} max={3} step={0.05} unit="°" format={(v) => v.toFixed(2)} onChange={(hRes) => s.setSensor({ hRes })} hint={solid ? 'For solid-state: sets the number of steered beams per sweep.' : undefined} />
-        <Slider label={solid ? 'Beam density (lines)' : 'Vertical channels'} value={sensor.channels} min={1} max={256} step={1} onChange={(channels) => s.setSensor({ channels })} />
-        <Slider label="Minimum range" value={sensor.minRange} min={0} max={5} step={0.1} unit=" m" format={(v) => v.toFixed(1)} onChange={(minRange) => s.setSensor({ minRange })} />
-        <Slider label="Maximum range" value={sensor.maxRange} min={1} max={150} step={1} unit=" m" onChange={(maxRange) => s.setSensor({ maxRange })} hint="Range for a bright (80 %) target; darker surfaces are detected at shorter range." />
-        <Slider label="Scan frequency" value={sensor.frequency} min={0.01} max={50} step={0.01} unit=" Hz" format={(v) => v.toFixed(2)} onChange={(frequency) => s.setSensor({ frequency })} />
-        <div className="field"><label>Returns per beam</label><Seg value={sensor.returns} options={[{ value: 1, label: '1' }, { value: 2, label: '2' }, { value: 3, label: '3' }]} onChange={(v) => s.setSensor({ returns: v as 1 | 2 | 3 })} /><span className="caption">Extra returns only appear where a beam partly passes through something (e.g. tree foliage in Scene C).</span></div>
-      </Section>
-
-      <Section title="Noise & surface">
-        <Slider label="Range noise (1σ)" value={sensor.noise} min={0} max={0.1} step={0.001} unit=" m" format={(v) => v.toFixed(3)} onChange={(noise) => s.setSensor({ noise })} />
-        <Toggle label="Override surface reflectivity" checked={sensor.reflectivityOverride !== null} onChange={(on) => s.setSensor({ reflectivityOverride: on ? 0.5 : null })} hint="Off: each material uses its own reflectivity." />
-        {sensor.reflectivityOverride !== null && <Slider label="Reflectivity (all surfaces)" value={sensor.reflectivityOverride} min={0.02} max={1} step={0.01} format={(v) => `${Math.round(v * 100)}%`} onChange={(v) => s.setSensor({ reflectivityOverride: v })} />}
-        <Slider label="Accumulated sweeps" value={s.scanOpts.sweeps} min={1} max={10} step={1} onChange={(sweeps) => s.patch({ scanOpts: { ...s.scanOpts, sweeps } })} hint="Accumulate several sweeps from the same pose." />
-        <Slider label="Point budget" value={s.scanOpts.maxRays} min={5000} max={400000} step={5000} format={fmtN} onChange={(maxRays) => s.patch({ scanOpts: { ...s.scanOpts, maxRays } })} hint="Upper limit on rays per scan; the simulator coarsens the angular step to stay within it." />
-        <NumberField label="Random seed" value={s.scanOpts.seed} step={1} onChange={(seed) => s.patch({ scanOpts: { ...s.scanOpts, seed: Math.round(seed) || 0 } })} />
+        <Slider label="Vertical FOV" value={Math.round((sensor.vMax - sensor.vMin) * 2) / 2} min={0} max={150} step={0.5} unit="°" onChange={(f) => { const mid = (sensor.vMin + sensor.vMax) / 2; s.setSensor({ vMin: mid - f / 2, vMax: mid + f / 2 }); }} />
+        <Slider label="Horizontal resolution (angular step)" value={sensor.hRes} min={0.05} max={3} step={0.05} unit="°" format={(v) => v.toFixed(2)} onChange={(hRes) => s.setSensor({ hRes })} hint={solid ? 'For solid-state: sets the number of steered beams per sweep.' : undefined} />
+        <Slider label={solid ? 'Beam density (lines)' : 'Vertical resolution (channels)'} value={sensor.channels} min={1} max={256} step={1} onChange={(channels) => s.setSensor({ channels })} />
+        <Slider label="Maximum range" value={sensor.maxRange} min={1} max={150} step={1} unit=" m" onChange={(maxRange) => s.setSensor({ maxRange })} />
       </Section>
 
       <Section title="Run">
@@ -164,6 +141,32 @@ export default function Tab1() {
         <Toggle label="Show scanning rays" checked={s.view.showRays} onChange={(v) => s.setView({ showRays: v })} />
       </Section>
 
+
+      <Section title="Sensor pose" open={false}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem 1rem' }}>
+          <MiniSlider label="X" value={s.pose.x} min={b.min[0] + 0.3} max={b.max[0] - 0.3} step={0.05} unit=" m" format={(v) => v.toFixed(1)} onChange={(x) => s.setPose({ x })} />
+          <MiniSlider label="Y" value={s.pose.y} min={b.min[1] + 0.3} max={b.max[1] - 0.3} step={0.05} unit=" m" format={(v) => v.toFixed(1)} onChange={(y) => s.setPose({ y })} />
+          <MiniSlider label="Height" value={s.pose.z} min={0.1} max={Math.max(2.8, b.max[2] - 0.2)} step={0.05} unit=" m" format={(v) => v.toFixed(1)} onChange={(z) => s.setPose({ z })} />
+          <MiniSlider label="Heading" value={Math.round(s.pose.yaw / D2R)} min={-180} max={180} step={1} unit="°" onChange={(d) => s.setPose({ yaw: d * D2R })} />
+          <MiniSlider label="Pitch (+ = up)" value={Math.round(s.pose.pitch / D2R)} min={-60} max={60} step={1} unit="°" onChange={(d) => s.setPose({ pitch: d * D2R })} />
+        </div>
+        <Btn sm icon={<Crosshair size={15} />} variant={s.interaction === 'place-sensor' ? 'primary' : ''} onClick={() => s.patch({ interaction: s.interaction === 'place-sensor' ? 'select' : 'place-sensor' })} block>
+          {s.interaction === 'place-sensor' ? 'Click a surface in the view…' : 'Place by clicking in the scene'}
+        </Btn>
+      </Section>
+
+      <Section title="Advanced" open={false}>
+        <Slider label="Minimum range" value={sensor.minRange} min={0} max={5} step={0.1} unit=" m" format={(v) => v.toFixed(1)} onChange={(minRange) => s.setSensor({ minRange })} />
+        <Slider label="Scan frequency" value={sensor.frequency} min={0.01} max={50} step={0.01} unit=" Hz" format={(v) => v.toFixed(2)} onChange={(frequency) => s.setSensor({ frequency })} />
+        <div className="field"><label>Returns per beam</label><Seg value={sensor.returns} options={[{ value: 1, label: '1' }, { value: 2, label: '2' }, { value: 3, label: '3' }]} onChange={(v) => s.setSensor({ returns: v as 1 | 2 | 3 })} /><span className="caption">Extra returns only appear where a beam partly passes through something (e.g. tree foliage in Scene C).</span></div>
+        <Slider label="Range noise (1σ)" value={sensor.noise} min={0} max={0.1} step={0.001} unit=" m" format={(v) => v.toFixed(3)} onChange={(noise) => s.setSensor({ noise })} />
+        <Toggle label="Override surface reflectivity" checked={sensor.reflectivityOverride !== null} onChange={(on) => s.setSensor({ reflectivityOverride: on ? 0.5 : null })} hint="Off: each material uses its own reflectivity." />
+        {sensor.reflectivityOverride !== null && <Slider label="Reflectivity (all surfaces)" value={sensor.reflectivityOverride} min={0.02} max={1} step={0.01} format={(v) => `${Math.round(v * 100)}%`} onChange={(v) => s.setSensor({ reflectivityOverride: v })} />}
+        <Slider label="Accumulated sweeps" value={s.scanOpts.sweeps} min={1} max={10} step={1} onChange={(sweeps) => s.patch({ scanOpts: { ...s.scanOpts, sweeps } })} hint="Accumulate several sweeps from the same pose." />
+        <Slider label="Point budget" value={s.scanOpts.maxRays} min={5000} max={400000} step={5000} format={fmtN} onChange={(maxRays) => s.patch({ scanOpts: { ...s.scanOpts, maxRays } })} hint="Upper limit on rays per scan; the simulator coarsens the angular step to stay within it." />
+        <NumberField label="Random seed" value={s.scanOpts.seed} step={1} onChange={(seed) => s.patch({ scanOpts: { ...s.scanOpts, seed: Math.round(seed) || 0 } })} />
+      </Section>
+
       {s.scanLog.length > 0 && (
         <Section title="Comparison">
           <table className="table" data-testid="scan-log">
@@ -173,7 +176,7 @@ export default function Tab1() {
           <Btn sm onClick={() => useLab.setState({ scanLog: [] })}>Clear table</Btn>
         </Section>
       )}
-      <DisplaySection cloud={cloud} />
+      <DisplaySection cloud={cloud} open={false} />
     </>
   );
 

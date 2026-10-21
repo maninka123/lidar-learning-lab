@@ -175,12 +175,12 @@ export function Toast() {
 }
 
 // ------------------------------------------------------------------ shared control sections
-export function DisplaySection({ cloud, extra }: { cloud?: PointCloud | null; extra?: ReactNode }) {
+export function DisplaySection({ cloud, extra, open = true }: { cloud?: PointCloud | null; extra?: ReactNode; open?: boolean }) {
   const v = useLab((s) => s.view);
   const setView = useLab((s) => s.setView);
   const modes = cloud ? availableModes(cloud) : (['height', 'flat'] as ColorMode[]);
   return (
-    <Section title="Display">
+    <Section title="Display" open={open}>
       <Select label="Colour by" value={v.colorMode} options={modes.map((m) => ({ value: m, label: COLOR_MODE_LABEL[m] }))} onChange={(m) => { setView({ colorMode: m }); const u = useLab.getState().usedColorModes; if (!u.includes(m)) useLab.setState({ usedColorModes: [...u, m] }); }} />
       <Slider label="Point size" value={v.pointSize} min={1} max={10} step={0.5} unit=" px" onChange={(x) => setView({ pointSize: x })} />
       <Slider label="Render budget" value={v.renderBudget} min={10000} max={400000} step={5000} format={(x) => fmtN(x)} onChange={(x) => setView({ renderBudget: x })} hint="Upper limit of points drawn. Lower it on slow machines — the app also lowers it automatically when the frame rate drops." />
