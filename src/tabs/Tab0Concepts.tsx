@@ -84,23 +84,34 @@ function AngleArc({ pts, label, labelAt, active, color }: { pts: V3[]; label: st
 }
 
 /** Multi-line info card that floats next to a point in the 3D view (constant screen size). */
-function CardSprite({ lines, position, accent = '#e61e28', onClose }: { lines: string[]; position: V3; accent?: string; onClose?: () => void }) {
+function CardSprite({ lines, table, position, accent = '#e61e28', onClose }: { lines: string[]; table?: { head: string[]; row: string[] }; position: V3; accent?: string; onClose?: () => void }) {
   const { tex, w, h } = useMemo(() => {
-    const dpr = 2, fs = 15 * dpr, lh = 24 * dpr, padX = 14 * dpr, padY = 10 * dpr;
+    const dpr = 2, fs = 15 * dpr, lh = 24 * dpr, padX = 14 * dpr, padY = 10 * dpr, gap = 22 * dpr;
     const c = document.createElement('canvas'); const g = c.getContext('2d')!;
-    g.font = `600 ${fs}px -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif`;
-    const W = Math.ceil(Math.max(...lines.map((l) => g.measureText(l).width))) + padX * 2 + 26 * dpr, H = lines.length * lh + padY * 2;
+    const font = `600 ${fs}px -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif`;
+    g.font = font;
+    const colW = table ? table.head.map((hd, i) => Math.ceil(Math.max(g.measureText(hd).width, g.measureText(table.row[i]).width))) : [];
+    const tableW = colW.reduce((a, b) => a + b, 0) + gap * Math.max(0, colW.length - 1);
+    const textW = Math.max(0, ...lines.map((l) => g.measureText(l).width));
+    const W = Math.ceil(Math.max(tableW, textW)) + padX * 2 + 26 * dpr, rows = lines.length + (table ? 2 : 0), H = rows * lh + padY * 2;
     c.width = W; c.height = H;
-    g.font = `600 ${fs}px -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif`;
-    g.fillStyle = 'rgba(255,255,255,0.96)'; g.strokeStyle = accent; g.lineWidth = 3;
+    g.font = font;
+    g.fillStyle = 'rgba(255,255,255,0.97)'; g.strokeStyle = accent; g.lineWidth = 3;
     g.beginPath(); g.roundRect(2, 2, W - 4, H - 4, 14 * dpr / 2 + 6); g.fill(); g.stroke();
-    lines.forEach((l, i) => { g.fillStyle = i === 0 ? accent : '#1d1d1f'; g.textBaseline = 'middle'; g.fillText(l, padX, padY + lh * i + lh / 2); });
-    // small close (×) icon, top-right
+    g.textBaseline = 'middle';
+    lines.forEach((l, i) => { g.fillStyle = i === 0 ? accent : '#1d1d1f'; g.fillText(l, padX, padY + lh * i + lh / 2); });
+    if (table) {
+      const y0 = padY + lh * lines.length;
+      g.fillStyle = 'rgba(120,120,128,0.14)'; g.fillRect(padX - 8, y0 + 2, tableW + 16, lh - 4);
+      let x = padX;
+      table.head.forEach((hd, i) => { g.fillStyle = '#6b6b70'; g.fillText(hd, x, y0 + lh / 2); g.fillStyle = '#1d1d1f'; g.fillText(table.row[i], x, y0 + lh * 1.5); x += colW[i] + gap; });
+      g.strokeStyle = 'rgba(0,0,0,.15)'; g.lineWidth = 2; g.beginPath(); g.moveTo(padX - 8, y0 + lh); g.lineTo(padX + tableW + 8, y0 + lh); g.stroke();
+    }
     const cx = W - 22 * dpr, cy = 20 * dpr, r = 9 * dpr;
     g.strokeStyle = '#8e8e93'; g.lineWidth = 2.4; g.beginPath(); g.moveTo(cx - r * 0.55, cy - r * 0.55); g.lineTo(cx + r * 0.55, cy + r * 0.55); g.moveTo(cx + r * 0.55, cy - r * 0.55); g.lineTo(cx - r * 0.55, cy + r * 0.55); g.stroke();
     const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
     return { tex: t, w: W, h: H };
-  }, [lines.join('|'), accent]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [lines.join('|'), table?.row.join('|'), accent]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => () => tex.dispose(), [tex]);
   const k = (0.034 / 44 / 2) * 1.6; // screen-size scale per canvas pixel
   return (
@@ -322,7 +333,7 @@ export default function Tab0() {
         <pointsMaterial vertexColors size={6} sizeAttenuation={false} map={roundPointTexture()} alphaTest={0.5} />
       </points>
       {sel !== null && focus && (focus.hit
-        ? <CardSprite position={focus.p} lines={[`Point #${focus.i + 1}`, `Position  ${focus.p.map((v) => v.toFixed(2)).join(', ')} m`, `Range  ${focus.r.toFixed(2)} m`, `Intensity  ${focus.I.toFixed(3)}`]} onClose={closeCard} />
+        ? <CardSprite position={focus.p} lines={[`Point #${focus.i + 1}`]} table={{ head: ['x (m)', 'y (m)', 'z (m)', 'intensity'], row: [focus.p[0].toFixed(2), focus.p[1].toFixed(2), focus.p[2].toFixed(2), focus.I.toFixed(3)] }} onClose={closeCard} />
         : focus.rGeo > 0
           ? <CardSprite accent="#c4163f" position={focus.p} onClose={closeCard} lines={focus.rGeo > effRange(maxRange, focus.rho)
             ? [`Point #${focus.i + 1}: no return`, `Range  ${focus.rGeo.toFixed(1)} m`, `Max range here  ${effRange(maxRange, focus.rho).toFixed(1)} m`, 'Too far for this surface']
