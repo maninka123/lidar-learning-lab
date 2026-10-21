@@ -10,13 +10,13 @@ test.describe('LiDAR Learning Lab', () => {
     const errors: string[] = [];
     page.on('pageerror', (e) => errors.push(e.message));
     await page.goto('/');
-    await expect(page.getByTestId('nav-9')).toBeVisible();
+    await expect(page.getByTestId('nav-10')).toBeVisible();
     (page as any).__errors = errors;
   });
   test.afterEach(async ({ page }) => { expect((page as any).__errors).toEqual([]); });
 
-  test('shell: ten lecture tabs, viewport, view presets, panel toggle', async ({ page }) => {
-    for (let i = 0; i < 10; i++) await expect(page.getByTestId(`nav-${i}`)).toBeVisible();
+  test('shell: eleven lecture tabs, viewport, view presets, panel toggle', async ({ page }) => {
+    for (let i = 0; i < 11; i++) await expect(page.getByTestId(`nav-${i}`)).toBeVisible();
     await expect(page.locator('canvas').first()).toBeVisible();
     await page.getByTestId('view-home').click();
     await expect(page.getByTestId('view-top')).toHaveCount(0);
@@ -85,6 +85,21 @@ test.describe('LiDAR Learning Lab', () => {
     await expect(page.getByTestId('scan-log')).toBeVisible();
   });
 
+  test('compare sensors: popup in the Scanner Simulator and its own tab', async ({ page }) => {
+    await go(page, 1);
+    await page.getByTestId('open-compare').click();
+    await expect(page.getByTestId('compare-popup')).toBeVisible();
+    await expect(page.getByTestId('cmp-panel-1')).toContainText('points', { timeout: 60000 });
+    await page.getByRole('button', { name: 'Add view' }).click();
+    await expect(page.getByTestId('cmp-panel-2')).toBeVisible();
+    await page.getByLabel('Close compare').click();
+    await go(page, 2);
+    await expect(page.getByTestId('compare-sensors')).toBeVisible();
+    await expect(page.getByTestId('cmp-panel-0')).toContainText('points', { timeout: 60000 });
+    await page.getByTestId('add-view').click();
+    await expect(page.getByTestId('cmp-panel-2')).toBeVisible();
+  });
+
   test('tab 1: prism (Livox-style) scans keep filling in automatically', async ({ page }) => {
     await go(page, 1);
     await page.evaluate(() => window.__lab.getState().setPreset('avia'));
@@ -98,7 +113,7 @@ test.describe('LiDAR Learning Lab', () => {
   });
 
   test('tab 2: real point clouds - load, compare, align, pick, raw and export', async ({ page }) => {
-    await go(page, 2);
+    await go(page, 3);
     await expect(page.getByTestId('stats-card')).toContainText('112,586', { timeout: 30000 });
     await expect(page.getByRole('button', { name: 'Exercise' })).toHaveCount(0);
     await page.getByTestId('real-lamp').click();
@@ -122,7 +137,7 @@ test.describe('LiDAR Learning Lab', () => {
   });
 
   test('tab 3: two TLS stations then an MLS trajectory', async ({ page }) => {
-    await go(page, 3);
+    await go(page, 4);
     await page.getByTestId('add-station-here').click();
     await expect.poll(() => state(page, (s) => s.stations.length)).toBe(1);
     await page.evaluate(() => window.__lab.getState().setPose({ x: -2.6, y: -1.8 }));
@@ -138,7 +153,7 @@ test.describe('LiDAR Learning Lab', () => {
   });
 
   test('tab 4: SLAM drift + loop closure, and ICP corrects a rigid error', async ({ page }) => {
-    await go(page, 4);
+    await go(page, 5);
     await page.evaluate(() => window.__lab.getState().patch({ slamParams: { ...window.__lab.getState().slamParams, loopClosure: true } }));
     await page.getByTestId('run-slam').click();
     await expect.poll(() => state(page, (s) => s.slam?.ateAfter ?? null), { timeout: 120000 }).not.toBeNull();
@@ -157,20 +172,20 @@ test.describe('LiDAR Learning Lab', () => {
     await go(page, 1);
     await page.getByTestId('run-scan').click();
     await expect.poll(() => state(page, (s) => !!s.clouds.scan)).toBe(true);
-    await go(page, 5);
+    await go(page, 6);
     await page.getByText('Noise + outliers + clean').click();
     await expect.poll(() => state(page, (s) => s.proc.quality?.injected ?? 0), { timeout: 60000 }).toBeGreaterThan(100);
     const q = await state(page, (s) => s.proc.quality);
     expect(q.injectedLeft / q.injected).toBeLessThan(0.5);
     await page.getByTestId('reset-original').click();
     await expect.poll(() => state(page, (s) => s.proc.steps.length)).toBe(0);
-    await go(page, 6);
+    await go(page, 7);
     await page.getByTestId('run-seg').click();
     await expect.poll(() => state(page, (s) => s.seg.gt?.recovered?.length ?? 0), { timeout: 60000 }).toBeGreaterThanOrEqual(3);
   });
 
   test('tab 7: LiDAR vs reconstruction needs valid alignment before reporting errors', async ({ page }) => {
-    await go(page, 7);
+    await go(page, 8);
     await expect.poll(() => state(page, (s) => !!s.recon.lidar), { timeout: 60000 }).toBe(true);
     await page.getByTestId('reconstruct').click();
     await expect.poll(() => state(page, (s) => !!s.recon.out), { timeout: 60000 }).toBe(true);
@@ -180,7 +195,7 @@ test.describe('LiDAR Learning Lab', () => {
   });
 
   test('tab 8: scene graph, node selection and offline queries (incl. local-llm-fit card)', async ({ page }) => {
-    await go(page, 8);
+    await go(page, 9);
     await page.getByTestId('node-table-1').click();
     await expect(page.getByTestId('node-details')).toContainText('table-1');
     await expect.poll(() => state(page, (s) => s.selectedObjectId)).toBe('table-1');
@@ -195,7 +210,7 @@ test.describe('LiDAR Learning Lab', () => {
   });
 
   test('tab 9: challenge dashboard and summary downloads', async ({ page }) => {
-    await go(page, 9);
+    await go(page, 10);
     await expect(page.getByTestId('challenges-page')).toContainText('of 9 challenges complete');
     const [j] = await Promise.all([page.waitForEvent('download'), page.getByTestId('download-json').click()]);
     expect(j.suggestedFilename()).toBe('lidar-lab-summary.json');

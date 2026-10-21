@@ -349,7 +349,7 @@ export default function Tab3() {
   return (
     <TabFrame
       title="TLS & MLS Laboratory"
-      tab={3}
+      tab={4}
       viewport={viewport}
       controls={controls}
       learn={learn}

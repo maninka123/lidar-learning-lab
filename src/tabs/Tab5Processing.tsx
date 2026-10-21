@@ -231,6 +231,6 @@ export default function Tab5() {
     </>
   );
 
-  return <TabFrame title="Point Cloud Processing" tab={5} viewport={viewport} controls={controls} learn={learn} stats={stats} hideViewControls={false} overlays={<KindLegend items={[{ color: '#64d2ff', label: 'Original / processed points' }, { color: '#ff6b8a', label: 'Injected outliers (when highlighted)' }]} />} />;
+  return <TabFrame title="Point Cloud Processing" tab={6} viewport={viewport} controls={controls} learn={learn} stats={stats} hideViewControls={false} overlays={<KindLegend items={[{ color: '#64d2ff', label: 'Original / processed points' }, { color: '#ff6b8a', label: 'Injected outliers (when highlighted)' }]} />} />;
   void activeCloud;
 }

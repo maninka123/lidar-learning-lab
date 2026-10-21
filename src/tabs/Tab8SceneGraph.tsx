@@ -231,6 +231,6 @@ export default function Tab8() {
     </>
   );
 
-  return <TabFrame title="Scene Graphs & 3D AI" tab={8} viewport={viewport} controls={controls} learn={learn} stats={stats} hideViewControls overlays={<KindLegend items={[{ color: '#ff9f0a', label: 'Selected / answer objects' }, { color: '#30d158', label: 'Walking corridor' }, { color: '#ff375f', label: 'Estimated boxes (dashed)', style: 'dash' }]} />} />;
+  return <TabFrame title="Scene Graphs & 3D AI" tab={9} viewport={viewport} controls={controls} learn={learn} stats={stats} hideViewControls overlays={<KindLegend items={[{ color: '#ff9f0a', label: 'Selected / answer objects' }, { color: '#30d158', label: 'Walking corridor' }, { color: '#ff375f', label: 'Estimated boxes (dashed)', style: 'dash' }]} />} />;
   void Badge; void fmtN; void ({} as GraphNode);
 }

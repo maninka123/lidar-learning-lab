@@ -188,5 +188,5 @@ export default function Tab6() {
     </>
   );
 
-  return <TabFrame title="Clustering & Segmentation" tab={6} viewport={viewport} controls={controls} learn={learn} stats={stats} overlays={<KindLegend items={[{ color: '#8e8e93', label: 'Original mesh', style: 'wire' }, { color: '#bf5af2', label: 'Estimated clusters (distinct colours)' }, { color: '#ff9f0a', label: 'Ground-truth annotation' }]} />} />;
+  return <TabFrame title="Clustering & Segmentation" tab={7} viewport={viewport} controls={controls} learn={learn} stats={stats} overlays={<KindLegend items={[{ color: '#8e8e93', label: 'Original mesh', style: 'wire' }, { color: '#bf5af2', label: 'Estimated clusters (distinct colours)' }, { color: '#ff9f0a', label: 'Ground-truth annotation' }]} />} />;
 }

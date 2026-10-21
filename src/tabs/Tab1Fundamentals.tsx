@@ -12,8 +12,9 @@ import { FAMILIES, FAMILY_GROUPS, familyLabel, familyOf, getPreset, raysPerSweep
 import { sweepDirections } from '../sensor/simulate';
 import { runScan, stopLive } from '../state/actions';
 import { RawViewer } from '../ui/RawViewer';
+import { CompareSensors, CmpPanel } from './CompareSensors';
 import { writePCD } from '../io/pcd';
-import { Dots, FileText, Pause } from '../ui/icons';
+import { Dots, FileText, Pause, Layers, X } from '../ui/icons';
 import { Plan2D } from '../ui/Plan2D';
 import { D2R } from '../core/math';
 
@@ -89,6 +90,8 @@ export default function Tab1() {
     return new TextDecoder().decode(writePCD(slim as typeof cloud, false));
   }, [rawOpen, cloud, s.sensor.pattern]);
   const [mode, setMode] = useState<'3d' | '2d'>('3d');
+  const [cmpOpen, setCmpOpen] = useState(false);
+  const [panels, setPanels] = useState<CmpPanel[]>([{ key: 1, preset: 'rot16' }, { key: 2, preset: 'rot128' }]);
   useEffect(() => () => stopLive(), []);
   useEffect(() => { stopLive(); }, [s.sensorPresetId]);
   const spacing = useSpacing(cloud);
@@ -244,8 +247,17 @@ export default function Tab1() {
       statsRow
       noPanelTabs
       topExtras={<Seg block={false} value={mode} onChange={setMode} options={[{ value: '3d', label: '3D' }, { value: '2d', label: '2D' }]} label="View" />}
-      viewExtras={<><Btn sm variant="primary" icon={s.live ? <Pause size={15} /> : <Play size={15} />} onClick={() => (s.live ? stopLive() : runScan())} busy={!!s.busy} testId="run-scan">{s.live ? 'Stop' : 'Run scan'}</Btn><Btn sm icon={<Dots size={15} />} variant={pointsOnly ? 'primary' : ''} onClick={() => setPointsOnly(!pointsOnly)} testId="points-only">{pointsOnly ? 'Show scene' : 'Point cloud'}</Btn><Btn sm icon={<FileText size={15} />} variant={rawOpen ? 'primary' : ''} onClick={() => setRawOpen(!rawOpen)} disabled={!cloud} testId="raw-toggle">Raw</Btn></>}
-      overlays={<>{(s.sensor.pattern === 'risley' || s.sensor.pattern === 'solidstate') && (
+      viewExtras={<><Btn sm icon={<Layers size={15} />} onClick={() => setCmpOpen(true)} testId="open-compare">Compare</Btn><Btn sm variant="primary" icon={s.live ? <Pause size={15} /> : <Play size={15} />} onClick={() => (s.live ? stopLive() : runScan())} busy={!!s.busy} testId="run-scan">{s.live ? 'Stop' : 'Run scan'}</Btn><Btn sm icon={<Dots size={15} />} variant={pointsOnly ? 'primary' : ''} onClick={() => setPointsOnly(!pointsOnly)} testId="points-only">{pointsOnly ? 'Show scene' : 'Point cloud'}</Btn><Btn sm icon={<FileText size={15} />} variant={rawOpen ? 'primary' : ''} onClick={() => setRawOpen(!rawOpen)} disabled={!cloud} testId="raw-toggle">Raw</Btn></>}
+      overlays={<>{cmpOpen && (
+        <div className="overlay glass-strong" style={{ inset: 12, zIndex: 20, borderRadius: 18, display: 'flex', flexDirection: 'column', overflow: 'hidden' }} data-testid="compare-popup">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '0.6rem 0.8rem' }}>
+            <b style={{ flex: 1 }}>Compare sensors · same environment and position</b>
+            <Btn sm icon={<Plus size={15} />} onClick={() => setPanels([...panels, { key: Math.max(...panels.map((p) => p.key)) + 1, preset: 'rot32' }])} disabled={panels.length >= 4}>Add view</Btn>
+            <button className="btn sm icon" onClick={() => setCmpOpen(false)} aria-label="Close compare" style={{ width: 32 }}><X size={15} /></button>
+          </div>
+          <div style={{ position: 'relative', flex: 1, minHeight: 0 }}><CompareSensors panels={panels} onChange={setPanels} /></div>
+        </div>
+      )}{(s.sensor.pattern === 'risley' || s.sensor.pattern === 'solidstate') && (
         <div className="overlay glass card" style={{ right: 12, top: 70, padding: '0.35rem' }} data-testid="accumulate-toggle">
           <Seg block={false} value={s.accumulate ? 'acc' : 'one'} onChange={(v) => { stopLive(); s.patch({ accumulate: v === 'acc' }); setTimeout(() => void runScan(), 0); }} label="Point cloud mode" options={[{ value: 'one', label: 'Single sweep' }, { value: 'acc', label: 'Building up' }]} />
         </div>

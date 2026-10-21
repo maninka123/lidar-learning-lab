@@ -29,7 +29,7 @@ export const CHALLENGES: Challenge[] = [
     },
   },
   {
-    id: 2, tab: 2, title: 'Load and export a point cloud',
+    id: 2, tab: 3, title: 'Load and export a point cloud',
     goal: 'Open a real point cloud (or upload your own) with at least 5 000 points and export it as PLY or PCD.',
     steps: ['Open Real Point Clouds and pick a dataset.', 'Look at it, pick a few points and read their x, y, z.', 'Export it as PLY or PCD from the toolbar or the File section.'],
     outcome: 'A point cloud file is just a table: one row per point with x, y, z and optional columns such as colour or intensity.',
@@ -39,14 +39,14 @@ export const CHALLENGES: Challenge[] = [
     },
   },
   {
-    id: 3, tab: 2, title: 'Compare two real scans',
+    id: 3, tab: 3, title: 'Compare two real scans',
     goal: 'Show two different real point clouds together (side by side or overlay) and measure at least one distance.',
     steps: ['Open Real Point Clouds.', 'Choose Compare, then Side by side or Overlay with Room scan 1 and Room scan 2.', 'Pick two points and read the distance.'],
     outcome: 'Real scans from different viewpoints overlap but do not line up until they are registered.',
     check: (s) => ({ done: s.realCompared && s.picks.length >= 2, detail: `Compared two datasets: ${s.realCompared ? 'yes' : 'no'}; points picked: ${s.picks.length} (need 2).` }),
   },
   {
-    id: 4, tab: 3, title: 'Create TLS and MLS scans of the same room',
+    id: 4, tab: 4, title: 'Create TLS and MLS scans of the same room',
     goal: 'Make at least two static TLS stations and one moving MLS trajectory in the same scene, then compare coverage.',
     steps: ['In TLS mode place two or three stations and scan.', 'In MLS mode draw waypoints and generate the moving scan.', 'Read the comparison table.'],
     outcome: 'TLS and MLS are deployment methods; coverage, density and gaps differ because of viewpoints and motion.',
@@ -56,7 +56,7 @@ export const CHALLENGES: Challenge[] = [
     },
   },
   {
-    id: 5, tab: 4, title: 'Correct a misaligned scan',
+    id: 5, tab: 5, title: 'Correct a misaligned scan',
     goal: 'Apply a rigid error to scan B, run ICP, and reduce the RMSE by at least 50 % with a recovered pose within 3 cm and 1° of the truth.',
     steps: ['Build scans A and B.', 'Apply the translation/rotation error.', 'Run ICP and scrub through iterations.'],
     outcome: 'ICP needs a reasonable initial guess and enough overlap; the residual RMSE does not reach zero because of noise and sampling.',
@@ -68,7 +68,7 @@ export const CHALLENGES: Challenge[] = [
     },
   },
   {
-    id: 6, tab: 5, title: 'Add noise, then clean the point cloud',
+    id: 6, tab: 6, title: 'Add noise, then clean the point cloud',
     goal: 'Inject noise and outliers, then clean them so ≥ 90 % of the outliers are removed while ≥ 85 % of the original points survive.',
     steps: ['Add “Inject outliers” (and optionally Gaussian noise).', 'Add Statistical or Radius outlier removal.', 'Tune parameters until the quality bar is met.'],
     outcome: 'Filters trade removing outliers against deleting real geometry. Parameters depend on point density.',
@@ -80,7 +80,7 @@ export const CHALLENGES: Challenge[] = [
     },
   },
   {
-    id: 7, tab: 6, title: 'Segment the floor and three objects',
+    id: 7, tab: 7, title: 'Segment the floor and three objects',
     goal: 'Remove the ground with RANSAC and cluster so that at least three ground-truth objects are recovered (IoU ≥ 0.5, purity ≥ 0.7).',
     steps: ['Use a simulated scan as input.', 'Enable ground removal; pick Euclidean clustering or DBSCAN.', 'Tune radius / epsilon and min cluster size.'],
     outcome: 'Geometric clustering does not know object classes; parameter choices cause over- or under-segmentation.',
@@ -92,7 +92,7 @@ export const CHALLENGES: Challenge[] = [
     },
   },
   {
-    id: 8, tab: 7, title: 'Compare LiDAR with reconstructed 3D geometry',
+    id: 8, tab: 8, title: 'Compare LiDAR with reconstructed 3D geometry',
     goal: 'Align the image-derived reconstruction to the LiDAR cloud, read the error statistics, and tick the four observations you can verify.',
     steps: ['Generate LiDAR and a reconstruction.', 'Align them (scale + ICP).', 'Inspect the error map and tick observations: occlusion, missing geometry, texture differences, geometric inaccuracy.'],
     outcome: 'Distances are only meaningful after valid alignment (including scale). Each method fails differently.',
@@ -102,7 +102,7 @@ export const CHALLENGES: Challenge[] = [
     },
   },
   {
-    id: 9, tab: 8, title: 'Answer a spatial question with the scene graph',
+    id: 9, tab: 9, title: 'Answer a spatial question with the scene graph',
     goal: 'Ask the graph a question and answer: “Which object is closest to the scanner?”',
     steps: ['Build the scene graph.', 'Ask the closest-object question.', 'Pick your answer in the quiz box.'],
     outcome: 'Answers come from computed geometry, not guesses; measurements are traceable to node positions.',

@@ -224,7 +224,7 @@ export default function Tab2() {
   return (
     <TabFrame
       title="Real Point Clouds"
-      tab={2}
+      tab={3}
       viewport={viewport}
       controls={controls}
       learn={null}
