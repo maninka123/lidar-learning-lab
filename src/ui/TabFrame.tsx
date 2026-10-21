@@ -12,10 +12,11 @@ export interface TabFrameProps {
   stats?: { k: string; v: ReactNode; s?: string }[];
   overlays?: ReactNode;
   hideViewControls?: boolean;
+  viewExtras?: ReactNode;
   simple?: boolean; // controls only: no Exercise / Learn panes, minimal top bar
 }
 
-export function TabFrame({ title, tab, viewport, controls, learn, stats, overlays, hideViewControls, simple }: TabFrameProps) {
+export function TabFrame({ title, tab, viewport, controls, learn, stats, overlays, hideViewControls, simple, viewExtras }: TabFrameProps) {
   const open = useLab((s) => s.rightOpen);
   const [pane, setPane] = useState<'controls' | 'exercise' | 'learn'>('controls');
   return (
@@ -24,7 +25,7 @@ export function TabFrame({ title, tab, viewport, controls, learn, stats, overlay
       <div className="tab-body">
         <div className="stage" data-testid="stage">
           {viewport}
-          {!hideViewControls && <ViewControls simple={simple} />}
+          {!hideViewControls && <ViewControls simple={simple} extra={viewExtras} />}
           {stats && <StatsCard items={stats} />}
           {overlays}
         </div>

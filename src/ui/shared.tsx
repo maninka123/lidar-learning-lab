@@ -123,12 +123,13 @@ export function TopBar({ title, minimal }: { title: string; minimal?: boolean })
 }
 
 // ------------------------------------------------------------------ overlays
-export function ViewControls({ simple }: { simple?: boolean }) {
+export function ViewControls({ simple, extra }: { simple?: boolean; extra?: ReactNode }) {
   const v = useLab((s) => s.view);
   const setView = useLab((s) => s.setView);
   const interaction = useLab((s) => s.interaction);
   return (
     <div className="overlay glass card" style={{ top: 12, right: 12, display: 'flex', gap: 6, padding: '0.35rem', alignItems: 'center' }} role="toolbar" aria-label="View controls">
+      {extra}
       <Btn sm icon={<Home size={15} />} onClick={() => viewBus.emit('home')} testId="view-home">Home</Btn>
       {!simple && <Btn sm onClick={() => viewBus.emit('top')} testId="view-top">Top</Btn>}
       {!simple && <Btn sm onClick={() => viewBus.emit('front')} testId="view-front">Front</Btn>}

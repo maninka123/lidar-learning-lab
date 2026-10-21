@@ -83,24 +83,27 @@ function AngleArc({ pts, label, labelAt, active, color }: { pts: V3[]; label: st
 }
 
 /** Multi-line info card that floats next to a point in the 3D view (constant screen size). */
-function CardSprite({ lines, position, accent = '#e61e28' }: { lines: string[]; position: V3; accent?: string }) {
+function CardSprite({ lines, position, accent = '#e61e28', onClose }: { lines: string[]; position: V3; accent?: string; onClose?: () => void }) {
   const { tex, w, h } = useMemo(() => {
     const dpr = 2, fs = 15 * dpr, lh = 24 * dpr, padX = 14 * dpr, padY = 10 * dpr;
     const c = document.createElement('canvas'); const g = c.getContext('2d')!;
     g.font = `600 ${fs}px -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif`;
-    const W = Math.ceil(Math.max(...lines.map((l) => g.measureText(l).width))) + padX * 2, H = lines.length * lh + padY * 2;
+    const W = Math.ceil(Math.max(...lines.map((l) => g.measureText(l).width))) + padX * 2 + 26 * dpr, H = lines.length * lh + padY * 2;
     c.width = W; c.height = H;
     g.font = `600 ${fs}px -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif`;
     g.fillStyle = 'rgba(255,255,255,0.96)'; g.strokeStyle = accent; g.lineWidth = 3;
     g.beginPath(); g.roundRect(2, 2, W - 4, H - 4, 14 * dpr / 2 + 6); g.fill(); g.stroke();
     lines.forEach((l, i) => { g.fillStyle = i === 0 ? accent : '#1d1d1f'; g.textBaseline = 'middle'; g.fillText(l, padX, padY + lh * i + lh / 2); });
+    // small close (×) icon, top-right
+    const cx = W - 22 * dpr, cy = 20 * dpr, r = 9 * dpr;
+    g.strokeStyle = '#8e8e93'; g.lineWidth = 2.4; g.beginPath(); g.moveTo(cx - r * 0.55, cy - r * 0.55); g.lineTo(cx + r * 0.55, cy + r * 0.55); g.moveTo(cx + r * 0.55, cy - r * 0.55); g.lineTo(cx - r * 0.55, cy + r * 0.55); g.stroke();
     const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
     return { tex: t, w: W, h: H };
   }, [lines.join('|'), accent]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => () => tex.dispose(), [tex]);
   const k = (0.034 / 44 / 2) * 1.6; // screen-size scale per canvas pixel
   return (
-    <sprite position={position} scale={[w * k, h * k, 1]} center={new THREE.Vector2(-0.05, -0.1)} renderOrder={60} raycast={() => null}>
+    <sprite position={position} scale={[w * k, h * k, 1]} center={new THREE.Vector2(1.04, -0.1)} renderOrder={60} onClick={(e) => { const uv = (e as unknown as { uv?: THREE.Vector2 }).uv; e.stopPropagation(); if (onClose && uv && uv.x > 0.82 && uv.y > 0.6) onClose(); }}>
       <spriteMaterial map={tex} sizeAttenuation={false} depthTest={false} transparent />
     </sprite>
   );
@@ -151,6 +154,8 @@ export default function Tab0() {
   const [sel, setSel] = useState<number | null>(null);
   const [phase, setPhase] = useState(0);
   const [playing, setPlaying] = useState(true);
+  const [pulseOn, setPulseOn] = useState(true);
+  const closeCard = () => { setSel(null); setPulseOn(false); };
   const showAxes = useLab((s) => s.view.showAxes);
   const [pane, setPane] = useState<'notes' | 'controls'>('notes');
   const [active, setActive] = useState<string | null>(null);
@@ -264,7 +269,6 @@ export default function Tab0() {
         pts={Array.from({ length: 33 }, (_, k) => { const a = (-hFov / 2 + (hFov * k) / 32) * D2R, R = Math.min(3.4, D * 0.5); return [R * Math.cos(a), R * Math.sin(a), zs] as V3; })} />
       <AngleArc active={active === 'v'} color="#8e3fd1" label={`${vFov}° vertical FOV`} labelAt={[Math.min(2.8, D * 0.42) * Math.cos(vFov * D2R / 2) + 0.2, 0, zs + Math.min(2.8, D * 0.42) * Math.sin(vFov * D2R / 2) + 0.35]}
         pts={Array.from({ length: 25 }, (_, k) => { const e = (-vFov / 2 + (vFov * k) / 24) * D2R, R = Math.min(2.8, D * 0.42); return [R * Math.cos(e), 0, zs + R * Math.sin(e)] as V3; })} />
-      <TextSprite text={`${nH} × ${nV} beams`} position={[0.4, 1.4, zs - 0.7]} bg={active === 'beams' ? 'rgba(217,122,0,0.95)' : 'rgba(0,70,160,0.9)'} />
       {focus?.hit && (() => { const sp = spot(focus.r), up = new THREE.Vector3(...focus.n).cross(new THREE.Vector3(0, 0, 1)).length() > 0.01 ? new THREE.Vector3(0, 0, 1) : new THREE.Vector3(0, 1, 0); const a: V3 = [focus.p[0] - focus.n[0] * 0.0 + 0.03, focus.p[1], focus.p[2] - (up.z ? sp / 2 : 0)], b: V3 = [a[0], a[1], a[2] + sp]; return <DimArrow a={a} b={b} label={`spot ${(sp * 100).toFixed(1)} cm`} active={active === 'spot'} color="#1f9d3d" labelOnActive />; })()}
       {showAxes && (
         <group position={[0, 0, zs]}>
@@ -289,18 +293,18 @@ export default function Tab0() {
         </mesh>
       )}
       {lesson === 'div' && beams.length <= 520 && beams.filter((b) => b.hit).map((b) => <Footprint key={b.i} b={b} radius={spot(b.r) / 2} />)}
-      <points geometry={hitGeom} frustumCulled={false} onClick={(e) => { e.stopPropagation(); const idx = e.index; if (idx !== undefined) setSel((cur) => (cur === idx ? null : idx)); }}>
+      <points geometry={hitGeom} frustumCulled={false} onClick={(e) => { e.stopPropagation(); const idx = e.index; if (idx !== undefined) setSel((cur) => (cur === idx ? null : idx)); setPulseOn(true); }}>
         <pointsMaterial vertexColors size={6} sizeAttenuation={false} map={roundPointTexture()} alphaTest={0.5} />
       </points>
       {sel !== null && focus && (focus.hit
-        ? <CardSprite position={focus.p} lines={[`Point #${focus.i + 1}`, `Position  ${focus.p.map((v) => v.toFixed(2)).join(', ')} m`, `Range  ${focus.r.toFixed(2)} m`, `Reflectivity  ${focus.rho.toFixed(2)}`, `Intensity  ${focus.I.toFixed(3)}`]} />
+        ? <CardSprite position={focus.p} lines={[`Point #${focus.i + 1}`, `Position  ${focus.p.map((v) => v.toFixed(2)).join(', ')} m`, `Range  ${focus.r.toFixed(2)} m`, `Intensity  ${focus.I.toFixed(3)}`]} onClose={closeCard} />
         : focus.rGeo > 0
-          ? <CardSprite accent="#c4163f" position={focus.p} lines={focus.rGeo > effRange(maxRange, focus.rho)
+          ? <CardSprite accent="#c4163f" position={focus.p} onClose={closeCard} lines={focus.rGeo > effRange(maxRange, focus.rho)
             ? [`Point #${focus.i + 1}: no return`, `Range  ${focus.rGeo.toFixed(1)} m`, `Max range here  ${effRange(maxRange, focus.rho).toFixed(1)} m`, 'Too far for this surface']
-            : [`Point #${focus.i + 1}: no return`, `Reflectivity  ${focus.rho.toFixed(2)}`, `Intensity  ${focus.IGeo.toFixed(3)} < ${DETECT}`, 'Too little light came back']} />
-          : <CardSprite accent="#666666" position={focus.p} lines={[`Point #${focus.i + 1}: no return`, 'This beam hit nothing']} />)}
+            : [`Point #${focus.i + 1}: no return`, `Intensity  ${focus.IGeo.toFixed(3)} < ${DETECT}`, 'Too little light came back']} />
+          : <CardSprite accent="#666666" position={focus.p} lines={[`Point #${focus.i + 1}: no return`, 'This beam hit nothing']} onClose={closeCard} />)}
       {focus?.hit && <mesh position={focus.p} raycast={() => null}><ringGeometry args={[0.14, 0.2, 24]} /><meshBasicMaterial color="#ff9f0a" side={THREE.DoubleSide} depthTest={false} /></mesh>}
-      {focus?.hit && <Pulse from={new THREE.Vector3(0, 0, zs)} to={new THREE.Vector3(...focus.p)} slow={slow} playing={playing} onTick={setPhase} />}
+      {pulseOn && focus?.hit && <Pulse from={new THREE.Vector3(0, 0, zs)} to={new THREE.Vector3(...focus.p)} slow={slow} playing={playing} onTick={setPhase} />}
     </Viewport>
   );
 
@@ -391,21 +395,21 @@ export default function Tab0() {
       controls={controls}
       learn={null}
       simple
+      viewExtras={<button className="btn icon primary" style={{ width: 38, height: 38, borderRadius: 19, padding: 0 }} onClick={() => setPlaying(!playing)} data-testid="play-pause" aria-label={playing ? 'Pause the light pulse' : 'Play the light pulse'} title={playing ? 'Pause' : 'Play'}>{playing ? <Pause size={18} /> : <Play size={18} />}</button>}
       overlays={
         <>
           <KindLegend items={[{ color: '#007aff', label: 'Laser beams' }, { color: '#34c759', label: 'Beam divergence / spot' }, { color: '#ff9f0a', label: 'Selected point' }]} />
           <div className="sr-only" data-testid="concept-point-info" aria-live="polite">{focus?.hit ? `${sel !== null ? `Point ${focus.i + 1}` : 'Middle beam'}: position ${focus.p.map((v) => v.toFixed(2)).join(', ')} m, range ${focus.r.toFixed(2)} m, reflectivity ${focus.rho.toFixed(2)}, Intensity ${focus.I.toFixed(3)}` : 'No return'}</div>
           <FrontInsets beams={beams} scene={scene} hFov={hFov} vFov={vFov} D={D} zs={zs} />
-          <button className="btn primary overlay" style={{ left: 14, bottom: 14, minWidth: 120 }} onClick={() => setPlaying(!playing)} data-testid="play-pause" aria-label={playing ? 'Pause the light pulse' : 'Play the light pulse'}>{playing ? <Pause size={16} /> : <Play size={16} />}{playing ? 'Pause' : 'Play'}</button>
           <div className="overlay" style={{ right: 12, bottom: 12, display: 'grid', gap: 8, justifyItems: 'end' }} data-testid="stats-card">
-            {lesson === 'tof' && focus?.hit && <div className="glass card" style={{ minWidth: 210, padding: '0.45rem 0.8rem' }}><div className="caption">Stopwatch (slowed down) · {phase < 0.5 ? 'going out' : 'coming back'}</div><div className="mono" style={{ fontSize: '1.3rem', fontWeight: 650 }}>{clock.toFixed(1)} ns</div></div>}
+            {pulseOn && lesson === 'tof' && focus?.hit && <div className="glass card" style={{ minWidth: 210, padding: '0.45rem 0.8rem' }}><div className="caption">Stopwatch (slowed down) · {phase < 0.5 ? 'going out' : 'coming back'}</div><div className="mono" style={{ fontSize: '1.3rem', fontWeight: 650 }}>{clock.toFixed(1)} ns</div></div>}
             <div style={{ display: 'flex', gap: 8 }}>
               <div className="glass card" style={{ minWidth: 170, padding: '0.45rem 0.8rem' }}><div className="caption">Time of flight</div><div style={{ fontSize: '1.15rem', fontWeight: 650 }}>{focus?.hit ? `${dtNs.toFixed(1)} ns` : '—'}</div><div className="caption">{focus?.hit ? `range ${focus.r.toFixed(2)} m` : 'no return'}</div></div>
               <div className="glass card" style={{ minWidth: 170, padding: '0.45rem 0.8rem' }}><div className="caption">Coverage</div><div style={{ fontSize: '1.3rem', fontWeight: 650 }}>{(2 * D * Math.tan(hFov * D2R / 2)).toFixed(1)} × {(2 * D * Math.tan(vFov * D2R / 2)).toFixed(1)} m</div><div className="caption">{hFov}° × {vFov}° FOV</div></div>
             </div>
             <div style={{ display: 'flex', gap: 8 }}>
               <div className="glass card" style={{ minWidth: 170, padding: '0.45rem 0.8rem' }}><div className="caption">Max range on this wall</div><div style={{ fontSize: '1.3rem', fontWeight: 650 }}>{effRange(maxRange, rho).toFixed(1)} m</div><div className="caption">sensor max {maxRange} m · wall at {D} m</div></div>
-              <div className="glass card" style={{ minWidth: 170, padding: '0.45rem 0.8rem' }}><div className="caption">Returns</div><div style={{ fontSize: '1.3rem', fontWeight: 650 }}>{hits.length} / {beams.length}</div><div className="caption">beams that got light back</div></div>
+              <div className="glass card" style={{ minWidth: 170, padding: '0.45rem 0.8rem' }}><div className="caption">Number of points</div><div style={{ fontSize: '1.3rem', fontWeight: 650 }}>{hits.length}</div><div className="caption">of {beams.length} beams got a return</div></div>
             </div>
           </div>
         </>

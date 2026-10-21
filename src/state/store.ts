@@ -63,6 +63,7 @@ export interface LabState {
   exportsLog: { name: string; fmt: string; count: number }[];
   undoCount: number;
   rightOpen: boolean;
+  navOpen: boolean;
   fps: number;
 
   // TLS / MLS
@@ -157,6 +158,7 @@ function initial() {
     exportsLog: [] as LabState['exportsLog'],
     undoCount: 0,
     rightOpen: true,
+    navOpen: true,
     fps: 60,
     stations: [] as Station[],
     stationRegErr: { t: 0, deg: 0 },

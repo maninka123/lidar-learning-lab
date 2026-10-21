@@ -1,5 +1,5 @@
 import { Suspense, lazy, ReactNode } from 'react';
-import { Radar, Info, Boxes, Route, GitMerge, Filter, Network, Camera, Share2, Trophy, Check } from './ui/icons';
+import { PanelLeft, Radar, Info, Boxes, Route, GitMerge, Filter, Network, Camera, Share2, Trophy, Check } from './ui/icons';
 import { useLab } from './state/store';
 import { Toast } from './ui/shared';
 import { CHALLENGES } from './exercises/defs';
@@ -31,15 +31,17 @@ const TABS: { label: string; icon: ReactNode; el: ReactNode }[] = [
 export default function App() {
   const tab = useLab((s) => s.tab);
   const setTab = useLab((s) => s.setTab);
+  const navOpen = useLab((s) => s.navOpen);
   const state = useLab();
   const done = new Set(CHALLENGES.filter((c) => c.check(state).done).map((c) => c.tab));
   return (
-    <div className="app">
+    <div className={`app ${navOpen ? '' : 'nav-collapsed'}`}>
       <nav className="sidebar glass" aria-label="Lecture sections">
         <div className="brand">
           <div className="brand-mark"><Radar size={22} color="#fff" /></div>
-          <div><b>LiDAR Learning Lab</b><span>60-minute workshop</span></div>
+          <div className="brand-text"><b>LiDAR Learning Lab</b></div>
         </div>
+        <button className="btn sm icon nav-toggle" onClick={() => useLab.setState({ navOpen: !navOpen })} aria-label={navOpen ? 'Collapse the menu' : 'Expand the menu'} aria-expanded={navOpen} title={navOpen ? 'Collapse menu' : 'Expand menu'} data-testid="nav-toggle"><PanelLeft size={17} /></button>
         {TABS.map((t, i) => (
           <button key={t.label} className="nav-item" aria-current={tab === i ? 'page' : undefined} onClick={() => setTab(i)} data-testid={`nav-${i}`} title={t.label}>
             <span className="nav-num">{i + 1}</span>

@@ -41,7 +41,10 @@ test.describe('LiDAR Learning Lab', () => {
     await expect(page.getByTestId('person-points')).toContainText('0 points · gap');
     await page.getByTestId('mat-white').click();
     await page.getByTestId('play-pause').click();
-    await expect(page.getByTestId('play-pause')).toContainText('Play');
+    await expect(page.getByTestId('play-pause')).toHaveAttribute('aria-label', 'Play the light pulse');
+    await page.getByTestId('nav-toggle').click();
+    await expect(page.locator('.app')).toHaveClass(/nav-collapsed/);
+    await page.getByTestId('nav-toggle').click();
     await page.getByRole('button', { name: 'Notes', exact: true }).click();
     for (const l of ['Field of view', 'Beam divergence', 'Time of flight']) await page.getByRole('button', { name: l, exact: true }).click();
   });
