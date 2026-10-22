@@ -5,7 +5,6 @@ import { className, classColor } from '../scenes/classes';
 import { Viewport } from '../ui/Viewport';
 import { TabFrame } from '../ui/TabFrame';
 import { Btn, Callout, Section, Select, Seg, Slider, Toggle, Badge, fmtN } from '../ui/controls';
-import { KindLegend } from '../ui/shared';
 import { SceneLayer, BoxOutline, CorridorVolume, SensorMarker } from '../ui/three';
 import { ExternalLink, Cpu, Play } from '../ui/icons';
 import { buildGraph, nodesFromScene, nodesFromSegmentation, REL_LABEL, RelType, SceneGraph, GraphNode, scannerGap } from '../graph/sceneGraph';
@@ -74,8 +73,8 @@ function GraphView({ graph, filters, selected, onSelect, showStructural, highlig
           const estimated = n.source !== 'ground-truth annotation';
           return (
             <g key={id} transform={`translate(${p.x},${p.y})`} style={{ cursor: 'pointer' }} onClick={(ev) => { ev.stopPropagation(); onSelect(id); }} onMouseEnter={() => setHover(id)} onMouseLeave={() => setHover(null)} data-testid={`node-${id}`}>
-              <circle r={sel ? 24 : 20} fill={`rgb(${c.join(',')})`} fillOpacity={0.9} stroke={sel ? '#fff' : hl ? '#ffd60a' : 'rgba(0,0,0,.4)'} strokeWidth={sel || hl ? 3 : 1.5} strokeDasharray={estimated ? '4 3' : undefined} />
-              <text y={36} fontSize="13.5" fontWeight={600} textAnchor="middle" fill="var(--text)" style={{ paintOrder: 'stroke', stroke: 'var(--bg)', strokeWidth: 3.5 }}>{n.label.length > 22 ? n.label.slice(0, 21) + '…' : n.label}</text>
+              <circle r={sel ? 20 : 16} fill={`rgb(${c.join(',')})`} fillOpacity={0.9} stroke={sel ? '#fff' : hl ? '#ffd60a' : 'rgba(0,0,0,.4)'} strokeWidth={sel || hl ? 3 : 1.5} strokeDasharray={estimated ? '4 3' : undefined} />
+              <text y={31} fontSize="13.5" fontWeight={600} textAnchor="middle" fill="var(--text)" style={{ paintOrder: 'stroke', stroke: 'var(--bg)', strokeWidth: 3.5 }}>{n.label.length > 16 ? n.label.slice(0, 15) + '…' : n.label}</text>
             </g>
           );
         })}
@@ -93,6 +92,7 @@ export default function Tab8() {
   const [answer, setAnswer] = useState<QueryAnswer | null>(null);
   const [showStructural, setShowStructural] = useState(false);
   const [showLLM, setShowLLM] = useState(false);
+  const [pane, setPane] = useState<'graph' | 'ask' | 'llm'>('ask');
   const [showFit, setShowFit] = useState(false);
   const seg = s.seg.result;
 
@@ -124,7 +124,7 @@ export default function Tab8() {
   const viewport = (
     <div style={{ position: 'absolute', inset: 0, display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 2 }}>
       <div style={{ position: 'relative' }}>
-        <Viewport id="sg3d" home={scene.cameraHome} target={scene.cameraTarget} label="3D scene">
+        <Viewport id="sg3d" home={scene.cameraHome} target={scene.cameraTarget} hideGrid hideAxes bgOverride="#ffffff">
           {g.source === 'ground-truth' && <SceneLayer scene={scene} opacity={Math.max(0.35, s.view.sceneOpacity)} showCeiling={s.view.showCeiling} highlight={hlIds} interactive={false} />}
           {g.source === 'segmentation' && s.view.showScene && <SceneLayer scene={scene} opacity={0.15} showCeiling={false} interactive={false} />}
           {graph && nodes.filter((n) => !n.structural && g.source === 'segmentation').map((n) => <BoxOutline key={n.id} bbox={n.bbox} color={hlIds.includes(n.id) ? '#ffd60a' : '#ff375f'} dashed />)}
@@ -134,34 +134,23 @@ export default function Tab8() {
       </div>
       <div style={{ position: 'relative', background: 'var(--bg)' }}>
         {graph && <GraphView graph={graph} filters={g.filters} selected={g.selectedNode} onSelect={selectNode} showStructural={showStructural} highlight={highlight} />}
-        <div className="overlay glass card" style={{ top: 12, left: 12, padding: '0.3rem 0.7rem', fontSize: '0.875rem', fontWeight: 600 }}>Scene graph · {objs.length} objects · {graph?.edges.filter((e) => g.filters[e.type]).length ?? 0} relations</div>
+        <div className="overlay glass card" style={{ top: 12, left: 12, padding: '0.3rem 0.7rem', fontSize: '0.875rem', fontWeight: 600 }}>Graph · tap an object</div>
       </div>
     </div>
   );
 
   const stats = [
-    { k: 'Nodes', v: objs.length, s: g.source === 'ground-truth' ? 'ground-truth annotations' : 'rule-based estimates' },
-    { k: 'Relations', v: graph ? graph.edges.length : 0, s: 'computed from bounding boxes' },
-    { k: 'Closest to scanner', v: closest ? closest.label : '—', s: closest && graph ? `${scannerGap(graph.scanner.pos, closest).toFixed(2)} m` : undefined },
-    { k: 'Blocking corridor', v: graph ? graph.edges.filter((e) => e.type === 'blocks_path').length : 0 },
+    { k: 'Objects', v: objs.length, s: `${graph ? graph.edges.length : 0} relations` },
+    { k: 'Closest to scanner', v: closest ? closest.label : '—', s: closest && graph ? `${scannerGap(graph.scanner.pos, closest).toFixed(2)} m away` : undefined },
+    { k: 'Blocking the corridor', v: graph ? graph.edges.filter((e) => e.type === 'blocks_path').length : 0 },
   ];
 
   const controls = (
     <>
-      <Section title="Graph source">
-        <Seg value={g.source} onChange={(source) => setG({ source })} options={[{ value: 'ground-truth', label: 'Scene objects (GT)' }, { value: 'segmentation', label: 'From segmentation' }]} />
-        {g.source === 'segmentation' && !seg && <Callout kind="warn">Run Tab 6 (segmentation) first. Clusters will become nodes with <b>estimated</b> labels from a crude size rule.</Callout>}
-        {g.source === 'segmentation' && seg && <Callout>Nodes come from {seg.clusters.length} geometric clusters. Labels are rule-based guesses with low confidence, not AI predictions.</Callout>}
-        {g.source === 'ground-truth' && <Callout>Nodes are the simulator’s annotated objects: label and size are ground truth (confidence not applicable).</Callout>}
-        <Slider label="“Near” threshold" value={g.nearThreshold} min={0.1} max={2} step={0.05} unit=" m" format={(v) => v.toFixed(2)} onChange={(nearThreshold) => setG({ nearThreshold })} hint="Surface-to-surface gap between bounding boxes." />
-        <Toggle label="Show floor / walls" checked={showStructural} onChange={setShowStructural} />
-      </Section>
-      <Section title="Relations shown">
-        <div className="chip-row">{(Object.keys(REL_LABEL) as RelType[]).map((t) => <button key={t} className="chip" aria-pressed={!!g.filters[t]} onClick={() => setG({ filters: { ...g.filters, [t]: !g.filters[t] } })}><span style={{ color: g.filters[t] ? '#fff' : REL_COLOR[t] }}>●</span> {REL_LABEL[t]}</button>)}</div>
-        <span className="caption">Left/right are relative to the scanner heading. Corridor test and “intersects” use axis-aligned bounding boxes (conservative).</span>
-      </Section>
-      <Section title="Ask the scene (offline demo)">
-        <Callout kind="warn" title="Not an LLM">A deterministic pattern matcher with a fixed list of intents. Every number comes from the graph geometry. It cannot understand free-form language.</Callout>
+      <Seg value={pane} onChange={setPane} options={[{ value: 'ask', label: 'Ask' }, { value: 'graph', label: 'Graph' }, { value: 'llm', label: 'LLM' }]} label="Section" />
+      {pane === 'ask' && (<>
+      <Section title="Ask the scene">
+        <p className="caption">Offline demo: a fixed set of question patterns, not an AI model. Every number comes from the graph geometry.</p>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 8 }}>
           <input type="text" value={q} placeholder="Ask a spatial question…" onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && ask(q)} aria-label="Question" data-testid="query-input" />
           <Btn variant="primary" onClick={() => ask(q)} testId="ask">Ask</Btn>
@@ -197,12 +186,24 @@ export default function Tab8() {
         <p>Which object is closest to the scanner?</p>
         <Select value={g.quizAnswer || ''} options={[{ value: '', label: 'Choose…' }, ...objs.map((o) => ({ value: o.id, label: o.label }))]} onChange={(quizAnswer) => setG({ quizAnswer })} />
         {g.quizAnswer && closest && <Callout kind={g.quizAnswer === closest.id ? 'good' : 'bad'}>{g.quizAnswer === closest.id ? `Correct — ${closest.label}, ${graph ? scannerGap(graph.scanner.pos, closest).toFixed(2) : ''} m from the scanner surface.` : 'Not quite. Ask the graph: “Which object is closest to the scanner?”'}</Callout>}
-        <span className="caption">Move the scanner in Tab 1 to change the answer.</span>
+        <span className="caption">Move the scanner in the Scanner Simulator to change the answer.</span>
       </Section>
-      <Section title="3D AI with a real LLM" open={false}>
-        <Callout kind="edu" title="Future capability (not active)">
-          A real LLM would call <b>tools</b> on a secure server endpoint that read this scene graph and run the geometry (distances, relations). The model never invents measurements: every number in its answer must come from a tool result. This app ships only the offline matcher above.
-        </Callout>
+      </>)}
+      {pane === 'graph' && (<>
+      <Section title="Objects">
+        <Seg value={g.source} onChange={(source) => setG({ source })} options={[{ value: 'ground-truth', label: 'True objects' }, { value: 'segmentation', label: 'From segmentation' }]} />
+        {g.source === 'segmentation' && !seg && <Callout kind="warn">Run the Clustering & Segmentation tab first. Clusters will become nodes with <b>estimated</b> labels from a crude size rule.</Callout>}
+        <Slider label="“Near” threshold" value={g.nearThreshold} min={0.1} max={2} step={0.05} unit=" m" format={(v) => v.toFixed(2)} onChange={(nearThreshold) => setG({ nearThreshold })}  />
+        <Toggle label="Show floor / walls" checked={showStructural} onChange={setShowStructural} />
+      </Section>
+      <Section title="Relations shown">
+        <div className="chip-row">{(Object.keys(REL_LABEL) as RelType[]).map((t) => <button key={t} className="chip" aria-pressed={!!g.filters[t]} onClick={() => setG({ filters: { ...g.filters, [t]: !g.filters[t] } })}><span style={{ color: g.filters[t] ? '#fff' : REL_COLOR[t] }}>●</span> {REL_LABEL[t]}</button>)}</div>
+        <span className="caption">Left/right are as seen from the scanner. Boxes are axis-aligned, so “intersects” is conservative.</span>
+      </Section>
+      </>)}
+      {pane === 'llm' && (<>
+      <Section title="Using a real LLM">
+        <p className="hint">Not active in this app. A real LLM would call tools on a server that read this graph and do the geometry, so it never invents a measurement.</p>
         <Btn sm onClick={() => setShowLLM(!showLLM)}>{showLLM ? 'Hide' : 'Show'} example tool contract</Btn>
         {showLLM && <pre className="mono" style={{ fontSize: '0.8125rem', background: 'var(--fill)', padding: 10, borderRadius: 12, overflow: 'auto', margin: 0 }}>{JSON.stringify(LLM_TOOL_SCHEMA, null, 2)}</pre>}
         <div className="callout" data-testid="llm-fit-card" style={{ gap: 8 }}>
@@ -218,19 +219,10 @@ export default function Tab8() {
           <span className="caption">Embedded only on request: nothing is loaded from the external site until you click.</span>
         </div>
       </Section>
+      </>)}
     </>
   );
 
-  const learn = (
-    <>
-      <Callout kind="edu" title="From points to a scene graph">Segmentation gives object-sized chunks of points. Each chunk becomes a <b>node</b> (id, label, position, size, bounding box, source). <b>Edges</b> are spatial relations computed from the geometry.</Callout>
-      <Callout title="How each relation is computed">
-        <b>near</b>: bounding-box gap ≤ threshold · <b>above/below</b>: lies over the other’s footprint and its bottom is at/above the other’s top · <b>inside</b>: fully contained · <b>left/right</b>: sign of the offset along the scanner’s left axis · <b>intersects</b>: boxes overlap in x, y and z · <b>blocks path</b>: box overlaps the corridor volume.
-      </Callout>
-      <Callout kind="warn" title="Offline demo vs a true LLM">The query box matches fixed patterns and calls geometry functions. A true LLM would parse arbitrary language, but must still obtain distances and relations from the same tools — otherwise it may invent numbers.</Callout>
-    </>
-  );
-
-  return <TabFrame title="Scene Graphs & 3D AI" tab={8} viewport={viewport} controls={controls} learn={learn} stats={stats} hideViewControls overlays={<KindLegend items={[{ color: '#ff9f0a', label: 'Selected / answer objects' }, { color: '#30d158', label: 'Walking corridor' }, { color: '#ff375f', label: 'Estimated boxes (dashed)', style: 'dash' }]} />} />;
+  return <TabFrame title="Scene Graph" tab={8} viewport={viewport} controls={controls} learn={null} noPanelTabs statsRow stats={stats} hideViewControls />;
   void Badge; void fmtN; void ({} as GraphNode);
 }

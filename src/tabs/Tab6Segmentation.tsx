@@ -5,7 +5,9 @@ import { className } from '../scenes/classes';
 import { Viewport } from '../ui/Viewport';
 import { TabFrame } from '../ui/TabFrame';
 import { Btn, Callout, Eq, NumberField, Section, Select, Seg, Slider, Toggle, Badge, fmtN } from '../ui/controls';
-import { DisplaySection, KindLegend } from '../ui/shared';
+import { RawViewer } from '../ui/RawViewer';
+import { writePCD } from '../io/pcd';
+import { FileText } from '../ui/icons';
 import { SceneFromStore, MiniChart } from './common';
 import { CloudLayer, BoxOutline } from '../ui/three';
 import { Play, RotateCcw, Plus } from '../ui/icons';
@@ -27,6 +29,9 @@ export default function Tab6() {
   const [busy, setBusy] = useState(false);
   const [show, setShow] = useState<Show>('result');
   const [boxes, setBoxes] = useState(true);
+  const [pane, setPane] = useState<'setup' | 'results'>('setup');
+  const [showRoom, setShowRoom] = useState(false);
+  const [rawOpen, setRawOpen] = useState(false);
   const [sweep, setSweep] = useState<{ x: number[]; clusters: number[]; over: number[]; under: number[]; recovered: number[]; label: string } | null>(null);
   const [slots, setSlots] = useState<{ A?: { params: SegParams; clusters: number; recovered: number; over: number; under: number; noise: number }; B?: { params: SegParams; clusters: number; recovered: number; over: number; under: number; noise: number } }>({});
   const cloud: PointCloud | null = s.clouds['scan'] ?? s.clouds['explorer'] ?? null;
@@ -84,8 +89,8 @@ export default function Tab6() {
   const stale = res && cloud && seg.cloudId !== cloud.id;
 
   const viewport = (
-    <Viewport home={scene.cameraHome} target={scene.cameraTarget}>
-      <SceneFromStore interactive={false} />
+    <Viewport home={scene.cameraHome} target={scene.cameraTarget} hideGrid hideAxes bgOverride="#ffffff">
+      {showRoom && <SceneFromStore interactive={false} />}
       {cloud && (show === 'result' && resultLabels && !stale
         ? <CloudLayer cloud={cloud} mode="cluster" colorOpts={{ clusterLabels: resultLabels }} size={s.view.pointSize} budget={s.view.renderBudget} pickable={false} />
         : show === 'instances' && instLabels
@@ -96,28 +101,24 @@ export default function Tab6() {
   );
 
   const stats = [
-    { k: 'Planes / clusters', v: res ? `${res.planes.length} / ${res.clusters.length}` : '—', s: res ? `${fmtN(res.noise)} unassigned` : undefined },
-    { k: 'Objects recovered', v: gt ? `${gt.recovered.length} / ${gt.gtObjects}` : '—', s: gt ? `${gt.overSegmented} split · ${gt.underSegmented} merged` : hasGT ? 'run to evaluate' : 'needs labelled data' },
-    { k: 'Algorithm', v: p.algo === 'none' ? 'planes only' : p.algo === 'dbscan' ? 'DBSCAN' : 'Euclidean', s: `RANSAC thr ${p.ransacThreshold.toFixed(3)} m` },
-    { k: 'Run time', v: res ? `${res.ms.toFixed(0)} ms` : '—' },
+    { k: 'Clusters', v: res ? `${res.clusters.length}` : '—', s: res ? `${res.planes.length} planes removed · ${fmtN(res.noise)} unassigned` : 'press Segment' },
+    { k: 'Objects found', v: gt ? `${gt.recovered.length} / ${gt.gtObjects}` : '—', s: gt ? `${gt.overSegmented} split · ${gt.underSegmented} merged` : hasGT ? 'press Segment' : 'needs labelled data' },
   ];
 
   const controls = (
     <>
-      <Callout kind="warn" title="Three different things — don't mix them up">
-        <b>Rule-based geometry</b> (RANSAC planes) fits shapes. <b>Unsupervised clustering</b> (Euclidean, DBSCAN) groups nearby points — it does not know what they are. <b>Learned semantic segmentation</b> (a trained network) predicts classes; it is <u>not</u> run in this app. The class labels shown here are ground-truth annotations from the simulator, not predictions.
-      </Callout>
-      <Section title="Input">
-        {cloud ? <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}><span>{cloud.name}</span><Badge kind={cloud.meta.kind === 'simulated' ? 'sim' : 'measured'} /><span className="caption">{fmtN(cloud.count)} pts{hasGT ? ' · GT labels' : ''}</span></div> : <p className="hint">No cloud. Scan the scene first.</p>}
-        <Btn icon={<Play size={16} />} onClick={() => runScan({ withCoverage: false })} busy={!!s.busy}>Scan current scene</Btn>
+      <Seg value={pane} onChange={setPane} options={[{ value: 'setup', label: 'Settings' }, { value: 'results', label: 'Results' }]} label="Section" />
+      {pane === 'setup' && (<>
+      <Section title="Point cloud">
+        {cloud ? <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}><span>{cloud.name}</span><Badge kind={cloud.meta.kind === 'simulated' ? 'sim' : 'measured'} /><span className="caption">{fmtN(cloud.count)} pts{hasGT ? ' · GT labels' : ''}</span></div> : <p className="hint">No cloud yet: run a scan in the Scanner Simulator first.</p>}
+        <p className="caption">Planes are fitted by rule (RANSAC), clusters group nearby points without knowing what they are. Class labels shown are the simulator’s ground truth, not AI predictions.</p>
       </Section>
       <Section title="1 · Ground & planes (RANSAC)">
         <Toggle label="Remove ground plane" checked={p.removeGround} onChange={(removeGround) => setP({ removeGround })} hint="Largest nearly-horizontal plane (≤ 20° tilt)." />
         <Slider label="Extra planes to peel (walls…)" value={p.extraPlanes} min={0} max={8} step={1} onChange={(extraPlanes) => setP({ extraPlanes })} hint="Plane / object separation: remove walls before clustering." />
         <Slider label="Distance threshold" value={p.ransacThreshold} min={0.005} max={0.2} step={0.005} unit=" m" format={(v) => v.toFixed(3)} onChange={(ransacThreshold) => setP({ ransacThreshold })} />
         <Slider label="Max iterations" value={p.ransacIterations} min={10} max={1000} step={10} onChange={(ransacIterations) => setP({ ransacIterations })} />
-        <NumberField label="Seed" value={p.seed} step={1} onChange={(seed) => setP({ seed: Math.round(seed) || 0 })} />
-      </Section>
+              </Section>
       <Section title="2 · Clustering (unsupervised)">
         <Seg value={p.algo} onChange={(algo) => setP({ algo })} options={[{ value: 'euclidean', label: 'Euclidean' }, { value: 'dbscan', label: 'DBSCAN' }, { value: 'none', label: 'None' }]} />
         {p.algo === 'euclidean' && <Slider label="Cluster radius" value={p.radius} min={0.02} max={1} step={0.01} unit=" m" format={(v) => v.toFixed(2)} onChange={(radius) => setP({ radius })} hint="Too small → one object breaks into pieces (over-segmentation). Too large → neighbours merge (under-segmentation)." />}
@@ -126,18 +127,16 @@ export default function Tab6() {
           <Slider label="Min points" value={p.minPts} min={2} max={40} step={1} onChange={(minPts) => setP({ minPts })} hint="Points with fewer neighbours become noise." />
         </>)}
         <Slider label="Min cluster size" value={p.minCluster} min={5} max={500} step={5} onChange={(minCluster) => setP({ minCluster })} />
-        <div className="btn-row">
-          <Btn variant="primary" icon={<Play size={16} />} onClick={runMain} busy={busy} disabled={!cloud} testId="run-seg">Segment</Btn>
-          <Btn icon={<RotateCcw size={16} />} onClick={() => useLab.setState({ seg: { ...seg, result: null, gt: null } })} disabled={!res}>Clear</Btn>
-        </div>
       </Section>
       <Section title="Show">
-        <Seg value={show} onChange={setShow} options={[{ value: 'result', label: 'Result' }, { value: 'instances', label: 'GT instances' }, { value: 'semantic', label: 'GT classes' }, { value: 'rgb', label: 'RGB' }]} />
+        <Seg value={show} onChange={setShow} options={[{ value: 'result', label: 'Result' }, { value: 'instances', label: 'True objects' }, { value: 'semantic', label: 'True classes' }]} />
         <Toggle label="Cluster bounding boxes (estimated)" checked={boxes} onChange={setBoxes} />
-        <Toggle label="Ground-truth object boxes (orange)" checked={s.view.showScene} onChange={(v) => s.setView({ showScene: v })} />
-        {show !== 'result' && <p className="hint">{show === 'semantic' || show === 'instances' ? 'Ground-truth annotation from the simulator — not a model prediction.' : ''}</p>}
+        <Toggle label="Show the room" checked={showRoom} onChange={setShowRoom} />
         {stale && <Callout kind="warn">The cloud changed since the last run — press Segment again.</Callout>}
       </Section>
+      </>)}
+      {pane === 'results' && (<>
+        {!res && <p className="hint" style={{ paddingTop: 12 }}>Press Segment in the toolbar to see results here.</p>}
       {res && (
         <Section title="Result">
           <table className="table"><thead><tr><th>Plane</th><th>Normal</th><th>Pts</th><th>RMSE</th></tr></thead><tbody>
@@ -174,19 +173,15 @@ export default function Tab6() {
           </tbody></table>
         )}
       </Section>
-      <DisplaySection cloud={cloud} />
+      </>)}
     </>
   );
 
-  const learn = (
-    <>
-      <Callout kind="edu" title="RANSAC plane extraction">Repeatedly pick 3 random points, fit a plane, count points within the distance threshold, and keep the plane with the most support. Robust to outliers, needs a sensible threshold (≈ sensor noise).</Callout>
-      <Eq note="plane n·x + d = 0 with |n| = 1; point i is an inlier if">| n · pᵢ + d | ≤ τ</Eq>
-      <Callout kind="edu" title="Euclidean clustering vs DBSCAN">Euclidean clustering connects points closer than a radius. DBSCAN additionally needs a minimum neighbourhood size, so sparse points become <i>noise</i> instead of forming tiny clusters.</Callout>
-      <Callout title="Semantic vs instance">Semantic segmentation gives a class per point (floor, chair…). Instance segmentation also separates individual objects (chair 1 vs chair 2). Clustering gives instances <i>without</i> classes; a trained network gives classes.</Callout>
-      <Callout kind="warn" title="Honesty box">“GT instances / GT classes” are labels written by the simulator when it generated the points. They are the answer key, not the output of AI.</Callout>
-    </>
-  );
+  const rawText = useMemo(() => (rawOpen && cloud ? new TextDecoder().decode(writePCD({ id: 'raw', name: 'segmented', count: cloud.count, positions: cloud.positions, meta: cloud.meta, ...(res ? { labels: res.display } : {}) } as PointCloud, false)) : ''), [rawOpen, cloud, res]);
 
-  return <TabFrame title="Clustering & Segmentation" tab={6} viewport={viewport} controls={controls} learn={learn} stats={stats} overlays={<KindLegend items={[{ color: '#8e8e93', label: 'Original mesh', style: 'wire' }, { color: '#bf5af2', label: 'Estimated clusters (distinct colours)' }, { color: '#ff9f0a', label: 'Ground-truth annotation' }]} />} />;
+  return (
+    <TabFrame title="Clustering & Segmentation" tab={6} viewport={viewport} controls={controls} learn={null} noPanelTabs statsRow stats={stats}
+      viewExtras={<><Btn sm variant="primary" icon={<Play size={15} />} onClick={runMain} busy={busy} disabled={!cloud} testId="run-seg">Segment</Btn><Btn sm icon={<FileText size={15} />} variant={rawOpen ? 'primary' : ''} onClick={() => setRawOpen(!rawOpen)} disabled={!cloud} testId="raw-toggle">Raw</Btn></>}
+      overlays={rawOpen && cloud ? <RawViewer text={rawText} filename="segmented.pcd" onClose={() => setRawOpen(false)} /> : null} />
+  );
 }

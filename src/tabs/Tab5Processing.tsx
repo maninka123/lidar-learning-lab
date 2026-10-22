@@ -3,8 +3,10 @@ import { useLab, pushUndo } from '../state/store';
 import { getScene } from '../scenes';
 import { Viewport } from '../ui/Viewport';
 import { TabFrame } from '../ui/TabFrame';
-import { Btn, Callout, Eq, NumberField, Section, Select, Slider, Toggle, Badge, cloudBadge, fmtN } from '../ui/controls';
-import { DisplaySection, KindLegend } from '../ui/shared';
+import { Btn, Callout, NumberField, Section, Select, Seg, Slider, Toggle, Badge, cloudBadge, fmtN } from '../ui/controls';
+import { RawViewer } from '../ui/RawViewer';
+import { writePCD } from '../io/pcd';
+import { FileText } from '../ui/icons';
 import { SceneFromStore } from './common';
 import { CloudLayer } from '../ui/three';
 import { Download, Play, Plus, Trash2, RotateCcw } from '../ui/icons';
@@ -77,6 +79,9 @@ export default function Tab5() {
   const original: PointCloud | null = (proc.sourceId && s.clouds[proc.sourceId]) || (ids.length ? s.clouds[ids[0]] : null);
   const [running, setRunning] = useState(false);
   const [highlight, setHighlight] = useState(false);
+  const [pane, setPane] = useState<'steps' | 'result'>('steps');
+  const [showRoom, setShowRoom] = useState(false);
+  const [rawOpen, setRawOpen] = useState(false);
   const [addType, setAddType] = useState<OpType>('noise');
   const reqId = useRef(0);
   const setProc = (patch: Partial<typeof proc>) => useLab.setState({ proc: { ...useLab.getState().proc, ...patch } });
@@ -112,7 +117,7 @@ export default function Tab5() {
   const processed = res && viewIdx >= 0 ? res.steps[viewIdx].cloud : null;
   const leftCloud = original;
   const rightCloud = processed ?? original;
-  const mode: ColorMode = highlight && rightCloud?.tags ? 'cluster' : s.view.colorMode;
+  const mode: ColorMode = highlight && rightCloud?.tags ? 'cluster' : 'flat';
   const b = original ? cloudBounds(original) : null;
   const heightRange: [number, number] | undefined = b ? [b.min[2], b.max[2]] : undefined;
   const tagLabels = (c: PointCloud | null) => (c?.tags ? Int32Array.from(c.tags) : null);
@@ -128,27 +133,24 @@ export default function Tab5() {
   const removeStep = (i: number) => { const prev = proc.steps; setProc({ steps: prev.filter((_, k) => k !== i), viewStep: -1 }); pushUndo('remove step', () => setProc({ steps: prev })); };
   const move = (i: number, d: -1 | 1) => { const a = [...proc.steps]; const j = i + d; if (j < 0 || j >= a.length) return; [a[i], a[j]] = [a[j], a[i]]; setProc({ steps: a }); };
 
-  const stats = res && processed
-    ? [
-      { k: 'Points before → after', v: `${compact(res.steps[viewIdx].before)} → ${compact(res.steps[viewIdx].after)}`, s: `step ${viewIdx + 1}: ${OP_LABEL[res.steps[viewIdx].op.type]}` },
-      { k: 'Original → final', v: `${compact(original!.count)} → ${compact(res.final.count)}`, s: `${res.steps.length} step(s)` },
-      { k: 'Processing time', v: `${res.steps[viewIdx].ms.toFixed(0)} ms`, s: `${res.totalMs.toFixed(0)} ms for the pipeline` },
-      { k: 'Outlier score', v: proc.quality ? `${((1 - proc.quality.injectedLeft / proc.quality.injected) * 100).toFixed(0)}% removed` : '—', s: proc.quality ? `${(proc.quality.originalKept * 100).toFixed(0)}% of original kept` : 'inject outliers to score' },
-    ]
-    : [{ k: 'Points', v: original ? fmtN(original.count) : '—', s: 'original (immutable)' }, { k: 'Steps', v: proc.steps.length }, { k: 'Seed', v: proc.seed }, { k: 'Status', v: running ? 'running…' : 'ready' }];
+  const stats = [
+    { k: 'Points', v: res && processed ? `${compact(res.steps[viewIdx].before)} → ${compact(res.steps[viewIdx].after)}` : original ? compact(original.count) : '—', s: res && processed ? `step ${viewIdx + 1}: ${OP_LABEL[res.steps[viewIdx].op.type]}` : 'original, never modified' },
+    { k: 'Time', v: res && processed ? `${res.steps[viewIdx].ms.toFixed(0)} ms` : running ? 'running…' : '—' },
+    { k: 'Outliers removed', v: proc.quality ? `${((1 - proc.quality.injectedLeft / proc.quality.injected) * 100).toFixed(0)}%` : '—', s: proc.quality ? `${(proc.quality.originalKept * 100).toFixed(0)}% of original kept` : 'add outliers to score' },
+  ];
 
   const viewport = (
     <div style={{ position: 'absolute', inset: 0, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
       <div style={{ position: 'relative' }}>
-        <Viewport id="proc-a" group="proc" primary label="Original (immutable)" home={scene.cameraHome} target={scene.cameraTarget}>
-          <SceneFromStore interactive={false} />
-          {leftCloud && <CloudLayer cloud={leftCloud} mode={mode} size={s.view.pointSize} budget={s.view.renderBudget} colorOpts={{ heightRange, clusterLabels: tagLabels(leftCloud) }} pickable={false} />}
+        <Viewport id="proc-a" group="proc" primary hideGrid hideAxes bgOverride="#ffffff" labelPos="bl" label="Original (never changed)" home={scene.cameraHome} target={scene.cameraTarget}>
+          {showRoom && <SceneFromStore interactive={false} />}
+          {leftCloud && <CloudLayer cloud={leftCloud} mode={mode} size={s.view.pointSize} budget={s.view.renderBudget} colorOpts={{ heightRange, flat: [230, 30, 40], clusterLabels: tagLabels(leftCloud) }} pickable={false} />}
         </Viewport>
       </div>
       <div style={{ position: 'relative' }}>
-        <Viewport id="proc-b" group="proc" primary={false} labelPos="bl" label={res && viewIdx >= 0 ? `Processed · step ${viewIdx + 1}: ${OP_LABEL[res.steps[viewIdx].op.type]}` : 'Processed'} home={scene.cameraHome} target={scene.cameraTarget}>
-          <SceneFromStore interactive={false} />
-          {rightCloud && <CloudLayer cloud={rightCloud} mode={mode} size={s.view.pointSize} budget={s.view.renderBudget} colorOpts={{ heightRange, clusterLabels: tagLabels(rightCloud) }} pickable={false} />}
+        <Viewport id="proc-b" group="proc" primary={false} hideGrid hideAxes bgOverride="#ffffff" labelPos="bl" label={res && viewIdx >= 0 ? `Processed · step ${viewIdx + 1}: ${OP_LABEL[res.steps[viewIdx].op.type]}` : 'Processed'} home={scene.cameraHome} target={scene.cameraTarget}>
+          {showRoom && <SceneFromStore interactive={false} />}
+          {rightCloud && <CloudLayer cloud={rightCloud} mode={mode} size={s.view.pointSize} budget={s.view.renderBudget} colorOpts={{ heightRange, flat: [230, 30, 40], clusterLabels: tagLabels(rightCloud) }} pickable={false} />}
         </Viewport>
       </div>
     </div>
@@ -156,15 +158,16 @@ export default function Tab5() {
 
   const controls = (
     <>
-      <Section title="Original data">
+      <Seg value={pane} onChange={setPane} options={[{ value: 'steps', label: 'Steps' }, { value: 'result', label: 'Result' }]} label="Section" />
+      {pane === 'steps' && (<>
+      <Section title="Point cloud">
         {ids.length ? (
           <Select value={proc.sourceId ?? ids[0]} options={ids.map((k) => ({ value: k, label: `${s.clouds[k].name} (${fmtN(s.clouds[k].count)})` }))} onChange={(k) => setProc({ sourceId: k, steps: [], result: null, quality: null })} />
         ) : <p className="hint">Create a point cloud first.</p>}
-        <Btn icon={<Play size={16} />} onClick={() => runScan({ withCoverage: false })} busy={!!s.busy}>Scan current scene</Btn>
         {original && <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}><Badge kind={cloudBadge(original.meta.kind)} /><span className="caption">{fmtN(original.count)} points · never modified</span></div>}
       </Section>
 
-      <Section title="Pipeline" hint="Steps run top to bottom on the immutable original. Change, reorder or remove any step; nothing accumulates unless you choose Apply.">
+      <Section title="Pipeline" hint="Steps run top to bottom on the untouched original.">
         <div style={{ display: 'grid', gap: 10 }}>
           {proc.steps.map((op, i) => (
             <div key={i} className="callout" style={{ gap: 8, outline: viewIdx === i ? '2px solid var(--accent)' : 'none' }} data-testid={`step-${i}`}>
@@ -193,9 +196,11 @@ export default function Tab5() {
         </div>
       </Section>
 
-      <Section title="Randomness & result">
+      </>)}
+      {pane === 'result' && (<>
+      <Section title="Result">
         <NumberField label="Seed (deterministic)" value={proc.seed} step={1} onChange={(seed) => setProc({ seed: Math.round(seed) || 0 })} />
-        <Toggle label="Colour injected outliers" checked={highlight} onChange={setHighlight} hint="Shows which points were injected (orange/pink) vs original (cyan/green)." />
+        <Toggle label="Mark injected outliers" checked={highlight} onChange={setHighlight} />
         <div className="btn-row">
           <Btn icon={<RotateCcw size={16} />} onClick={() => { const prev = proc.steps; setProc({ steps: [], result: null, quality: null }); pushUndo('reset to original', () => setProc({ steps: prev })); }} disabled={!proc.steps.length} testId="reset-original">Reset to original</Btn>
           <Btn icon={<Download size={16} />} onClick={() => res && exportCloudFile(res.final, 'ply')} disabled={!res}>PLY</Btn>
@@ -210,27 +215,23 @@ export default function Tab5() {
           pushUndo('apply result', () => { useLab.getState().setCloud(id, null, false); setProc({ sourceId: prevSource, steps: prevSteps }); });
           s.notify('Result applied as a new dataset. The previous original is still available.', 'ok');
         }} disabled={!res} block>Apply result as new original…</Btn>
-        <p className="hint">Applying is explicit and undoable; the earlier original stays in the dataset list.</p>
         {res && proc.quality && (
           <Callout kind={1 - proc.quality.injectedLeft / proc.quality.injected >= 0.9 && proc.quality.originalKept >= 0.85 ? 'good' : ''} title="Cleaning quality">
             Injected outliers: {fmtN(proc.quality.injected)} → {fmtN(proc.quality.injectedLeft)} left. Original points kept: {(proc.quality.originalKept * 100).toFixed(0)} %. Aim: ≥ 90 % removed and ≥ 85 % kept.
           </Callout>
         )}
       </Section>
-      <DisplaySection cloud={rightCloud} />
+        <Toggle label="Show the room" checked={showRoom} onChange={setShowRoom} />
+      </>)}
     </>
   );
 
-  const learn = (
-    <>
-      <Callout kind="edu" title="Immutable original">Every run starts from the untouched dataset, so you can experiment freely. Use “Apply” only when you want a processed cloud to become the new starting point.</Callout>
-      <Eq note="Statistical outlier removal: d̄ᵢ is the mean distance of point i to its k neighbours">remove i if d̄ᵢ &gt; μ(d̄) + α · σ(d̄)</Eq>
-      <Eq note="Voxel downsampling">pᵥ = (1/|V|) Σ p, p ∈ voxel v</Eq>
-      <Callout title="Filter trade-offs">Radius filters depend on point density: a radius that works at 3 cm spacing deletes everything at 30 cm. SOR adapts to the local statistics but can eat sparse true geometry (thin legs, edges).</Callout>
-      <Callout title="Reproducibility">Noise, outliers, dropout and random downsampling use a seeded generator — same seed, same result.</Callout>
-    </>
-  );
+  const rawText = useMemo(() => (rawOpen && rightCloud ? new TextDecoder().decode(writePCD({ id: 'raw', name: 'processed', count: rightCloud.count, positions: rightCloud.positions, meta: rightCloud.meta, ...(rightCloud.normals ? { normals: rightCloud.normals } : {}) } as PointCloud, false)) : ''), [rawOpen, rightCloud]);
 
-  return <TabFrame title="Point Cloud Processing" tab={5} viewport={viewport} controls={controls} learn={learn} stats={stats} hideViewControls={false} overlays={<KindLegend items={[{ color: '#64d2ff', label: 'Original / processed points' }, { color: '#ff6b8a', label: 'Injected outliers (when highlighted)' }]} />} />;
+  return (
+    <TabFrame title="Point Cloud Processing" tab={5} viewport={viewport} controls={controls} learn={null} noPanelTabs statsRow stats={stats}
+      viewExtras={<Btn sm icon={<FileText size={15} />} variant={rawOpen ? 'primary' : ''} onClick={() => setRawOpen(!rawOpen)} disabled={!rightCloud} testId="raw-toggle">Raw</Btn>}
+      overlays={rawOpen && rightCloud ? <RawViewer text={rawText} filename="processed.pcd" onClose={() => setRawOpen(false)} /> : null} />
+  );
   void activeCloud;
 }

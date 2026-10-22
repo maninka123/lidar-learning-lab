@@ -23,13 +23,16 @@ export function circularLayout(ids: string[], edges: { a: string; b: string }[],
     }
     void start;
   }
-  const cx = W / 2, cy = H / 2, R = Math.max(40, Math.min(W, H) / 2 - 70);
+  const cx = W / 2, cy = H / 2, R = Math.max(40, Math.min(W, H) / 2 - 62);
+  const centreId = order.find((i) => i === 'corridor');
+  if (centreId) order.splice(order.indexOf(centreId), 1);
   const n = order.length;
   const rings = n > 16 ? 2 : 1;
-  return order.map((id, i) => {
+  const ring = order.map((id, i) => {
     const ring = rings === 2 ? i % 2 : 0;
     const a = (i / n) * Math.PI * 2 - Math.PI / 2;
     const r = ring ? R * 0.58 : R;
     return { id, x: cx + Math.cos(a) * r, y: cy + Math.sin(a) * r };
   });
+  return centreId ? [...ring, { id: centreId, x: cx, y: cy }] : ring;
 }

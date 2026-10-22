@@ -164,6 +164,7 @@ test.describe('LiDAR Learning Lab', () => {
     await expect.poll(() => state(page, (s) => s.proc.quality?.injected ?? 0), { timeout: 60000 }).toBeGreaterThan(100);
     const q = await state(page, (s) => s.proc.quality);
     expect(q.injectedLeft / q.injected).toBeLessThan(0.5);
+    await page.getByRole('button', { name: 'Result', exact: true }).click();
     await page.getByTestId('reset-original').click();
     await expect.poll(() => state(page, (s) => s.proc.steps.length)).toBe(0);
     await go(page, 6);
@@ -173,9 +174,11 @@ test.describe('LiDAR Learning Lab', () => {
 
   test('tab 7: LiDAR vs reconstruction needs valid alignment before reporting errors', async ({ page }) => {
     await go(page, 7);
+    await expect(page.getByRole('button', { name: 'Exercise' })).toHaveCount(0);
     await expect.poll(() => state(page, (s) => !!s.recon.lidar), { timeout: 60000 }).toBe(true);
     await page.getByTestId('reconstruct').click();
     await expect.poll(() => state(page, (s) => !!s.recon.out), { timeout: 60000 }).toBe(true);
+    await page.getByRole('button', { name: 'Compare', exact: true }).click();
     await expect(page.getByTestId('recon-stats')).toHaveCount(0); // no statistics before alignment
     await page.getByTestId('align-recon').click();
     await expect(page.getByTestId('recon-stats')).toBeVisible({ timeout: 90000 });
@@ -183,7 +186,9 @@ test.describe('LiDAR Learning Lab', () => {
 
   test('tab 8: scene graph, node selection and offline queries (incl. local-llm-fit card)', async ({ page }) => {
     await go(page, 8);
+    await page.getByRole('button', { name: 'Graph', exact: true }).click();
     await page.getByTestId('node-table-1').click();
+    await page.getByRole('button', { name: 'Ask', exact: true }).click();
     await expect(page.getByTestId('node-details')).toContainText('table-1');
     await expect.poll(() => state(page, (s) => s.selectedObjectId)).toBe('table-1');
     await page.getByTestId('query-input').fill('Which objects intersect the walking corridor?');
@@ -191,7 +196,7 @@ test.describe('LiDAR Learning Lab', () => {
     await expect(page.getByTestId('answer')).toContainText(/Box in corridor/i);
     await page.getByText('Which object is closest to the scanner?').first().click();
     await expect(page.getByTestId('answer')).toContainText('closest');
-    await page.getByText('3D AI with a real LLM').click();
+    await page.getByRole('button', { name: 'LLM', exact: true }).click();
     const link = page.getByTestId('llm-fit-link');
     await expect(link).toHaveAttribute('href', 'https://maninka123.github.io/local-llm-fit/');
   });
