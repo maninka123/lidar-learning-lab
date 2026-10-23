@@ -20,6 +20,8 @@ export const CLASSES: Record<number, { name: string; color: [number, number, num
   18: { name: 'pole', color: [255, 213, 79] },
   19: { name: 'bollard', color: [255, 138, 101] },
   20: { name: 'object', color: [129, 199, 132] },
+  21: { name: 'pedestrian', color: [255, 140, 60] },
+  22: { name: 'traffic light', color: [120, 120, 130] },
 };
 export const className = (id: number) => CLASSES[id]?.name ?? `class ${id}`;
 export const classColor = (id: number): [number, number, number] => CLASSES[id]?.color ?? [200, 200, 200];

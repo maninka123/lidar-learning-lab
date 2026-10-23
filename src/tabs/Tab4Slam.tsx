@@ -17,22 +17,18 @@ import { evaluateAlignment } from '../registration/icp';
 import { makeRng } from '../core/rng';
 import { Plan2D } from '../ui/Plan2D';
 
-const SLAM_SENSOR: SensorConfig = { ...presetToConfig(PRESETS.find((p) => p.id === 'rot16')!), hRes: 2, channels: 5, vMin: -20, vMax: 20, maxRange: 30, noise: 0.005, minRange: 0.3 };
+const SLAM_SENSOR: SensorConfig = { ...presetToConfig(PRESETS.find((p) => p.id === 'rot16')!), hRes: 2, channels: 5, vMin: -20, vMax: 20, maxRange: 60, noise: 0.005, minRange: 0.3 };
 const REG_SENSOR: SensorConfig = { ...presetToConfig(PRESETS.find((p) => p.id === 'rot64')!), hRes: 1, noise: 0.003 };
 
 const errTransform = (r: ReturnType<typeof useLab.getState>['reg']): Rigid => rigidFromEuler(r.errT[0], r.errT[1], r.errT[2], r.errYawDeg * D2R, r.errPitchDeg * D2R, r.errRollDeg * D2R);
 
-export default function Tab4({ lab, labSwitch }: { lab: 'slam' | 'reg'; labSwitch?: React.ReactNode }) {
+export default function Tab4({ labSwitch }: { lab?: 'slam'; labSwitch?: React.ReactNode }) {
   const s = useLab();
   const scene = getScene(s.sceneId);
-  const mode = lab;
   const [busy, setBusy] = useState(false);
-  const [view, setView] = useState<'before' | 'after' | 'both'>('both');
   const p = s.slamParams;
   const slam = s.slam;
-  const reg = s.reg;
   const setP = (patch: Partial<typeof p>) => s.patch({ slamParams: { ...p, ...patch } });
-  const setReg = (patch: Partial<typeof reg>) => s.patch({ reg: { ...useLab.getState().reg, ...patch } });
 
   async function runSlam() {
     setBusy(true);
@@ -42,45 +38,6 @@ export default function Tab4({ lab, labSwitch }: { lab: 'slam' | 'reg'; labSwitc
       s.setCloud('slam-map', r.maps.corrected ?? r.maps.est, true);
     } catch (e) { s.notify((e as Error).message, 'error'); } finally { setBusy(false); }
   }
-
-  // ------------------------------------------------ registration lab
-  async function makeScans() {
-    setBusy(true);
-    try {
-      const base = useLab.getState().pose;
-      const [A, B] = await Promise.all([
-        runTask('scan', { scene, sensor: REG_SENSOR, trajectory: staticPose(base.x, base.y, base.z, base.yaw), sweeps: 1, seed: 11, maxRays: 60000, distortion: false, scanId: 1, name: 'Scan A (reference)' }),
-        runTask('scan', { scene, sensor: REG_SENSOR, trajectory: staticPose(base.x + reg.offset, base.y + reg.offset * 0.5, base.z, base.yaw + 0.1), sweeps: 1, seed: 12, maxRays: 60000, distortion: false, scanId: 2, name: 'Scan B (true pose)' }),
-      ]);
-      setReg({ A: A.cloud, B: B.cloud, result: null, before: null, after: null, recoveredErr: null, iter: 0, applied: null });
-    } finally { setBusy(false); }
-  }
-
-  const Bmis = useMemo(() => (reg.B ? transformCloud(reg.B, errTransform(reg), 'Scan B (misaligned)') : null), [reg.B, reg.errT, reg.errYawDeg, reg.errPitchDeg, reg.errRollDeg]); // eslint-disable-line react-hooks/exhaustive-deps
-  const live = useMemo(() => {
-    if (!reg.A || !Bmis) return null;
-    return evaluateAlignment(Bmis.positions, Bmis.count, reg.A.positions, reg.A.count, rigidFromEuler(0, 0, 0, 0, 0, 0), 1.5, 3000);
-  }, [reg.A, Bmis]);
-
-  async function runIcp() {
-    if (!reg.A || !Bmis) return;
-    setBusy(true);
-    try {
-      const before = evaluateAlignment(Bmis.positions, Bmis.count, reg.A.positions, reg.A.count, rigidFromEuler(0, 0, 0, 0, 0, 0), 1.5, 3000);
-      const r = await runTask('icp', { src: Bmis.positions, nSrc: Bmis.count, dst: reg.A.positions, nDst: reg.A.count, opts: { maxIterations: reg.icp.maxIterations, tolerance: 1e-6, maxCorrDist: reg.icp.maxCorrDist, sampleMax: reg.icp.sample } });
-      const after = evaluateAlignment(Bmis.positions, Bmis.count, reg.A.positions, reg.A.count, r.T, 1.5, 3000);
-      // truth: T ∘ E should be identity
-      const total = rigidCompose(r.T, errTransform(reg));
-      const c: Vec3 = [reg.B!.positions[0], reg.B!.positions[1], reg.B!.positions[2]];
-      const pc = rigidApply(total, c);
-      setReg({ result: r, before, after, iter: r.history.length - 1, recoveredErr: { t: Math.hypot(pc[0] - c[0], pc[1] - c[1], pc[2] - c[2]), deg: rotationAngle(total.R) * R2D } });
-    } finally { setBusy(false); }
-  }
-
-  const iterIdx = reg.result ? Math.min(reg.iter, reg.result.history.length - 1) : 0;
-  const Bafter = useMemo(() => (reg.result && Bmis ? transformCloud(Bmis, iterIdx >= reg.result.history.length - 1 ? reg.result.T : reg.result.history[iterIdx].T, 'Scan B (ICP aligned)') : null), [reg.result, Bmis, iterIdx]);
-
-  useEffect(() => { if (mode === 'reg' && !reg.A && !busy) void makeScans(); }, [mode]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ------------------------------------------------ viewport
   const z = p.z;
@@ -104,36 +61,17 @@ export default function Tab4({ lab, labSwitch }: { lab: 'slam' | 'reg'; labSwitc
       )}
     </>
   );
-  const regView = (
-    <>
-      <SceneFromStore interactive={false} />
-      {reg.A && <CloudLayer cloud={reg.A} mode="flat" colorOpts={flat([10, 132, 255])} size={s.view.pointSize} budget={s.view.renderBudget} pickable={false} />}
-      {Bmis && (view !== 'after' || !Bafter) && <CloudLayer cloud={Bmis} mode="flat" colorOpts={flat([255, 159, 10])} size={s.view.pointSize} budget={s.view.renderBudget} pickable={false} />}
-      {Bafter && view !== 'before' && <CloudLayer cloud={Bafter} mode="flat" colorOpts={flat([48, 209, 88])} size={s.view.pointSize} budget={s.view.renderBudget} pickable={false} />}
-    </>
-  );
+  const viewport = <Viewport home={scene.cameraHome} target={scene.cameraTarget}>{slamView}</Viewport>;
 
-  const viewport = <Viewport home={scene.cameraHome} target={scene.cameraTarget}>{mode === 'slam' ? slamView : regView}</Viewport>;
-
-  const stats = mode === 'slam'
-    ? [
+  const stats = [
       { k: 'ATE (before)', v: slam ? `${(slam.ateBefore * 100).toFixed(1)} cm` : '—', s: 'RMS position error of estimate' },
       { k: 'ATE (after)', v: slam?.ateAfter != null ? `${(slam.ateAfter * 100).toFixed(1)} cm` : '—', s: slam?.closure ? (slam.closure.detected ? 'loop closure applied' : 'closure not detected') : 'closure off' },
       { k: 'Final drift', v: slam ? `${(slam.finalDriftBefore * 100).toFixed(1)} cm` : '—', s: slam?.finalDriftAfter != null ? `→ ${(slam.finalDriftAfter * 100).toFixed(1)} cm` : undefined },
       { k: 'Mean scan overlap', v: slam ? `${((100 * slam.overlap.reduce((a, v) => a + v, 0)) / slam.overlap.length).toFixed(0)} %` : '—', s: 'ICP inlier fraction' },
-    ]
-    : [
-      { k: 'RMSE before', v: reg.before ? `${(reg.before.rmse * 100).toFixed(2)} cm` : live ? `${(live.rmse * 100).toFixed(2)} cm` : '—', s: reg.before ? 'at ICP start' : 'live (sliders)' },
-      { k: 'RMSE after', v: reg.after ? `${(reg.after.rmse * 100).toFixed(2)} cm` : '—' },
-      { k: 'Fitness', v: reg.after ? `${(reg.after.fitness * 100).toFixed(0)} %` : live ? `${(live.fitness * 100).toFixed(0)} %` : '—', s: 'inliers within 1.5 m' },
-      { k: 'Pose error vs truth', v: reg.recoveredErr ? `${(reg.recoveredErr.t * 100).toFixed(1)} cm · ${reg.recoveredErr.deg.toFixed(2)}°` : '—' },
     ];
-
-  const sliderTrans = (k: 0 | 1 | 2, label: string) => <Slider key={label} label={label} value={reg.errT[k]} min={-1} max={1} step={0.01} unit=" m" format={(v) => v.toFixed(2)} onChange={(v) => { const e = [...reg.errT] as [number, number, number]; e[k] = v; setReg({ errT: e, result: null, after: null, recoveredErr: null }); }} />;
 
   const controls = (
     <>
-      {mode === 'slam' ? (
         <>
           <Callout kind="warn" title="Teaching approximation">
             The robot follows a known loop. Motion error is <b>injected</b> into the odometry (or ICP scan matching is used). Loop closure here = ICP between the last and first scan + the residual spread along the path. It is <b>not</b> a full pose-graph SLAM back-end, and nothing is prerecorded.
@@ -172,54 +110,13 @@ export default function Tab4({ lab, labSwitch }: { lab: 'slam' | 'reg'; labSwitc
             </Section>
           )}
         </>
-      ) : (
-        <>
-          <Section title="1 · Scans">
-            <Slider label="Sensor offset between scans" value={reg.offset} min={0} max={2} step={0.1} unit=" m" format={(v) => v.toFixed(1)} onChange={(offset) => setReg({ offset })} hint="Scan B is taken from a displaced pose, so the overlap is partial." />
-            <Btn onClick={makeScans} busy={busy} testId="make-scans">Generate scans A and B</Btn>
-            <p className="hint">A (blue) is the reference. B (orange) starts perfectly aligned, then gets the rigid error below.</p>
-          </Section>
-          <Section title="2 · Rigid error on scan B (manual controls)">
-            {sliderTrans(0, 'Translate X')}
-            {sliderTrans(1, 'Translate Y')}
-            {sliderTrans(2, 'Translate Z')}
-            <Slider label="Yaw" value={reg.errYawDeg} min={-20} max={20} step={0.25} unit="°" onChange={(v) => setReg({ errYawDeg: v, result: null, after: null, recoveredErr: null })} />
-            <Slider label="Pitch" value={reg.errPitchDeg} min={-10} max={10} step={0.25} unit="°" onChange={(v) => setReg({ errPitchDeg: v, result: null, after: null, recoveredErr: null })} />
-            <Slider label="Roll" value={reg.errRollDeg} min={-10} max={10} step={0.25} unit="°" onChange={(v) => setReg({ errRollDeg: v, result: null, after: null, recoveredErr: null })} />
-            <div className="btn-row">
-              <Btn sm icon={<Wand size={15} />} onClick={() => { const r = makeRng(Date.now() & 0xffff); setReg({ errT: [r.range(-0.5, 0.5), r.range(-0.5, 0.5), r.range(-0.1, 0.1)], errYawDeg: r.range(-8, 8), errPitchDeg: r.range(-2, 2), errRollDeg: r.range(-2, 2), result: null, after: null }); }}>Random error</Btn>
-              <Btn sm onClick={() => setReg({ errT: [0, 0, 0], errYawDeg: 0, errPitchDeg: 0, errRollDeg: 0, result: null, after: null })}>Zero (perfect)</Btn>
-            </div>
-            <p className="hint">Try aligning by eye first: drive the sliders back to zero and watch the live RMSE.</p>
-          </Section>
-          <Section title="3 · Point-to-point ICP">
-            <Slider label="Max iterations" value={reg.icp.maxIterations} min={5} max={150} step={5} onChange={(maxIterations) => setReg({ icp: { ...reg.icp, maxIterations } })} />
-            <Slider label="Max correspondence distance" value={reg.icp.maxCorrDist} min={0.1} max={3} step={0.1} unit=" m" format={(v) => v.toFixed(1)} onChange={(maxCorrDist) => setReg({ icp: { ...reg.icp, maxCorrDist } })} hint="Too small: ICP cannot see the error. Too large: wrong matches pull the result off." />
-            <Slider label="Points used" value={reg.icp.sample} min={500} max={8000} step={500} format={fmtN} onChange={(sample) => setReg({ icp: { ...reg.icp, sample } })} />
-            <Btn variant="primary" icon={<Play size={16} />} onClick={runIcp} busy={busy} disabled={!reg.A} testId="run-icp">Run ICP</Btn>
-          </Section>
-          {reg.result && (
-            <Section title="Result">
-              <Seg value={view} onChange={setView} options={[{ value: 'before', label: 'Before' }, { value: 'both', label: 'Overlay' }, { value: 'after', label: 'After' }]} />
-              <Slider label="Iteration" value={iterIdx} min={0} max={reg.result.history.length - 1} step={1} onChange={(iter) => setReg({ iter })} format={(v) => `${v + 1} / ${reg.result!.history.length}`} />
-              <MiniChart series={[{ name: 'RMSE (cm)', color: '#ff9f0a', values: reg.result.history.map((h) => h.rmse * 100) }]} yLabel="convergence error" xLabel="iteration" />
-              <table className="table"><tbody>
-                <tr><td>RMSE</td><td className="mono">{(reg.before!.rmse * 100).toFixed(2)} → {(reg.after!.rmse * 100).toFixed(2)} cm</td></tr>
-                <tr><td>Fitness</td><td className="mono">{(reg.before!.fitness * 100).toFixed(0)} → {(reg.after!.fitness * 100).toFixed(0)} %</td></tr>
-                <tr><td>Pose error vs truth</td><td className="mono">{(reg.recoveredErr!.t * 100).toFixed(1)} cm · {reg.recoveredErr!.deg.toFixed(2)}°</td></tr>
-                <tr><td>Converged</td><td>{reg.result.converged ? 'yes' : 'iteration limit'}</td></tr>
-              </tbody></table>
-            </Section>
-          )}
-        </>
-      )}
       <DisplaySection />
     </>
   );
 
   return (
     <TabFrame
-      title="SLAM & Registration"
+      title="SLAM & Mobile Scanning"
       tab={5}
       viewport={viewport}
       controls={controls}
@@ -227,7 +124,7 @@ export default function Tab4({ lab, labSwitch }: { lab: 'slam' | 'reg'; labSwitc
       noPanelTabs
       topExtras={labSwitch}
       stats={stats}
-      overlays={<KindLegend items={mode === 'slam' ? [{ color: '#30d158', label: 'Ground-truth trajectory' }, { color: '#ff453a', label: 'Estimated (drifting)', style: 'dash' }, { color: '#0a84ff', label: 'After loop closure' }] : [{ color: '#0a84ff', label: 'Scan A (reference)' }, { color: '#ff9f0a', label: 'Scan B (misaligned)' }, { color: '#30d158', label: 'Scan B after ICP' }]} />}
+      overlays={<KindLegend items={[{ color: '#30d158', label: 'Ground-truth trajectory' }, { color: '#ff453a', label: 'Estimated (drifting)', style: 'dash' }, { color: '#0a84ff', label: 'After loop closure' }]} />}
     />
   );
   void mulR; void SLAM_SENSOR;

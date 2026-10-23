@@ -229,7 +229,7 @@ export default function Tab5() {
   const rawText = useMemo(() => (rawOpen && rightCloud ? new TextDecoder().decode(writePCD({ id: 'raw', name: 'processed', count: rightCloud.count, positions: rightCloud.positions, meta: rightCloud.meta, ...(rightCloud.normals ? { normals: rightCloud.normals } : {}) } as PointCloud, false)) : ''), [rawOpen, rightCloud]);
 
   return (
-    <TabFrame title="Point Cloud Processing" tab={5} viewport={viewport} controls={controls} learn={null} noPanelTabs statsRow stats={stats}
+    <TabFrame title="Point Cloud Processing" tab={6} viewport={viewport} controls={controls} learn={null} noPanelTabs statsRow stats={stats}
       viewExtras={<Btn sm icon={<FileText size={15} />} variant={rawOpen ? 'primary' : ''} onClick={() => setRawOpen(!rawOpen)} disabled={!rightCloud} testId="raw-toggle">Raw</Btn>}
       overlays={rawOpen && rightCloud ? <RawViewer text={rawText} filename="processed.pcd" onClose={() => setRawOpen(false)} /> : null} />
   );

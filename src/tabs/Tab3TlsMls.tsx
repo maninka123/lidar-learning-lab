@@ -65,6 +65,7 @@ export default function Tab3({ labSwitch }: { labSwitch?: React.ReactNode }) {
   const mode = 'mls' as Mode;
   const setMode = (_m: Mode) => { void _m; };
   const [tripod, setTripod] = useState(1.5);
+  const [uav, setUav] = useState(false);
   const [mlsId, setMlsId] = useState('rot16');
   const [tool, setTool] = useState<'station' | 'waypoint' | null>(null);
   const [missingOn, setMissingOn] = useState(true);
@@ -252,8 +253,8 @@ export default function Tab3({ labSwitch }: { labSwitch?: React.ReactNode }) {
       }} />
   );
 
-  const loopWps = (): [number, number][] => { const hx = (b.max[0] - b.min[0]) * 0.34, hy = (b.max[1] - b.min[1]) * 0.3, cx = (b.max[0] + b.min[0]) / 2, cy = (b.max[1] + b.min[1]) / 2; return [[cx - hx, cy - hy], [cx + hx, cy - hy], [cx + hx, cy + hy], [cx - hx, cy + hy], [cx - hx, cy - hy]]; };
-  const zigWps = (): [number, number][] => { const hx = (b.max[0] - b.min[0]) * 0.36, hy = (b.max[1] - b.min[1]) * 0.3, cx = (b.max[0] + b.min[0]) / 2, cy = (b.max[1] + b.min[1]) / 2; return [[cx - hx, cy - hy], [cx + hx, cy - hy * 0.4], [cx - hx, cy + hy * 0.2], [cx + hx, cy + hy]]; };
+  const loopWps = (): [number, number][] => { if (scene.id === 'D') return [[-14, 0], [14, 0], [14, 24], [-14, 24], [-14, 0]]; const hx = (b.max[0] - b.min[0]) * 0.34, hy = (b.max[1] - b.min[1]) * 0.3, cx = (b.max[0] + b.min[0]) / 2, cy = (b.max[1] + b.min[1]) / 2; return [[cx - hx, cy - hy], [cx + hx, cy - hy], [cx + hx, cy + hy], [cx - hx, cy + hy], [cx - hx, cy - hy]]; };
+  const zigWps = (): [number, number][] => { if (scene.id === 'D') return [[-32, -2], [-8, 2], [10, -2], [32, 2]]; const hx = (b.max[0] - b.min[0]) * 0.36, hy = (b.max[1] - b.min[1]) * 0.3, cx = (b.max[0] + b.min[0]) / 2, cy = (b.max[1] + b.min[1]) / 2; return [[cx - hx, cy - hy], [cx + hx, cy - hy * 0.4], [cx - hx, cy + hy * 0.2], [cx + hx, cy + hy]]; };
 
   const tlsStats = covInfo?.info;
   const stats = mode === 'mls'
@@ -315,7 +316,8 @@ export default function Tab3({ labSwitch }: { labSwitch?: React.ReactNode }) {
         <>
           <Section title="Mobile platform">
             <SensorPicker value={mlsId} onPick={setMlsId} only={['planar', 'c4', 'c8', 'c16', 'c32', 'c64', 'c128', 'prism', 'mems', 'array']} />
-            <Seg value={String(s.mlsOpts.height)} onChange={(v) => s.patch({ mlsOpts: { ...s.mlsOpts, height: parseFloat(v) } })} options={[{ value: '1', label: 'Trolley 1.0 m' }, { value: '1.5', label: 'Handheld 1.5 m' }, { value: '1.8', label: 'Vehicle 1.8 m' }]} />
+            <Seg value={uav ? 'uav' : String(s.mlsOpts.height)} onChange={(v) => { if (v === 'uav') { setUav(true); s.patch({ mlsOpts: { ...s.mlsOpts, height: Math.max(s.mlsOpts.height, 6) } }); } else { setUav(false); s.patch({ mlsOpts: { ...s.mlsOpts, height: parseFloat(v) } }); } }} options={[{ value: 'uav', label: 'UAV' }, { value: '1.5', label: 'Handheld 1.5 m' }, { value: '1.8', label: 'Vehicle 1.8 m' }]} />
+            {uav && <Slider label="Flight height" value={s.mlsOpts.height} min={3} max={40} step={1} unit=" m" onChange={(height) => s.patch({ mlsOpts: { ...s.mlsOpts, height } })} hint="Height of the scanner above the ground. Higher up sees more of the roofs and less of the facades." />}
             <Slider label="Scanner heading (single scan)" value={Math.round(s.pose.yaw / D2R)} min={-180} max={180} step={1} unit="°" onChange={(d) => s.setPose({ yaw: d * D2R })} hint="The black arrow in the scene shows where the scanner points. Click the floor plan with “Add waypoints” to move it." />
             <Slider label="Platform speed" value={s.mlsOpts.speed} min={0.2} max={4} step={0.1} unit=" m/s" format={(v) => v.toFixed(1)} onChange={(speed) => s.patch({ mlsOpts: { ...s.mlsOpts, speed } })} />
             <Toggle label="Show motion distortion" checked={s.mlsOpts.distortion} onChange={(distortion) => s.patch({ mlsOpts: { ...s.mlsOpts, distortion } })} hint="ON: every point of a sweep is placed with the sweep-start pose, as if the platform did not move during the rotation. Compare with OFF (each point uses its own time-stamped pose)." />
@@ -363,8 +365,8 @@ export default function Tab3({ labSwitch }: { labSwitch?: React.ReactNode }) {
 
   return (
     <TabFrame
-      title="SLAM & Registration"
-      tab={4}
+      title="SLAM & Mobile Scanning"
+      tab={5}
       viewport={viewport}
       controls={controls}
       learn={null}

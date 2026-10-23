@@ -223,6 +223,6 @@ export default function Tab8() {
     </>
   );
 
-  return <TabFrame title="Scene Graph" tab={8} viewport={viewport} controls={controls} learn={null} noPanelTabs statsRow stats={stats} hideViewControls />;
+  return <TabFrame title="Scene Graph" tab={9} viewport={viewport} controls={controls} learn={null} noPanelTabs statsRow stats={stats} hideViewControls />;
   void Badge; void fmtN; void ({} as GraphNode);
 }

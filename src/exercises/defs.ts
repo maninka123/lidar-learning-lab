@@ -29,11 +29,11 @@ export const CHALLENGES: Challenge[] = [
     },
   },
   {
-    id: 2, tab: 3, title: 'Explore a real TLS scan',
-    goal: 'Open the real terrestrial laser scan in the Point Cloud Gallery and orbit it.',
+    id: 2, tab: 3, title: 'Explore real LiDAR scans',
+    goal: 'Open a real Ouster frame and the real terrestrial laser scan in the Point Cloud Gallery and orbit both.',
     steps: ['Open Point Cloud Gallery.', 'Orbit and zoom into the branches.', 'Read the scanner type and field of view.'],
     outcome: 'A real TLS scan is extremely dense: individual branches are visible.',
-    check: (s) => ({ done: s.galleryViewed.includes('riegl'), detail: s.galleryViewed.includes('riegl') ? 'Real TLS scan opened.' : 'Open the RIEGL scan.' }),
+    check: (s) => { const a = s.galleryViewed.some((x) => x.startsWith('os')), b = s.galleryViewed.includes('riegl'); return { done: a && b, detail: `Ouster frame opened: ${a ? 'yes' : 'no'}; TLS scan opened: ${b ? 'yes' : 'no'}.` }; },
   },
   {
     id: 3, tab: 3, title: 'Read a point cloud file',
@@ -43,16 +43,16 @@ export const CHALLENGES: Challenge[] = [
     check: (s) => ({ done: s.galleryRaw, detail: s.galleryRaw ? 'Raw view opened.' : 'Open the Raw view.' }),
   },
   {
-    id: 4, tab: 4, title: 'Scan with a moving sensor (MLS)',
+    id: 4, tab: 5, title: 'Scan with a moving sensor (MLS)',
     goal: 'Draw a trajectory with at least three waypoints and generate a moving scan of the room.',
-    steps: ['Open SLAM & Registration → Mobile scanning.', 'Add waypoints (or use a preset) and generate the moving scan.', 'Turn on motion distortion and compare.'],
+    steps: ['Open SLAM & Mobile Scanning → Mobile scanning.', 'Add waypoints (or use a preset) and generate the moving scan.', 'Turn on motion distortion and compare.'],
     outcome: 'A moving scanner gives every point its own pose; coverage depends on the path.',
     check: (s) => { const ok = !!s.mls && s.waypoints.length >= 3 && s.mls.sceneId === s.sceneId; return { done: ok, detail: `MLS scan: ${s.mls ? `${s.mls.cloud.count.toLocaleString()} pts` : 'not generated'}; waypoints: ${s.waypoints.length} (need 3).` }; },
   },
   {
     id: 5, tab: 4, title: 'Correct a misaligned scan',
-    goal: 'Apply a rigid error to scan B, run ICP, and reduce the RMSE by at least 50 % with a recovered pose within 3 cm and 1° of the truth.',
-    steps: ['Build scans A and B.', 'Apply the translation/rotation error.', 'Run ICP and scrub through iterations.'],
+    goal: 'Move cloud B away from cloud A, run ICP, and reduce the RMSE by at least 50 % with a recovered pose within 3 cm and 1° of the truth.',
+    steps: ['Open Point Cloud Registration and move cloud B with the sliders.', 'Pick an algorithm and a match distance, then run ICP.', 'Scrub through the iterations and compare runs.'],
     outcome: 'ICP needs a reasonable initial guess and enough overlap; the residual RMSE does not reach zero because of noise and sampling.',
     check: (s) => {
       const r = s.reg;
@@ -62,7 +62,7 @@ export const CHALLENGES: Challenge[] = [
     },
   },
   {
-    id: 6, tab: 5, title: 'Add noise, then clean the point cloud',
+    id: 6, tab: 6, title: 'Add noise, then clean the point cloud',
     goal: 'Inject noise and outliers, then clean them so ≥ 90 % of the outliers are removed while ≥ 85 % of the original points survive.',
     steps: ['Add “Inject outliers” (and optionally Gaussian noise).', 'Add Statistical or Radius outlier removal.', 'Tune parameters until the quality bar is met.'],
     outcome: 'Filters trade removing outliers against deleting real geometry. Parameters depend on point density.',
@@ -74,7 +74,7 @@ export const CHALLENGES: Challenge[] = [
     },
   },
   {
-    id: 7, tab: 6, title: 'Segment the floor and three objects',
+    id: 7, tab: 7, title: 'Segment the floor and three objects',
     goal: 'Remove the ground with RANSAC and cluster so that at least three ground-truth objects are recovered (IoU ≥ 0.5, purity ≥ 0.7).',
     steps: ['Use a simulated scan as input.', 'Enable ground removal; pick Euclidean clustering or DBSCAN.', 'Tune radius / epsilon and min cluster size.'],
     outcome: 'Geometric clustering does not know object classes; parameter choices cause over- or under-segmentation.',
@@ -86,7 +86,7 @@ export const CHALLENGES: Challenge[] = [
     },
   },
   {
-    id: 8, tab: 7, title: 'Compare LiDAR with reconstructed 3D geometry',
+    id: 8, tab: 8, title: 'Compare LiDAR with reconstructed 3D geometry',
     goal: 'Align the image-derived reconstruction to the LiDAR cloud, read the error statistics, and tick the four observations you can verify.',
     steps: ['Generate LiDAR and a reconstruction.', 'Align them (scale + ICP).', 'Inspect the error map and tick observations: occlusion, missing geometry, texture differences, geometric inaccuracy.'],
     outcome: 'Distances are only meaningful after valid alignment (including scale). Each method fails differently.',
@@ -96,7 +96,7 @@ export const CHALLENGES: Challenge[] = [
     },
   },
   {
-    id: 9, tab: 8, title: 'Answer a spatial question with the scene graph',
+    id: 9, tab: 9, title: 'Answer a spatial question with the scene graph',
     goal: 'Ask the graph a question and answer: “Which object is closest to the scanner?”',
     steps: ['Build the scene graph.', 'Ask the closest-object question.', 'Pick your answer in the quiz box.'],
     outcome: 'Answers come from computed geometry, not guesses; measurements are traceable to node positions.',

@@ -80,9 +80,7 @@ export function SceneLayer({ scene, opacity, highlight = [], showCeiling, intera
           <group
             key={o.id}
             onClick={interactive ? (e) => handleSceneClick(e, o) : undefined}
-            onPointerOver={interactive ? (e) => { e.stopPropagation(); document.body.style.cursor = 'pointer'; } : undefined}
-            onPointerOut={interactive ? () => { document.body.style.cursor = ''; } : undefined}
-          >
+                      >
             {o.parts.map((p, i) => (
               <PrimMesh key={i} p={p} color={visualOnly ? '#d36bff' : rgb(p.mat?.color ?? o.color)} opacity={op} wire={visualOnly} emissive={hl ? '#ff9f0a' : undefined} />
             ))}
@@ -110,9 +108,6 @@ function handleSceneClick(e: { stopPropagation: () => void; point: THREE.Vector3
     const w = [...s.waypoints, [pt.x, pt.y] as [number, number]];
     s.patch({ waypoints: w });
     pushUndo('add waypoint', () => useLab.setState({ waypoints: useLab.getState().waypoints.slice(0, -1) }));
-  } else if (s.interaction === 'select') {
-    e.stopPropagation();
-    s.patch({ selectedObjectId: o.id });
   }
 }
 

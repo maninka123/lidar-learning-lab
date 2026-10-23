@@ -17,15 +17,16 @@ export interface TabFrameProps {
   hideExercise?: boolean;
   noPanelTabs?: boolean;
   topExtras?: ReactNode;
+  noEnv?: boolean; // hide the Environment menu (tabs that do not use a scene)
   simple?: boolean; // controls only: no Exercise / Learn panes, minimal top bar
 }
 
-export function TabFrame({ title, tab, viewport, controls, learn, stats, overlays, hideViewControls, simple, viewExtras, statsRow, hideExercise, noPanelTabs, topExtras }: TabFrameProps) {
+export function TabFrame({ title, tab, viewport, controls, learn, stats, overlays, hideViewControls, simple, viewExtras, statsRow, hideExercise, noPanelTabs, topExtras, noEnv }: TabFrameProps) {
   const open = useLab((s) => s.rightOpen);
   const [pane, setPane] = useState<'controls' | 'exercise' | 'learn'>('controls');
   return (
     <>
-      <TopBar title={title} minimal={simple} extra={topExtras} />
+      <TopBar title={title} minimal={simple} extra={topExtras} noEnv={noEnv} />
       <div className="tab-body">
         <div className="stage" data-testid="stage">
           {viewport}

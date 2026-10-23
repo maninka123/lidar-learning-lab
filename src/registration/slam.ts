@@ -44,7 +44,8 @@ export function loopPath(scene: SceneDef, steps: number): Pose2[] {
   const { min, max } = scene.bounds;
   const cx = (min[0] + max[0]) / 2, cy = (min[1] + max[1]) / 2;
   const hx = ((max[0] - min[0]) / 2) * (scene.id === 'C' ? 0.7 : 0.72), hy = ((max[1] - min[1]) / 2) * (scene.id === 'C' ? 0.45 : 0.62);
-  let pts: [number, number][] = [[cx - hx, cy - hy], [cx + hx, cy - hy], [cx + hx, cy + hy], [cx - hx, cy + hy]];
+  // city district: drive around the school block along the road centre lines (two long roads, two crossings)
+  let pts: [number, number][] = scene.id === 'D' ? [[-14, 0], [14, 0], [14, 24], [-14, 24]] : [[cx - hx, cy - hy], [cx + hx, cy - hy], [cx + hx, cy + hy], [cx - hx, cy + hy]];
   for (let it = 0; it < 3; it++) { // Chaikin corner cutting on a closed polygon
     const out: [number, number][] = [];
     for (let i = 0; i < pts.length; i++) {

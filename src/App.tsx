@@ -9,6 +9,7 @@ const Tab1 = lazy(() => import('./tabs/Tab1Fundamentals'));
 const Tab2 = lazy(() => import('./tabs/Tab2Explorer'));
 const TabCmp = lazy(() => import('./tabs/TabCompareSensors'));
 const TabMap = lazy(() => import('./tabs/TabMapping'));
+const TabReg = lazy(() => import('./tabs/TabRegistration'));
 const Tab5 = lazy(() => import('./tabs/Tab5Processing'));
 const Tab6 = lazy(() => import('./tabs/Tab6Segmentation'));
 const Tab7 = lazy(() => import('./tabs/Tab7Recon'));
@@ -20,7 +21,8 @@ const TABS: { label: string; icon: ReactNode; el: ReactNode }[] = [
   { label: 'Scanner Simulator', icon: <Radar size={18} />, el: <Tab1 /> },
   { label: 'Compare Sensors', icon: <Layers size={18} />, el: <TabCmp /> },
   { label: 'Point Cloud Gallery', icon: <Boxes size={18} />, el: <Tab2 /> },
-  { label: 'SLAM & Registration', icon: <GitMerge size={18} />, el: <TabMap /> },
+  { label: 'Point Cloud Registration', icon: <GitMerge size={18} />, el: <TabReg /> },
+  { label: 'SLAM & Mobile Scanning', icon: <Route size={18} />, el: <TabMap /> },
   { label: 'Point Cloud Processing', icon: <Filter size={18} />, el: <Tab5 /> },
   { label: 'Clustering & Segmentation', icon: <Network size={18} />, el: <Tab6 /> },
   { label: 'Image to 3D', icon: <Camera size={18} />, el: <Tab7 /> },

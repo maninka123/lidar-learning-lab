@@ -1,226 +1,121 @@
-import { test, expect, Page } from '@playwright/test';
+# LiDAR Learning Lab
 
-declare global { interface Window { __lab: { getState: () => any; setState: (p: any) => void } } }
+A browser-based, hands-on simulation platform for a 60-minute workshop on **LiDAR, point clouds, TLS / MLS, SLAM, point-cloud processing, clustering and segmentation, image-to-3D reconstruction, scene graphs and AI reasoning**.
 
-const go = async (page: Page, tab: number) => { await page.getByTestId(`nav-${tab}`).click(); await page.waitForTimeout(400); };
-const state = <T,>(page: Page, fn: (s: any) => T) => page.evaluate((src) => { const f = new Function('s', `return (${src})(s)`); return f(window.__lab.getState()); }, fn.toString());
+Participants explore 3D scenes, drive virtual LiDAR scanners (real ray casting against scene geometry), generate point clouds, process and segment them, register scans, compare LiDAR with image-based reconstruction and query a geometric scene graph. Everything runs in the browser: no server, database, authentication or AI API is needed.
 
-test.describe('LiDAR Learning Lab', () => {
-  test.beforeEach(async ({ page }) => {
-    const errors: string[] = [];
-    page.on('pageerror', (e) => errors.push(e.message));
-    await page.goto('/');
-    await expect(page.getByTestId('nav-9')).toBeVisible();
-    (page as any).__errors = errors;
-  });
-  test.afterEach(async ({ page }) => { expect((page as any).__errors).toEqual([]); });
+**Live demo: https://maninka123.github.io/lidar-learning-lab/**
 
-  test('shell: ten lecture tabs, viewport, view presets, panel toggle', async ({ page }) => {
-    for (let i = 0; i < 10; i++) await expect(page.getByTestId(`nav-${i}`)).toBeVisible();
-    await expect(page.locator('canvas').first()).toBeVisible();
-    await page.getByTestId('view-home').click();
-    await expect(page.getByTestId('view-top')).toHaveCount(0);
-    await go(page, 1);
-    await page.getByTestId('view-home').click();
-    await expect(page.getByTestId('view-front')).toHaveCount(0);
-    await page.getByTestId('toggle-panel').click();
-    await expect(page.getByTestId('right-panel')).toHaveClass(/closed/);
-    await page.getByTestId('toggle-panel').click();
-    await expect(page.getByTestId('right-panel')).not.toHaveClass(/closed/);
-  });
+**Live tools bundled:** eleven lecture-aligned tabs (light theme) · four procedural scenes · PLY / PCD / LAS import · PLY / PCD export · 9 auto-checked challenges with JSON / PDF summary.
 
-  test('tab 0: what is LiDAR — simple concept page with point inspection', async ({ page }) => {
-    await expect(page.getByTestId('concept-point-info')).toContainText('Intensity');
-    await expect(page.getByTestId('stats-card')).toContainText('Time of flight');
-    await expect(page.getByTestId('person-points')).toContainText('Points on the person');
-    await expect(page.getByRole('button', { name: 'Exercise' })).toHaveCount(0);
-    await expect(page.getByTestId('environment-menu')).toHaveCount(0);
-    await page.getByRole('button', { name: 'Controls', exact: true }).click();
-    await expect(page.getByText('Horizontal field of view')).toBeVisible();
-    await expect(page.getByTestId('person-points')).toContainText('Points on the wall');
-    await page.getByTestId('mat-glass').click();
-    await expect(page.getByTestId('person-points')).toContainText('0 points · gap');
-    await page.getByTestId('mat-white').click();
-    await page.getByTestId('raw-toggle').click();
-    await expect(page.getByTestId('raw-view')).toContainText('DATA ascii');
-    await expect(page.getByTestId('raw-view')).toContainText('FIELDS x y z intensity');
-    await page.getByTestId('raw-toggle').click();
-    await page.getByTestId('points-only').click();
-    await page.getByTestId('points-only').click();
-    await page.getByTestId('play-pause').click();
-    await expect(page.getByTestId('play-pause')).toHaveAttribute('aria-label', 'Play the light pulse');
-    await page.getByTestId('nav-toggle').click();
-    await expect(page.locator('.app')).toHaveClass(/nav-collapsed/);
-    await page.getByTestId('nav-toggle').click();
-    await page.getByRole('button', { name: 'Notes', exact: true }).click();
-    for (const l of ['Field of view', 'Beam divergence', 'Time of flight']) await page.getByRole('button', { name: l, exact: true }).click();
-  });
+## Quick start
 
-  test('tab 1: simulated scan produces points and coverage statistics', async ({ page }) => {
-    await go(page, 1);
-    await page.getByTestId('run-scan').click();
-    await expect(page.getByTestId('stats-card')).toContainText(/\d{2},\d{3}/);
-    await expect.poll(() => state(page, (s) => s.scanInfo?.coverage?.coveredPct ?? 0)).toBeGreaterThan(5);
-    const n1 = await state(page, (s) => s.clouds.scan.count);
-    await page.evaluate(() => window.__lab.getState().setSensor({ hRes: 1.5 }));
-    await page.getByTestId('run-scan').click();
-    await expect.poll(() => state(page, (s) => s.clouds.scan.count)).toBeLessThan(n1);
-    await page.getByTestId('raw-toggle').click();
-    await expect(page.getByTestId('raw-view')).toContainText('DATA ascii');
-    await page.getByTestId('raw-toggle').click();
-    await page.getByTestId('points-only').click();
-    await page.getByTestId('points-only').click();
-    await expect(page.getByText('Vertical FOV', { exact: true })).toBeVisible();
-    await page.evaluate(() => window.__lab.getState().setPreset('rot4'));
-    await page.getByTestId('sensor-picker').locator('select').selectOption('c64');
-    await expect.poll(() => state(page, (s) => s.sensorPresetId)).toBe('rot64');
-    await expect(page.getByTestId('sensor-hdl64e')).toBeVisible();
-    await page.getByTestId('sensor-hdl64e').click();
-    await expect.poll(() => state(page, (s) => s.sensorPresetId)).toBe('hdl64e');
-    await page.evaluate(() => window.__lab.getState().setPreset('planar'));
-    await expect(page.getByText('Vertical FOV', { exact: true })).toHaveCount(0);
-    await page.evaluate(() => window.__lab.getState().setPreset('rot32'));
-    await page.getByRole('button', { name: 'View', exact: true }).click();
-    await page.getByTestId('log-scan').click();
-    await expect(page.getByTestId('scan-log')).toBeVisible();
-  });
+Requires **Node.js 20.19+ or 22+**.
 
-  test('compare sensors tab: several sensors scan the same environment', async ({ page }) => {
-    await go(page, 2);
-    await expect(page.getByTestId('compare-sensors')).toBeVisible();
-    await expect(page.getByTestId('cmp-panel-0')).toContainText('points', { timeout: 60000 });
-    await page.getByTestId('add-view').click();
-    await expect(page.getByTestId('cmp-panel-2')).toBeVisible();
-  });
+```bash
+npm install          # install dependencies
+npm run dev          # development server → http://localhost:5173
+npm run build        # type-check + production build into dist/
+npm run preview      # serve the production build → http://localhost:4173
+npm test             # unit tests (Vitest)
+npm run test:e2e     # browser tests (Playwright; builds + serves the app itself)
+npm run typecheck    # TypeScript only
+```
 
-  test('tab 1: prism (Livox-style) scans keep filling in automatically', async ({ page }) => {
-    await go(page, 1);
-    await page.evaluate(() => window.__lab.getState().setPreset('avia'));
-    await page.getByTestId('run-scan').click();
-    await expect.poll(() => state(page, (s) => s.clouds.scan?.count ?? 0)).toBeGreaterThan(1000);
-    const n1 = await state(page, (s) => s.clouds.scan.count);
-    await expect.poll(() => state(page, (s) => s.clouds.scan?.count ?? 0), { timeout: 60000 }).toBeGreaterThan(n1 * 2);
-    await expect(page.getByTestId('run-scan')).toContainText(/Stop|Run scan/);
-    await page.getByRole('button', { name: 'Single sweep', exact: true }).click();
-    await expect.poll(() => state(page, (s) => s.accumulate)).toBe(false);
-  });
+First time running the end-to-end tests: `npx playwright install chromium`.
 
-  test('tab 3: point cloud gallery - real TLS scan with raw view', async ({ page }) => {
-    await go(page, 3);
-    await expect(page.getByTestId('gallery-info')).toContainText('RIEGL VZ-400', { timeout: 60000 });
-    await expect(page.getByTestId('gallery-info')).toContainText('324,064', { timeout: 60000 });
-    await expect(page.getByRole('button', { name: 'Exercise' })).toHaveCount(0);
-    await page.getByTestId('raw-toggle').click();
-    await expect(page.getByTestId('raw-view')).toContainText('FIELDS x y z');
-    await expect.poll(() => state(page, (s) => s.galleryRaw && s.galleryViewed.includes('riegl'))).toBe(true);
-  });
+> Tip: keep the project on a normal local disk. Cloud-synced folders (OneDrive, iCloud, Dropbox) can make `node_modules` extremely slow.
 
-  test('tab 4: two TLS stations then an MLS trajectory', async ({ page }) => {
-    await go(page, 4);
-    await page.getByTestId('add-station-here').click();
-    await expect.poll(() => state(page, (s) => s.stations.length)).toBe(1);
-    await page.evaluate(() => window.__lab.getState().setPose({ x: -2.6, y: -1.8 }));
-    await page.getByTestId('add-station-here').click();
-    await expect.poll(() => state(page, (s) => s.stations.length)).toBe(2);
-    await expect.poll(() => state(page, (s) => s.tlsCoverage?.coveredPct ?? 0)).toBeGreaterThan(30);
-    await page.getByRole('button', { name: 'Moving (MLS)' }).click();
-    await page.getByTestId('run-mls').click();
-    await expect.poll(() => state(page, (s) => s.mls?.cloud?.count ?? 0), { timeout: 60000 }).toBeGreaterThan(500);
-    await page.getByText('Loop preset').click();
-    await page.getByTestId('run-mls').click();
-    await expect.poll(() => state(page, (s) => s.mls?.cloud?.count ?? 0), { timeout: 120000 }).toBeGreaterThan(1000);
-    await page.getByRole('button', { name: 'Compare', exact: true }).click();
-    await expect(page.getByTestId('compare-table')).toContainText('Coverage');
-  });
+## Tabs
 
-  test('tab 4: SLAM drift + loop closure, and ICP corrects a rigid error', async ({ page }) => {
-    await go(page, 4);
-    await page.getByRole('button', { name: 'SLAM', exact: true }).click();
-    await page.evaluate(() => window.__lab.getState().patch({ slamParams: { ...window.__lab.getState().slamParams, loopClosure: true } }));
-    await page.getByTestId('run-slam').click();
-    await expect.poll(() => state(page, (s) => s.slam?.ateAfter ?? null), { timeout: 120000 }).not.toBeNull();
-    const r = await state(page, (s) => ({ b: s.slam.ateBefore, a: s.slam.ateAfter }));
-    expect(r.a).toBeLessThan(r.b);
-    await page.getByRole('button', { name: 'Registration', exact: true }).click();
-    await expect.poll(() => state(page, (s) => !!s.reg.A && !!s.reg.B)).toBe(true);
-    await page.getByTestId('run-icp').click();
-    await expect.poll(() => state(page, (s) => s.reg.after?.rmse ?? null), { timeout: 120000 }).not.toBeNull();
-    const reg = await state(page, (s) => ({ b: s.reg.before.rmse, a: s.reg.after.rmse, e: s.reg.recoveredErr }));
-    expect(reg.a).toBeLessThan(reg.b * 0.5);
-    expect(reg.e.t).toBeLessThan(0.05);
-  });
+| # | Tab | What you can do |
+|---|-----|-----------------|
+| 1 | **What is LiDAR?** | Concept page with no scene: a sensor, a wall and a few objects. Watch a laser pulse travel out and back (time of flight, R = cΔt/2), see beam divergence grow with range, and explore horizontal/vertical FOV in 3D, top and side views. Click any point to read its position, range and intensity. |
+| 2 | **Scanner Simulator** | Place and aim a scanner; set FOV, angular resolution, channels, range, frequency, returns and noise; pick a scanner type (2D, 4–128-channel mechanical, TLS, prism, MEMS, solid-state array) with commercial models (Velodyne, Ouster, Hesai, RoboSense, Livox, SICK, Hokuyo, Blickfeld, Leica, FARO…); animated scan pattern for non-repetitive scanners. Specifications are approximate public values. |
+| 3 | **Compare Sensors** | The same environment scanned by 2–4 sensors you choose, point clouds only, cameras linked. |
+| 4 | **Point Cloud Gallery** | Real measured point clouds with play / pause through frames: Velodyne VLP-16 (from a pcap), Ouster OS1-128 and OS0-128 (from OSF recordings), Livox MID-360 (from a ROS 2 bag) and a RIEGL VZ-400 TLS tree. Shows scanner type, field of view, channels and the raw file text, and lets you open your own file. |
+| 5 | **Point Cloud Registration** | Two point clouds, no scene. Move cloud B by hand and press Calculate to read the RMSE and overlap, or align automatically with ICP (point-to-point or point-to-plane, match distance, best-pairs trimming, iterations). Iteration scrubber, convergence chart, run comparison table and the 4 × 4 transformation matrix drawn on the view. |
+| 6 | **SLAM & Mobile Scanning** | A city district with roads, crossings, a school, vehicles and pedestrians. Mobile scanning along waypoints (handheld, vehicle or UAV with adjustable flight height, motion distortion), then a closed-loop SLAM run with drift (noisy odometry or ICP scan matching) and a loop closure *teaching approximation*. |
+| 7 | **Point Cloud Processing** | Add/reorder/remove pipeline steps (crop, voxel, random downsample, noise, outliers, dropout, statistical & radius outlier removal, normals, rigid transform) on an immutable original; split comparison; deterministic seed; export. |
+| 8 | **Clustering & Segmentation** | RANSAC planes, ground removal, Euclidean clustering, DBSCAN, parameter-sensitivity sweep, A/B comparison, over-/under-segmentation scoring against ground truth. |
+| 9 | **Image to 3D** | Photo, LiDAR cloud, reconstruction, voxel-surface mesh, overlay and error map; similarity alignment (rotation, translation and scale); error statistics only after a valid alignment. |
+| 10 | **Scene Graphs & 3D AI** | Nodes with id, label, position, size, bbox and confidence; geometric relations; interactive graph ↔ 3D selection; deterministic offline question answering; link to the *local-llm-fit* model-fit tool. |
+| 11 | **Challenges** | Nine automatically checked exercises, progress tracking, JSON/PDF summary download and a suggested 60-minute agenda. |
 
-  test('tabs 5-6: noise + outliers + cleaning, then floor + objects segmentation', async ({ page }) => {
-    await go(page, 1);
-    await page.getByTestId('run-scan').click();
-    await expect.poll(() => state(page, (s) => !!s.clouds.scan)).toBe(true);
-    await go(page, 5);
-    await page.getByText('Noise + outliers + clean').click();
-    await expect.poll(() => state(page, (s) => s.proc.quality?.injected ?? 0), { timeout: 60000 }).toBeGreaterThan(100);
-    const q = await state(page, (s) => s.proc.quality);
-    expect(q.injectedLeft / q.injected).toBeLessThan(0.5);
-    await page.getByRole('button', { name: 'Result', exact: true }).click();
-    await page.getByTestId('reset-original').click();
-    await expect.poll(() => state(page, (s) => s.proc.steps.length)).toBe(0);
-    await go(page, 6);
-    await page.getByTestId('run-seg').click();
-    await expect.poll(() => state(page, (s) => s.seg.gt?.recovered?.length ?? 0), { timeout: 60000 }).toBeGreaterThanOrEqual(3);
-  });
+## What is real, and what is a teaching simplification
 
-  test('tab 7: LiDAR vs reconstruction needs valid alignment before reporting errors', async ({ page }) => {
-    await go(page, 7);
-    await expect(page.getByRole('button', { name: 'Exercise' })).toHaveCount(0);
-    await expect.poll(() => state(page, (s) => !!s.recon.lidar), { timeout: 60000 }).toBe(true);
-    await page.getByTestId('reconstruct').click();
-    await expect.poll(() => state(page, (s) => !!s.recon.out), { timeout: 60000 }).toBe(true);
-    await page.getByRole('button', { name: 'Compare', exact: true }).click();
-    await expect(page.getByTestId('recon-stats')).toHaveCount(0); // no statistics before alignment
-    await page.getByTestId('align-recon').click();
-    await expect(page.getByTestId('recon-stats')).toBeVisible({ timeout: 90000 });
-  });
+The lab is explicit about this inside the UI; the same rules apply here.
 
-  test('tab 8: scene graph, node selection and offline queries (incl. local-llm-fit card)', async ({ page }) => {
-    await go(page, 8);
-    await page.getByRole('button', { name: 'Graph', exact: true }).click();
-    await page.getByTestId('node-table-1').click();
-    await page.getByRole('button', { name: 'Ask', exact: true }).click();
-    await expect(page.getByTestId('node-details')).toContainText('table-1');
-    await expect.poll(() => state(page, (s) => s.selectedObjectId)).toBe('table-1');
-    await page.getByTestId('query-input').fill('Which objects intersect the walking corridor?');
-    await page.getByTestId('ask').click();
-    await expect(page.getByTestId('answer')).toContainText(/Box in corridor/i);
-    await page.getByText('Which object is closest to the scanner?').first().click();
-    await expect(page.getByTestId('answer')).toContainText('closest');
-    await page.getByRole('button', { name: 'LLM', exact: true }).click();
-    const link = page.getByTestId('llm-fit-link');
-    await expect(link).toHaveAttribute('href', 'https://maninka123.github.io/local-llm-fit/');
-  });
+* **Scanning is real ray casting.** Each beam is cast against analytic boxes, cylinders and spheres; range is measured from the sensor origin, noise is added along the ray, and points are built from sensor-relative range and direction and transformed to world coordinates.
+* **Intensity is a simplified model**, `I ≈ ρ·cosθ ÷ (1 + (r/r₀)²)`, and detection range scales with √reflectivity. It is not a calibrated physical return. Intensity and RGB are stored and rendered as separate attributes.
+* **Commercial sensor profiles** (VLP-16, OS1, Mid-360) list public datasheet values and a list of simplifications. Illustrative scan patterns (hybrid mirror, solid-state rosette) do **not** reproduce any commercial pattern. Re-check current datasheets before quoting numbers.
+* **SLAM** is a controlled-error teaching model. Loop closure = scan-to-scan ICP between last and first scan + linear distribution of the residual — not a pose-graph back-end, and nothing is prerecorded.
+* **Segmentation:** RANSAC is rule-based geometry, Euclidean clustering and DBSCAN are unsupervised and know nothing about classes. The class labels shown are **ground-truth annotations written by the simulator**, not predictions of a trained model. The “rule-based class guess” is a deliberately crude size heuristic shown for contrast.
+* **Image to 3D:** the photograph, depth maps, multi-view photogrammetry, RGB-D fusion and single-image-depth results are produced by in-browser simulations (ray-cast renders + depth-error models + depth-map fusion). **No NeRF, 3D Gaussian Splatting or generative-model outputs are bundled or faked.** You can upload your own prerecorded PLY/PCD and evaluate it with the same alignment and error tools.
+* **Scene-graph questions** use an offline deterministic intent matcher, not an LLM. The tool contract a real LLM would use is documented in the app; an LLM would have to obtain every measurement from those geometric tools.
 
-  test('tab 9: challenge dashboard and summary downloads', async ({ page }) => {
-    await go(page, 9);
-    await expect(page.getByTestId('challenges-page')).toContainText('of 9 challenges complete');
-    const [j] = await Promise.all([page.waitForEvent('download'), page.getByTestId('download-json').click()]);
-    expect(j.suggestedFilename()).toBe('lidar-lab-summary.json');
-    const [p] = await Promise.all([page.waitForEvent('download'), page.getByTestId('download-pdf').click()]);
-    expect(p.suggestedFilename()).toBe('lidar-lab-summary.pdf');
-  });
+## Datasets
 
-  test('environment menu switches scenes compactly', async ({ page }) => {
-    await go(page, 1);
-    await page.getByTestId('environment-menu').click();
-    await page.getByTestId('env-B').click();
-    await expect.poll(() => state(page, (s) => s.sceneId)).toBe('B');
-    await page.getByTestId('env-A').click();
-    await expect.poll(() => state(page, (s) => s.sceneId)).toBe('A');
-  });
+| Dataset | Source | Licence | Origin | Attributes |
+|---|---|---|---|---|
+| Scene A – room (8 × 6 × 3 m) | Procedural, this repo | MIT | Synthetic | geometry, class, instance, material reflectivity |
+| Scene B – industrial workshop | Procedural, this repo | MIT | Synthetic | as above |
+| Scene C – street | Procedural, this repo | MIT | Synthetic | as above, porous foliage (multi-return) |
+| Scene D – city district (76 × 56 m) | Procedural, this repo | MIT | Synthetic | as above, pedestrians, traffic lights |
+| Real TLS tree (RIEGL VZ-400) | [Zenodo 5076045](https://zenodo.org/records/5076045), UCL | CC BY 4.0 | Measured | x y z |
+| Ouster OS1-128 / OS0-128 frames | [ouster-sdk test data](https://github.com/ouster-lidar/ouster-sdk) (tests/osfs), decoded from OSF | BSD-3-Clause | Measured | x y z, intensity |
+| Livox MID-360 frames | [Zenodo 14841855](https://zenodo.org/records/14841855), AIST (ROS 2 bag, `/livox/lidar`) | CC BY 4.0 | Measured | x y z, intensity |
+| Velodyne VLP-16 frames | [Keio-CSG/lidar-spoofing-artifacts](https://github.com/Keio-CSG/lidar-spoofing-artifacts) (benign pcap), decoded with velodyne_decoder | no licence stated: credit Keio-CSG | Measured | x y z, intensity |
+| User uploads | PLY (ascii/binary), PCD (ascii/binary/compressed), LAS 1.0–1.4 (uncompressed) | user's | Measured or synthetic (you choose) | whatever the file contains |
 
-  test('scene switching keeps state per scene and all three scenes can be scanned', async ({ page }) => {
-    await go(page, 1);
-    for (const id of ['B', 'C', 'A']) {
-      await page.evaluate((i) => window.__lab.getState().setScene(i), id);
-      await page.getByTestId('run-scan').click();
-      await expect.poll(() => state(page, (s) => s.clouds.scan?.meta?.sceneId), { timeout: 60000 }).toBe(id);
-      expect(await state(page, (s) => s.clouds.scan.count)).toBeGreaterThan(5000);
-    }
-  });
-});
+Units are metres; coordinates are right-handed, **Z-up**. Other public datasets (e.g. Stanford 3D Scanning Repository, ETH TLS, Semantic3D, KITTI samples) are not bundled: redistribution terms still need to be verified for each. LAZ is not decoded in the browser — convert with `pdal translate in.laz out.las`.
+
+## Performance
+
+Designed for laptops without a dedicated GPU: typed arrays, `BufferGeometry` points, adjustable point budget and render budget (with automatic reduction when the frame rate drops), and Web Workers for scanning, processing, segmentation, ICP, SLAM and reconstruction. Target: responsive orbiting with ≈100 000 points. No large dataset is downloaded automatically.
+
+## Architecture
+
+```
+src/
+  core/           PRNG, math (rigid transforms, Horn/Umeyama fit, Jacobi eigen), k-d tree,
+                  point-cloud model + attribute handling, colour mapping
+  scenes/         scene definitions (room, industrial, outdoor), analytic ray caster,
+                  surface sampling + coverage / occlusion classification
+  sensor/         presets & documented profiles, scan patterns, simulator (poses over time)
+  processing/     filters, noise/outliers, voxel, normals, pipeline runner
+  segmentation/   RANSAC, Euclidean clustering, DBSCAN, GT evaluation
+  registration/   ICP (point-to-point, point-to-plane, trimmed, optional scale), SLAM teaching simulation
+  recon/          synthetic photo + depth-error models, fusion, voxel mesh, alignment, error stats
+  graph/          scene graph builder, relations, query engine, layout
+  io/             PLY / PCD / LAS readers, PLY / PCD writers
+  engine/         task registry, Web Worker + client with main-thread fallback
+  exercises/      challenge definitions, automatic checks, PDF writer
+  state/          Zustand store, actions
+  ui/, tabs/      React + React Three Fiber components, one file per lecture tab
+tests/            Vitest unit tests (algorithms, IO, simulator, graph, SLAM, recon)
+e2e/              Playwright browser tests (workshop walkthrough)
+```
+
+Stack: React, TypeScript, Vite, Three.js + React Three Fiber + Drei, Zustand, Tailwind CSS, Vitest, Playwright.
+
+## Validation
+
+Unit tests cover: ray distances to a known wall; FOV and angular resolution changing coverage; moving the scanner changing measurements; intensity distinct from RGB; downsampling reducing/preserving counts; reproducible noise; outlier filters removing injected outliers; RANSAC recovering a known plane; DBSCAN separating clusters; ICP recovering a known small rigid transform; scene-graph distances in world coordinates; PLY/PCD (ascii and binary) round-trips keeping attributes; SLAM drift and loop closure; reconstruction alignment. The Playwright suite walks through every tab.
+
+## Deployment
+
+The app is published automatically to GitHub Pages by `.github/workflows/pages.yml` on every push to `main` → https://maninka123.github.io/lidar-learning-lab/ (one-time setup: repo **Settings → Pages → Source: GitHub Actions**).
+
+`npm run build` produces a fully static site in `dist/` (relative asset paths), deployable to any static host (GitHub Pages, Netlify, S3…). Nothing is sent to a server; uploaded files stay in the browser.
+
+## Related tools
+
+Scan-architecture descriptions (prism rosette, MEMS eye-shaped pattern, fixed arrays) follow **[Rotating Target Calibration Studio](https://github.com/maninka123/rotating-target-calibration-studio)** ([live demo](https://maninka123.github.io/rotating-target-calibration-studio/)), which goes deeper into comparing LiDAR and camera architectures.
+
+
+Wondering which local LLM you could run for the scene-graph question-answering idea? Try **[Model Fit Explorer (local-llm-fit)](https://github.com/maninka123/local-llm-fit)** — [web version](https://maninka123.github.io/local-llm-fit/). It is linked (and optionally embeddable on request) from Tab 8.
+
+## Licence
+
+MIT — see [LICENSE](LICENSE).
