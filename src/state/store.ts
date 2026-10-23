@@ -25,6 +25,7 @@ export interface ViewOpts {
   background: Background;
   showGrid: boolean;
   showAxes: boolean;
+  panMode: boolean; // left-drag pans (moves the cloud) instead of rotating, like CloudCompare's pan tool
   showScene: boolean;
   sceneOpacity: number;
   showCeiling: boolean;
@@ -131,7 +132,7 @@ export function emptyGt() {
 }
 
 export const DEFAULT_VIEW: ViewOpts = {
-  colorMode: 'height', pointSize: 3, background: 'light', showGrid: true, showAxes: true, showScene: true, sceneOpacity: 0.28, showCeiling: false,
+  colorMode: 'height', pointSize: 3, background: 'light', showGrid: true, showAxes: true, panMode: false, showScene: true, sceneOpacity: 0.28, showCeiling: false,
   renderBudget: 150000, clipOn: false, clipMin: -1, clipMax: 20, showRays: true,
 };
 

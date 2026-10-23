@@ -179,6 +179,8 @@ test.describe('LiDAR Learning Lab', () => {
     await expect.poll(() => state(page, (s) => !!s.recon.lidar), { timeout: 60000 }).toBe(true);
     await page.getByTestId('reconstruct').click();
     await expect.poll(() => state(page, (s) => !!s.recon.out), { timeout: 60000 }).toBe(true);
+    await page.getByTestId('mesh-toolbar').click();
+    await expect.poll(() => page.getByTestId('photo-strip').count()).toBe(1);
     await page.getByRole('button', { name: 'Compare', exact: true }).click();
     await expect(page.getByTestId('recon-stats')).toHaveCount(0); // no statistics before alignment
     await page.getByTestId('align-recon').click();
@@ -229,4 +231,24 @@ test.describe('LiDAR Learning Lab', () => {
       expect(await state(page, (s) => s.clouds.scan.count)).toBeGreaterThan(5000);
     }
   });
+});
+
+test('viewport: right-drag and the Pan button move the view like CloudCompare', async ({ page }) => {
+  await page.goto('/');
+  await page.getByTestId('nav-3').click();
+  await expect(page.getByTestId('gallery-info')).toContainText('Ouster', { timeout: 60000 });
+  const box = (await page.locator('canvas').first().boundingBox())!;
+  const cx = box.x + box.width / 2, cy = box.y + box.height / 2;
+  const camPos = () => page.evaluate(() => (window as any).__camPos?.() ?? null);
+  void camPos;
+  const shot = async () => (await page.locator('canvas').first().screenshot()).toString('base64');
+  const a = await shot();
+  await page.mouse.move(cx, cy); await page.mouse.down({ button: 'right' }); await page.mouse.move(cx + 120, cy + 40, { steps: 8 }); await page.mouse.up({ button: 'right' });
+  await page.waitForTimeout(800);
+  const b = await shot();
+  expect(b).not.toBe(a);
+  await page.getByTestId('view-pan').click();
+  await page.mouse.move(cx, cy); await page.mouse.down(); await page.mouse.move(cx - 100, cy - 30, { steps: 8 }); await page.mouse.up();
+  await page.waitForTimeout(800);
+  expect(await shot()).not.toBe(b);
 });

@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useLab } from '../state/store';
 import { getScene } from '../scenes';
 import { className } from '../scenes/classes';
@@ -35,6 +35,8 @@ export default function Tab6() {
   const [sweep, setSweep] = useState<{ x: number[]; clusters: number[]; over: number[]; under: number[]; recovered: number[]; label: string } | null>(null);
   const [slots, setSlots] = useState<{ A?: { params: SegParams; clusters: number; recovered: number; over: number; under: number; noise: number }; B?: { params: SegParams; clusters: number; recovered: number; over: number; under: number; noise: number } }>({});
   const cloud: PointCloud | null = s.clouds['scan'] ?? s.clouds['explorer'] ?? null;
+  // nothing to segment yet: scan the current scene so the tab works straight away
+  useEffect(() => { const st = useLab.getState(); if (!st.clouds['scan'] && !st.clouds['explorer'] && !st.busy) void runScan(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const res: SegResult | null = seg.result;
   const gt = seg.gt;
   const ignore = useMemo(() => scene.objects.filter((o) => o.structural).map((o) => o.instanceId), [scene]);
@@ -110,7 +112,7 @@ export default function Tab6() {
       <Seg value={pane} onChange={setPane} options={[{ value: 'setup', label: 'Settings' }, { value: 'results', label: 'Results' }]} label="Section" />
       {pane === 'setup' && (<>
       <Section title="Point cloud">
-        {cloud ? <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}><span>{cloud.name}</span><Badge kind={cloud.meta.kind === 'simulated' ? 'sim' : 'measured'} /><span className="caption">{fmtN(cloud.count)} pts{hasGT ? ' · GT labels' : ''}</span></div> : <p className="hint">No cloud yet: run a scan in the Scanner Simulator first.</p>}
+        {cloud ? <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}><span>{cloud.name}</span><Badge kind={cloud.meta.kind === 'simulated' ? 'sim' : 'measured'} /><span className="caption">{fmtN(cloud.count)} pts{hasGT ? ' · GT labels' : ''}</span></div> : <div style={{ display: 'grid', gap: 8 }}><p className="hint">No point cloud yet. Scan the current scene to get one to segment.</p><Btn variant="primary" onClick={() => void runScan()} busy={!!s.busy}>Scan this scene</Btn></div>}
         <p className="caption">Planes are fitted by rule (RANSAC), clusters group nearby points without knowing what they are. Class labels shown are the simulator’s ground truth, not AI predictions.</p>
       </Section>
       <Section title="1 · Ground & planes (RANSAC)">

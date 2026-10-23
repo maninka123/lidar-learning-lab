@@ -15,3 +15,16 @@ describe('image-to-3D comparison (simulated pipelines)', () => {
     }, 120000);
   }
 });
+
+import { surfaceMesh } from '../src/recon/recon';
+describe('images and meshing', () => {
+  it('returns the scene overview plus the views used, and both meshing methods give triangles', () => {
+    const out = reconstruct({ object: 'crate', method: 'photogrammetry', views: 4, seed: 3 });
+    expect(out.photos.length).toBe(2 + 4);
+    expect(out.photos[0].label).toContain('Scene overview');
+    for (const method of ['voxel', 'smooth'] as const) {
+      const m = surfaceMesh(out.cloud, { method, voxel: 0.03 });
+      expect(m.indices.length).toBeGreaterThan(300);
+    }
+  });
+});

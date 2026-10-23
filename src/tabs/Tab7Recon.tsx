@@ -6,7 +6,7 @@ import { Btn, Callout, Section, Select, Seg, Slider, Toggle, NumberField, Badge,
 import { CloudLayer, SceneLayer, MeshLayer } from '../ui/three';
 import { Play, Upload } from '../ui/icons';
 import { runTask } from '../engine/client';
-import { reconScene, ReconMethod, ReconObjectId } from '../recon/recon';
+import { reconScene, surfaceMesh, ReconMethod, ReconObjectId } from '../recon/recon';
 import { PointCloud } from '../core/pointcloud';
 import { applySim } from '../registration/icp';
 import { turbo } from '../core/colorize';
@@ -19,7 +19,7 @@ const METHODS: { value: ReconMethod | 'external'; label: string }[] = [
   { value: 'external', label: 'Uploaded AI / NeRF / 3DGS result' },
 ];
 
-function PhotoCanvas({ photo, width }: { photo: { w: number; h: number; rgb: Uint8ClampedArray }; width: number }) {
+function PhotoCanvas({ photo, width }: { photo: { w: number; h: number; rgb: Uint8ClampedArray }; width: number | string }) {
   const ref = useRef<HTMLCanvasElement>(null);
   useEffect(() => {
     const cv = ref.current;
@@ -27,7 +27,7 @@ function PhotoCanvas({ photo, width }: { photo: { w: number; h: number; rgb: Uin
     cv.width = photo.w; cv.height = photo.h;
     cv.getContext('2d')!.putImageData(new ImageData(new Uint8ClampedArray(photo.rgb), photo.w, photo.h), 0, 0);
   }, [photo]);
-  return <canvas ref={ref} style={{ width, height: (width * photo.h) / photo.w, borderRadius: 10, display: 'block' }} aria-label="Synthetic photograph of the object" />;
+  return <canvas ref={ref} style={{ width, height: 'auto', aspectRatio: `${photo.w} / ${photo.h}`, borderRadius: 10, display: 'block', background: '#e5e5ea' }} aria-label="Synthetic photograph" />;
 }
 
 export default function Tab7() {
@@ -41,6 +41,8 @@ export default function Tab7() {
   const [rgbColour, setRgbColour] = useState(true);
   const scene = useMemo(() => reconScene(r.object), [r.object]);
   const fileRef = useRef<HTMLInputElement>(null);
+  const [meshOpts, setMeshOpts] = useState<{ method: 'voxel' | 'smooth'; voxel: number }>({ method: 'smooth', voxel: 0.03 });
+  const [userMesh, setUserMesh] = useState<{ positions: Float32Array; indices: Uint32Array } | null>(null);
 
   const out = r.out;
   const recon: PointCloud | null = method === 'external' ? r.ai : out?.cloud ?? null;
@@ -48,12 +50,19 @@ export default function Tab7() {
   const reconShown = aligned ? aligned.aligned : recon;
 
   const meshShown = useMemo(() => {
-    if (!out || method === 'external') return null;
-    if (!aligned) return out.mesh;
-    const p = new Float32Array(out.mesh.positions.length);
-    for (let i = 0; i < p.length; i += 3) { const q = applySim(aligned.T, aligned.scale, [out.mesh.positions[i], out.mesh.positions[i + 1], out.mesh.positions[i + 2]]); p[i] = q[0]; p[i + 1] = q[1]; p[i + 2] = q[2]; }
-    return { positions: p, indices: out.mesh.indices };
-  }, [out, aligned, method]);
+    const base = userMesh ?? (method === 'external' ? null : out?.mesh ?? null);
+    if (!base) return null;
+    if (!aligned) return base;
+    const p = new Float32Array(base.positions.length);
+    for (let i = 0; i < p.length; i += 3) { const q = applySim(aligned.T, aligned.scale, [base.positions[i], base.positions[i + 1], base.positions[i + 2]]); p[i] = q[0]; p[i + 1] = q[1]; p[i + 2] = q[2]; }
+    return { positions: p, indices: base.indices };
+  }, [out, userMesh, aligned, method]);
+  useEffect(() => { setUserMesh(null); }, [out, r.ai, method]);
+  function buildMesh() {
+    if (!recon) { s.notify('Reconstruct (or upload a result) first, then build the surface.', 'warn'); return; }
+    setBusy('Building the surface…');
+    setTimeout(() => { try { setUserMesh(surfaceMesh(recon, meshOpts)); setR({ layer: 'mesh', layout: 'single' }); } catch (e) { s.notify((e as Error).message, 'error'); } finally { setBusy(null); } }, 30);
+  }
 
   const errCloud = useMemo(() => {
     if (!aligned || !r.cmp) return null;
@@ -103,8 +112,18 @@ export default function Tab7() {
       <div style={{ position: 'relative' }}><Viewport id="r-b" group="recon" primary={false} hideGrid hideAxes bgOverride="#ffffff" labelPos="bl" label={aligned ? 'Reconstruction (aligned)' : 'Reconstruction (not aligned)'} home={home} target={target} threshold={0.01} gridSize={0.25}>{content('recon')}</Viewport></div>
     </div>
   ) : photoLayer ? (
-    <div style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', background: '#0b0c10' }}>
-      {out ? <div style={{ textAlign: 'center' }}><PhotoCanvas photo={out.photo} width={Math.min(720, 560)} /><p className="caption" style={{ marginTop: 8, color: 'var(--text2)' }}>Synthetic photograph rendered by the ray-caster (Lambert shading + procedural wood texture) — the input to the image-based methods.</p></div> : <p className="hint" style={{ color: '#fff' }}>Press “Reconstruct” to render the photograph(s).</p>}
+    <div style={{ position: 'absolute', inset: 0, overflow: 'auto', background: '#f5f5f7', padding: '76px 16px 16px' }} data-testid="photo-gallery">
+      {out ? (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 14 }}>
+          {out.photos.map((ph, i) => (
+            <figure key={i} style={{ margin: 0, background: '#fff', borderRadius: 14, padding: 8, boxShadow: '0 1px 6px rgba(0,0,0,.08)' }}>
+              <PhotoCanvas photo={ph} width="100%" />
+              <figcaption className="caption" style={{ padding: '6px 4px 2px', fontWeight: 600 }}>{ph.label}</figcaption>
+            </figure>
+          ))}
+        </div>
+      ) : <p className="hint" style={{ textAlign: 'center', paddingTop: 40 }}>Press “Reconstruct” to render the scene image and the photographs the method uses.</p>}
+      {out && <p className="caption" style={{ marginTop: 10 }}>Synthetic images rendered by the ray-caster (Lambert shading + a procedural wood texture): one wide shot of the scene, then the photographs or RGB-D frames that the chosen method turns into 3D.</p>}
     </div>
   ) : (
     <Viewport home={home} target={target} threshold={0.01} gridSize={0.25} hideGrid hideAxes bgOverride="#ffffff">{content('single')}</Viewport>
@@ -143,6 +162,13 @@ export default function Tab7() {
         {method === 'external' && <p className="hint">Upload a PLY/PCD you produced with NeRF, 3D Gaussian Splatting or an image-to-3D model (export the point cloud / mesh vertices).</p>}
         {(method === 'photogrammetry' || method === 'rgbd') && <Slider label="Number of views" value={r.views} min={2} max={16} step={1} onChange={(views) => setR({ views })} />}
                 <input ref={fileRef} type="file" accept=".ply,.pcd,.las" hidden onChange={async (e) => { const f = e.target.files?.[0]; if (f) { try { const c = await loadFile(f); c.meta.kind = 'reconstructed'; setR({ ai: c, align: null, cmp: null }); } catch (err) { s.notify((err as Error).message, 'error'); } } e.target.value = ''; }} />
+      </Section>
+      <Section title="Surface reconstruction (meshing)">
+        <p className="hint">Turns the reconstructed points into a surface of triangles.</p>
+        <Seg value={meshOpts.method} onChange={(m) => setMeshOpts({ ...meshOpts, method: m })} label="Meshing method" options={[{ value: 'voxel', label: 'Voxel surface' }, { value: 'smooth', label: 'Smoothed surface' }]} />
+        <Slider label="Cell size" value={meshOpts.voxel * 100} min={1.5} max={8} step={0.5} unit=" cm" format={(v) => v.toFixed(1)} onChange={(v) => setMeshOpts({ ...meshOpts, voxel: v / 100 })} hint="Small cells keep detail but leave holes; large cells fill holes but blur detail." />
+        <Btn variant="primary" onClick={buildMesh} disabled={!recon} busy={busy === 'Building the surface…'} testId="build-mesh">Build surface</Btn>
+        {meshShown && <span className="caption">{fmtN(meshShown.indices.length / 3)} triangles</span>}
       </Section>
       </>)}
       {pane === 'compare' && (<>
@@ -189,11 +215,12 @@ export default function Tab7() {
       viewExtras={<>
         <Btn sm icon={<Play size={15} />} onClick={genLidar} busy={busy === 'Scanning the object with LiDAR…'} testId="lidar-scan">LiDAR</Btn>
         <Btn sm variant="primary" icon={method === 'external' ? <Upload size={15} /> : <Play size={15} />} onClick={genRecon} busy={busy?.startsWith('Reconstructing') ?? false} testId="reconstruct">{method === 'external' ? 'Upload result' : 'Reconstruct'}</Btn>
+        <Btn sm onClick={buildMesh} disabled={!recon} busy={busy === 'Building the surface…'} testId="mesh-toolbar">Mesh</Btn>
         <Btn sm variant="primary" onClick={align} disabled={!r.lidar || !recon} busy={busy?.startsWith('Aligning') ?? false} testId="align-recon">Align</Btn>
       </>}
       overlays={
         <>
-          {out && !photoLayer && <div className="overlay glass card" style={{ right: 12, bottom: 12, padding: 8 }}><PhotoCanvas photo={out.photo} width={170} /></div>}
+          {out && !photoLayer && <button className="overlay glass card" style={{ right: 12, bottom: 12, padding: 6, display: 'flex', gap: 6, border: 0, cursor: 'pointer' }} onClick={() => setR({ layer: 'photo', layout: 'single' })} title="Open all the images" data-testid="photo-strip">{out.photos.slice(0, 3).map((ph, i) => <PhotoCanvas key={i} photo={ph} width={96} />)}</button>}
           {r.layer === 'error' && aligned && <div className="overlay glass card" style={{ right: 12, top: 70, width: 200 }}><div className="caption">distance to LiDAR</div><div style={{ height: 10, borderRadius: 6, background: `linear-gradient(90deg,${Array.from({ length: 10 }, (_, i) => { const c = turbo(i / 9); return `rgb(${c[0]},${c[1]},${c[2]})`; }).join(',')})` }} /><div style={{ display: 'flex', justifyContent: 'space-between' }} className="mono caption"><span>0</span><span>{(r.errMax * 1000).toFixed(0)} mm</span></div></div>}
         </>
       }

@@ -88,6 +88,7 @@ export interface ReconOutput {
   cloud: PointCloud;
   mesh: { positions: Float32Array; indices: Uint32Array };
   photo: { w: number; h: number; rgb: Uint8ClampedArray };
+  photos: { label: string; w: number; h: number; rgb: Uint8ClampedArray }[]; // the scene overview plus every image the method used
   hiddenTransform: { scale: number; yawDeg: number; t: Vec3 } | null; // revealed only after alignment, for validation
   notes: string[];
 }
@@ -133,6 +134,36 @@ export function voxelSurfaceMesh(c: PointCloud, vs: number): { positions: Float3
   return { positions: Float32Array.from(pos), indices: Uint32Array.from(idx) };
 }
 
+/** Surface reconstruction from a point cloud: a blocky voxel surface, or the same surface with welded vertices and Laplacian smoothing. */
+export function surfaceMesh(c: PointCloud, o: { method: 'voxel' | 'smooth'; voxel: number; iterations?: number }): { positions: Float32Array; indices: Uint32Array } {
+  const m = voxelSurfaceMesh(c, o.voxel);
+  if (o.method === 'voxel') return m;
+  // weld duplicate vertices
+  const map = new Map<string, number>(), remap = new Uint32Array(m.positions.length / 3), vp: number[] = [];
+  for (let i = 0; i < remap.length; i++) {
+    const x = m.positions[i * 3], y = m.positions[i * 3 + 1], z = m.positions[i * 3 + 2];
+    const k = `${Math.round(x / o.voxel * 4)},${Math.round(y / o.voxel * 4)},${Math.round(z / o.voxel * 4)}`;
+    let id = map.get(k);
+    if (id === undefined) { id = vp.length / 3; map.set(k, id); vp.push(x, y, z); }
+    remap[i] = id;
+  }
+  const idx = Uint32Array.from(m.indices, (i) => remap[i]);
+  const n = vp.length / 3, nbr: Set<number>[] = Array.from({ length: n }, () => new Set());
+  for (let t = 0; t < idx.length; t += 3) for (let e = 0; e < 3; e++) { const a = idx[t + e], b = idx[t + (e + 1) % 3]; nbr[a].add(b); nbr[b].add(a); }
+  let cur = Float32Array.from(vp);
+  for (let it = 0; it < (o.iterations ?? 6); it++) {
+    const next = new Float32Array(cur.length);
+    for (let v = 0; v < n; v++) {
+      const s = nbr[v];
+      if (!s.size) { next.set(cur.subarray(v * 3, v * 3 + 3), v * 3); continue; }
+      let x = 0, y = 0, z = 0; for (const u of s) { x += cur[u * 3]; y += cur[u * 3 + 1]; z += cur[u * 3 + 2]; }
+      next[v * 3] = cur[v * 3] * 0.4 + (x / s.size) * 0.6; next[v * 3 + 1] = cur[v * 3 + 1] * 0.4 + (y / s.size) * 0.6; next[v * 3 + 2] = cur[v * 3 + 2] * 0.4 + (z / s.size) * 0.6;
+    }
+    cur = next;
+  }
+  return { positions: cur, indices: idx };
+}
+
 export function reconstruct(p: ReconParams): ReconOutput {
   const scene = reconScene(p.object);
   const rng = makeRng(p.seed);
@@ -140,8 +171,13 @@ export function reconstruct(p: ReconParams): ReconOutput {
   const W = 160, H = 120;
   const notes: string[] = [];
   const photoCam: Camera = { pos: [1.8, -1.6, 1.1], target: center, fovDeg: 50 };
-  const photoView = renderView(scene, photoCam, 320, 240);
-  const photo = { w: 320, h: 240, rgb: photoView.rgb };
+  const PW = 400, PH = 300;
+  const photoView = renderView(scene, photoCam, PW, PH);
+  const photo = { w: PW, h: PH, rgb: photoView.rgb };
+  const photos: ReconOutput['photos'] = [
+    { label: 'Scene overview (wide shot)', w: PW, h: PH, rgb: renderView(scene, { pos: [4.2, -3.8, 2.6], target: [0, 0, 0.5], fovDeg: 62 }, PW, PH).rgb },
+    { label: 'Main photo', ...photo },
+  ];
 
   const pos: number[] = [], col: number[] = [];
   let cams: Camera[];
@@ -155,7 +191,8 @@ export function reconstruct(p: ReconParams): ReconOutput {
   } else {
     cams = orbitCameras(Math.max(2, p.views), 2.2, p.method === 'rgbd' ? 28 : 32, center, rng.range(0, 60));
     const pc: PointCloud[] = [];
-    cams.forEach((cam) => {
+    cams.forEach((cam, ci) => {
+      if (ci < 6) photos.push({ label: `${p.method === 'rgbd' ? 'RGB-D frame' : 'Photo'} ${ci + 1} of ${cams.length}`, w: PW, h: PH, rgb: renderView(scene, cam, PW, PH).rgb });
       // Photogrammetry: camera poses come from SfM, so they are slightly wrong. RGB-D: tracked / known poses.
       const noisyCam: Camera = p.method === 'photogrammetry'
         ? { ...cam, pos: [cam.pos[0] + 0.012 * rng.gauss(), cam.pos[1] + 0.012 * rng.gauss(), cam.pos[2] + 0.012 * rng.gauss()] as Vec3, target: [cam.target[0] + 0.01 * rng.gauss(), cam.target[1] + 0.01 * rng.gauss(), cam.target[2] + 0.01 * rng.gauss()] as Vec3 }
@@ -203,7 +240,7 @@ export function reconstruct(p: ReconParams): ReconOutput {
     notes.push('Output is in an arbitrary frame; align it to the LiDAR cloud (with scale) before measuring any error.');
   }
   const mesh = voxelSurfaceMesh(cloud, 0.025);
-  return { cloud, mesh, photo, hiddenTransform: hidden, notes };
+  return { cloud, mesh, photo, photos, hiddenTransform: hidden, notes };
 }
 
 // ---------------------------------------------------------------- LiDAR reference + comparison

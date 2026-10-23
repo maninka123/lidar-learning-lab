@@ -93,6 +93,7 @@ export function Viewport({ children, home = [8, -9, 6.5], target = [0, 0, 1], gr
   const bg = useLab((s) => s.view.background);
   const showGrid = useLab((s) => s.view.showGrid);
   const showAxes = useLab((s) => s.view.showAxes);
+  const panMode = useLab((s) => s.view.panMode);
   const interaction = useLab((s) => s.interaction);
   const light = bg === 'light';
   const color = bgOverride ?? BG[bg];
@@ -109,7 +110,9 @@ export function Viewport({ children, home = [8, -9, 6.5], target = [0, 0, 1], gr
         <ambientLight intensity={1.15} />
         <directionalLight position={[6, -4, 12]} intensity={1.4} />
         <directionalLight position={[-6, 5, 6]} intensity={0.5} />
-        <OrbitControls makeDefault enableDamping dampingFactor={0.12} maxPolarAngle={Math.PI} />
+        <OrbitControls makeDefault enableDamping dampingFactor={0.12} maxPolarAngle={Math.PI} enablePan screenSpacePanning panSpeed={1.3}
+          mouseButtons={{ LEFT: panMode ? THREE.MOUSE.PAN : THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: panMode ? THREE.MOUSE.ROTATE : THREE.MOUSE.PAN }}
+          touches={{ ONE: panMode ? THREE.TOUCH.PAN : THREE.TOUCH.ROTATE, TWO: THREE.TOUCH.DOLLY_PAN }} />
         <Rig home={home} target={target} group={group} id={id} primary={primary} />
         {showGrid && !hideGrid && (
           <Grid rotation={[Math.PI / 2, 0, 0]} position={[0, 0, -0.002]} args={[40, 40]} cellSize={gridSize} sectionSize={gridSize * 5} cellColor={light ? '#b9bcc4' : '#2c2f38'} sectionColor={light ? '#8d919c' : '#4a4f5c'} fadeDistance={60} fadeStrength={1.5} infiniteGrid raycast={() => null} />

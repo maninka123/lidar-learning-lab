@@ -86,6 +86,8 @@ export default function Tab5() {
   const reqId = useRef(0);
   const setProc = (patch: Partial<typeof proc>) => useLab.setState({ proc: { ...useLab.getState().proc, ...patch } });
 
+  // nothing to process yet: scan the current scene so the tab works straight away
+  useEffect(() => { if (!Object.keys(useLab.getState().clouds).length && !useLab.getState().busy) void runScan(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   // keep the source pinned
   useEffect(() => { if (original && proc.sourceId !== Object.keys(s.clouds).find((k) => s.clouds[k] === original)) setProc({ sourceId: Object.keys(s.clouds).find((k) => s.clouds[k] === original) ?? null }); }, [original]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -163,7 +165,7 @@ export default function Tab5() {
       <Section title="Point cloud">
         {ids.length ? (
           <Select value={proc.sourceId ?? ids[0]} options={ids.map((k) => ({ value: k, label: `${s.clouds[k].name} (${fmtN(s.clouds[k].count)})` }))} onChange={(k) => setProc({ sourceId: k, steps: [], result: null, quality: null })} />
-        ) : <p className="hint">Create a point cloud first.</p>}
+        ) : <div style={{ display: 'grid', gap: 8 }}><p className="hint">No point cloud yet. Scan the current scene to get one to process.</p><Btn variant="primary" onClick={() => void runScan()} busy={!!s.busy} testId="proc-scan">Scan this scene</Btn></div>}
         {original && <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}><Badge kind={cloudBadge(original.meta.kind)} /><span className="caption">{fmtN(original.count)} points · never modified</span></div>}
       </Section>
 

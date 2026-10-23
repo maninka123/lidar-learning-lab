@@ -1,121 +1,77 @@
 # LiDAR Learning Lab
 
-A browser-based, hands-on simulation platform for a 60-minute workshop on **LiDAR, point clouds, TLS / MLS, SLAM, point-cloud processing, clustering and segmentation, image-to-3D reconstruction, scene graphs and AI reasoning**.
-
-Participants explore 3D scenes, drive virtual LiDAR scanners (real ray casting against scene geometry), generate point clouds, process and segment them, register scans, compare LiDAR with image-based reconstruction and query a geometric scene graph. Everything runs in the browser: no server, database, authentication or AI API is needed.
+A browser-based, hands-on lab for a 60-minute workshop on **LiDAR, point clouds, registration, SLAM, processing, segmentation, image-to-3D and scene graphs**. Virtual scanners cast real rays into 3D scenes; you can also explore real point clouds, align scans, clean and segment them. It all runs in the browser: no server, database or AI API.
 
 **Live demo: https://maninka123.github.io/lidar-learning-lab/**
 
-**Live tools bundled:** eleven lecture-aligned tabs (light theme) · four procedural scenes · PLY / PCD / LAS import · PLY / PCD export · 9 auto-checked challenges with JSON / PDF summary.
+| | | |
+|:-:|:-:|:-:|
+| ![What is LiDAR](docs/screens/01-what-is-lidar.jpg) **1 · What is LiDAR?** | ![Scanner simulator](docs/screens/02-scanner-simulator.jpg) **2 · Scanner Simulator** | ![Compare sensors](docs/screens/03-compare-sensors.jpg) **3 · Compare Sensors** |
+| ![Gallery](docs/screens/04-point-cloud-gallery.jpg) **4 · Point Cloud Gallery** | ![Registration](docs/screens/05-registration.jpg) **5 · Point Cloud Registration** | ![SLAM](docs/screens/06-slam.jpg) **6 · SLAM & Mobile Scanning** |
+| ![Processing](docs/screens/07-processing.jpg) **7 · Point Cloud Processing** | ![Segmentation](docs/screens/08-segmentation.jpg) **8 · Clustering & Segmentation** | ![Image to 3D](docs/screens/09-image-to-3d.jpg) **9 · Image to 3D** |
+| ![Scene graph](docs/screens/10-scene-graph.jpg) **10 · Scene Graphs & 3D AI** | | |
 
 ## Quick start
 
-Requires **Node.js 20.19+ or 22+**.
+Needs **Node.js 20.19+ or 22+**. Keep the project on a local disk (cloud-synced folders make `node_modules` very slow).
 
 ```bash
-npm install          # install dependencies
-npm run dev          # development server → http://localhost:5173
-npm run build        # type-check + production build into dist/
-npm run preview      # serve the production build → http://localhost:4173
-npm test             # unit tests (Vitest)
-npm run test:e2e     # browser tests (Playwright; builds + serves the app itself)
-npm run typecheck    # TypeScript only
+npm install
+npm run dev        # http://localhost:5173
+npm run build      # type-check + production build into dist/
+npm test           # unit tests (Vitest)
+npm run test:e2e   # browser tests (Playwright; first run: npx playwright install chromium)
 ```
-
-First time running the end-to-end tests: `npx playwright install chromium`.
-
-> Tip: keep the project on a normal local disk. Cloud-synced folders (OneDrive, iCloud, Dropbox) can make `node_modules` extremely slow.
 
 ## Tabs
 
-| # | Tab | What you can do |
-|---|-----|-----------------|
-| 1 | **What is LiDAR?** | Concept page with no scene: a sensor, a wall and a few objects. Watch a laser pulse travel out and back (time of flight, R = cΔt/2), see beam divergence grow with range, and explore horizontal/vertical FOV in 3D, top and side views. Click any point to read its position, range and intensity. |
-| 2 | **Scanner Simulator** | Place and aim a scanner; set FOV, angular resolution, channels, range, frequency, returns and noise; pick a scanner type (2D, 4–128-channel mechanical, TLS, prism, MEMS, solid-state array) with commercial models (Velodyne, Ouster, Hesai, RoboSense, Livox, SICK, Hokuyo, Blickfeld, Leica, FARO…); animated scan pattern for non-repetitive scanners. Specifications are approximate public values. |
-| 3 | **Compare Sensors** | The same environment scanned by 2–4 sensors you choose, point clouds only, cameras linked. |
-| 4 | **Point Cloud Gallery** | Real measured point clouds with play / pause through frames: Velodyne VLP-16 (from a pcap), Ouster OS1-128 and OS0-128 (from OSF recordings), Livox MID-360 (from a ROS 2 bag) and a RIEGL VZ-400 TLS tree. Shows scanner type, field of view, channels and the raw file text, and lets you open your own file. |
-| 5 | **Point Cloud Registration** | Two point clouds, no scene. Move cloud B by hand and press Calculate to read the RMSE and overlap, or align automatically with ICP (point-to-point or point-to-plane, match distance, best-pairs trimming, iterations). Iteration scrubber, convergence chart, run comparison table and the 4 × 4 transformation matrix drawn on the view. |
-| 6 | **SLAM & Mobile Scanning** | A city district with roads, crossings, a school, vehicles and pedestrians. Mobile scanning along waypoints (handheld, vehicle or UAV with adjustable flight height, motion distortion), then a closed-loop SLAM run with drift (noisy odometry or ICP scan matching) and a loop closure *teaching approximation*. |
-| 7 | **Point Cloud Processing** | Add/reorder/remove pipeline steps (crop, voxel, random downsample, noise, outliers, dropout, statistical & radius outlier removal, normals, rigid transform) on an immutable original; split comparison; deterministic seed; export. |
-| 8 | **Clustering & Segmentation** | RANSAC planes, ground removal, Euclidean clustering, DBSCAN, parameter-sensitivity sweep, A/B comparison, over-/under-segmentation scoring against ground truth. |
-| 9 | **Image to 3D** | Photo, LiDAR cloud, reconstruction, voxel-surface mesh, overlay and error map; similarity alignment (rotation, translation and scale); error statistics only after a valid alignment. |
-| 10 | **Scene Graphs & 3D AI** | Nodes with id, label, position, size, bbox and confidence; geometric relations; interactive graph ↔ 3D selection; deterministic offline question answering; link to the *local-llm-fit* model-fit tool. |
-| 11 | **Challenges** | Nine automatically checked exercises, progress tracking, JSON/PDF summary download and a suggested 60-minute agenda. |
+| # | Tab | What you do |
+|---|-----|-------------|
+| 1 | **What is LiDAR?** | A sensor, a wall and a person with no scene: time of flight, beam divergence, field of view. Click any point for its position and intensity. |
+| 2 | **Scanner Simulator** | Place a scanner and set FOV, resolution, channels, range and noise; pick a scanner type with commercial presets; animated patterns for non-repetitive scanners. |
+| 3 | **Compare Sensors** | Two to four sensors scan the same place side by side. |
+| 4 | **Point Cloud Gallery** | Real clouds with play/pause through frames: Velodyne VLP-16, Ouster OS1-128 / OS0-128, Livox MID-360, RIEGL VZ-400 TLS. Raw file view and your own file. |
+| 5 | **Point Cloud Registration** | Two clouds, no scene. Move B by hand and press Calculate, or run ICP (point-to-point / point-to-plane, match distance, trimming). 4 × 4 matrix shown on the view. |
+| 6 | **SLAM & Mobile Scanning** | City district: moving scans (handheld, vehicle, UAV with adjustable height), then a SLAM run with drift and loop closure. |
+| 7 | **Point Cloud Processing** | Pipeline of filters on an untouched original: crop, voxel, noise, outliers, SOR/ROR, normals. |
+| 8 | **Clustering & Segmentation** | RANSAC planes, Euclidean clustering, DBSCAN, scoring against ground truth. |
+| 9 | **Image to 3D** | Scene and input images, three reconstruction methods, surface meshing (voxel / smoothed), alignment with scale, error map. |
+| 10 | **Scene Graphs & 3D AI** | Nodes and geometric relations, offline question answering, link to [local-llm-fit](https://maninka123.github.io/local-llm-fit/). |
+| 11 | **Challenges** | Nine auto-checked exercises with a JSON / PDF summary. |
 
-## What is real, and what is a teaching simplification
+Viewport controls: left-drag rotates, right-drag or the **Pan** button moves the cloud, wheel zooms.
 
-The lab is explicit about this inside the UI; the same rules apply here.
+## What is real, what is simplified
 
-* **Scanning is real ray casting.** Each beam is cast against analytic boxes, cylinders and spheres; range is measured from the sensor origin, noise is added along the ray, and points are built from sensor-relative range and direction and transformed to world coordinates.
-* **Intensity is a simplified model**, `I ≈ ρ·cosθ ÷ (1 + (r/r₀)²)`, and detection range scales with √reflectivity. It is not a calibrated physical return. Intensity and RGB are stored and rendered as separate attributes.
-* **Commercial sensor profiles** (VLP-16, OS1, Mid-360) list public datasheet values and a list of simplifications. Illustrative scan patterns (hybrid mirror, solid-state rosette) do **not** reproduce any commercial pattern. Re-check current datasheets before quoting numbers.
-* **SLAM** is a controlled-error teaching model. Loop closure = scan-to-scan ICP between last and first scan + linear distribution of the residual — not a pose-graph back-end, and nothing is prerecorded.
-* **Segmentation:** RANSAC is rule-based geometry, Euclidean clustering and DBSCAN are unsupervised and know nothing about classes. The class labels shown are **ground-truth annotations written by the simulator**, not predictions of a trained model. The “rule-based class guess” is a deliberately crude size heuristic shown for contrast.
-* **Image to 3D:** the photograph, depth maps, multi-view photogrammetry, RGB-D fusion and single-image-depth results are produced by in-browser simulations (ray-cast renders + depth-error models + depth-map fusion). **No NeRF, 3D Gaussian Splatting or generative-model outputs are bundled or faked.** You can upload your own prerecorded PLY/PCD and evaluate it with the same alignment and error tools.
-* **Scene-graph questions** use an offline deterministic intent matcher, not an LLM. The tool contract a real LLM would use is documented in the app; an LLM would have to obtain every measurement from those geometric tools.
+* **Scanning is real ray casting** against boxes, cylinders and spheres, with range noise. Intensity uses a simple model, `I ≈ ρ·cosθ / (1 + (r/r₀)²)`. Sensor presets use approximate public datasheet values.
+* **SLAM** is a teaching model: injected odometry error or ICP scan matching, and a loop closure that is ICP plus spreading the residual. Not a pose-graph back-end.
+* **Segmentation labels** shown are simulator ground truth, not predictions of a trained model.
+* **Image to 3D** is simulated (ray-cast renders, depth-error models, depth fusion). No NeRF or Gaussian-splatting output is bundled; you can upload your own result.
+* **Scene-graph answers** come from an offline rule matcher, not an LLM.
 
-## Datasets
+## Data
 
-| Dataset | Source | Licence | Origin | Attributes |
-|---|---|---|---|---|
-| Scene A – room (8 × 6 × 3 m) | Procedural, this repo | MIT | Synthetic | geometry, class, instance, material reflectivity |
-| Scene B – industrial workshop | Procedural, this repo | MIT | Synthetic | as above |
-| Scene C – street | Procedural, this repo | MIT | Synthetic | as above, porous foliage (multi-return) |
-| Scene D – city district (76 × 56 m) | Procedural, this repo | MIT | Synthetic | as above, pedestrians, traffic lights |
-| Real TLS tree (RIEGL VZ-400) | [Zenodo 5076045](https://zenodo.org/records/5076045), UCL | CC BY 4.0 | Measured | x y z |
-| Ouster OS1-128 / OS0-128 frames | [ouster-sdk test data](https://github.com/ouster-lidar/ouster-sdk) (tests/osfs), decoded from OSF | BSD-3-Clause | Measured | x y z, intensity |
-| Livox MID-360 frames | [Zenodo 14841855](https://zenodo.org/records/14841855), AIST (ROS 2 bag, `/livox/lidar`) | CC BY 4.0 | Measured | x y z, intensity |
-| Velodyne VLP-16 frames | [Keio-CSG/lidar-spoofing-artifacts](https://github.com/Keio-CSG/lidar-spoofing-artifacts) (benign pcap), decoded with velodyne_decoder | no licence stated: credit Keio-CSG | Measured | x y z, intensity |
-| User uploads | PLY (ascii/binary), PCD (ascii/binary/compressed), LAS 1.0–1.4 (uncompressed) | user's | Measured or synthetic (you choose) | whatever the file contains |
+| Dataset | Source | Licence |
+|---|---|---|
+| Scenes A–D (room, workshop, street, city) | Procedural, this repo | MIT |
+| RIEGL VZ-400 tree (TLS) | [Zenodo 5076045](https://zenodo.org/records/5076045), UCL | CC BY 4.0 |
+| Ouster OS1-128 / OS0-128 frames | [ouster-sdk](https://github.com/ouster-lidar/ouster-sdk) test data | BSD-3-Clause |
+| Livox MID-360 frames | [Zenodo 14841855](https://zenodo.org/records/14841855), AIST | CC BY 4.0 |
+| Velodyne VLP-16 frames | [Keio-CSG/lidar-spoofing-artifacts](https://github.com/Keio-CSG/lidar-spoofing-artifacts) | no licence stated, credit Keio-CSG |
+| Your files | PLY, PCD (incl. compressed), LAS 1.0–1.4 | yours |
 
-Units are metres; coordinates are right-handed, **Z-up**. Other public datasets (e.g. Stanford 3D Scanning Repository, ETH TLS, Semantic3D, KITTI samples) are not bundled: redistribution terms still need to be verified for each. LAZ is not decoded in the browser — convert with `pdal translate in.laz out.las`.
+Units are metres, Z-up. LAZ is not decoded in the browser (`pdal translate in.laz out.las`).
 
-## Performance
-
-Designed for laptops without a dedicated GPU: typed arrays, `BufferGeometry` points, adjustable point budget and render budget (with automatic reduction when the frame rate drops), and Web Workers for scanning, processing, segmentation, ICP, SLAM and reconstruction. Target: responsive orbiting with ≈100 000 points. No large dataset is downloaded automatically.
-
-## Architecture
+## Code layout
 
 ```
-src/
-  core/           PRNG, math (rigid transforms, Horn/Umeyama fit, Jacobi eigen), k-d tree,
-                  point-cloud model + attribute handling, colour mapping
-  scenes/         scene definitions (room, industrial, outdoor), analytic ray caster,
-                  surface sampling + coverage / occlusion classification
-  sensor/         presets & documented profiles, scan patterns, simulator (poses over time)
-  processing/     filters, noise/outliers, voxel, normals, pipeline runner
-  segmentation/   RANSAC, Euclidean clustering, DBSCAN, GT evaluation
-  registration/   ICP (point-to-point, point-to-plane, trimmed, optional scale), SLAM teaching simulation
-  recon/          synthetic photo + depth-error models, fusion, voxel mesh, alignment, error stats
-  graph/          scene graph builder, relations, query engine, layout
-  io/             PLY / PCD / LAS readers, PLY / PCD writers
-  engine/         task registry, Web Worker + client with main-thread fallback
-  exercises/      challenge definitions, automatic checks, PDF writer
-  state/          Zustand store, actions
-  ui/, tabs/      React + React Three Fiber components, one file per lecture tab
-tests/            Vitest unit tests (algorithms, IO, simulator, graph, SLAM, recon)
-e2e/              Playwright browser tests (workshop walkthrough)
+src/core  src/scenes  src/sensor  src/processing  src/segmentation  src/registration
+src/recon  src/graph  src/io  src/engine (Web Workers)  src/exercises  src/state  src/ui  src/tabs
+tests/ (Vitest)   e2e/ (Playwright)   docs/screens/ (README images)
 ```
 
-Stack: React, TypeScript, Vite, Three.js + React Three Fiber + Drei, Zustand, Tailwind CSS, Vitest, Playwright.
+Stack: React, TypeScript, Vite, Three.js + React Three Fiber, Zustand, Tailwind CSS. A push to `main` deploys to GitHub Pages through `.github/workflows/pages.yml` (Settings → Pages → Source: GitHub Actions).
 
-## Validation
+## Related
 
-Unit tests cover: ray distances to a known wall; FOV and angular resolution changing coverage; moving the scanner changing measurements; intensity distinct from RGB; downsampling reducing/preserving counts; reproducible noise; outlier filters removing injected outliers; RANSAC recovering a known plane; DBSCAN separating clusters; ICP recovering a known small rigid transform; scene-graph distances in world coordinates; PLY/PCD (ascii and binary) round-trips keeping attributes; SLAM drift and loop closure; reconstruction alignment. The Playwright suite walks through every tab.
-
-## Deployment
-
-The app is published automatically to GitHub Pages by `.github/workflows/pages.yml` on every push to `main` → https://maninka123.github.io/lidar-learning-lab/ (one-time setup: repo **Settings → Pages → Source: GitHub Actions**).
-
-`npm run build` produces a fully static site in `dist/` (relative asset paths), deployable to any static host (GitHub Pages, Netlify, S3…). Nothing is sent to a server; uploaded files stay in the browser.
-
-## Related tools
-
-Scan-architecture descriptions (prism rosette, MEMS eye-shaped pattern, fixed arrays) follow **[Rotating Target Calibration Studio](https://github.com/maninka123/rotating-target-calibration-studio)** ([live demo](https://maninka123.github.io/rotating-target-calibration-studio/)), which goes deeper into comparing LiDAR and camera architectures.
-
-
-Wondering which local LLM you could run for the scene-graph question-answering idea? Try **[Model Fit Explorer (local-llm-fit)](https://github.com/maninka123/local-llm-fit)** — [web version](https://maninka123.github.io/local-llm-fit/). It is linked (and optionally embeddable on request) from Tab 8.
-
-## Licence
-
-MIT — see [LICENSE](LICENSE).
+[Rotating Target Calibration Studio](https://github.com/maninka123/rotating-target-calibration-studio) (scan architectures) · [Model Fit Explorer](https://github.com/maninka123/local-llm-fit) (which local LLM can you run) · Licence: MIT, see [LICENSE](LICENSE).
