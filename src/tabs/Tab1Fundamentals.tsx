@@ -113,7 +113,7 @@ export default function Tab1() {
     <Viewport home={scene.cameraHome} target={scene.cameraTarget}>
       {!pointsOnly && <SceneFromStore annotate={false} />}
       {cloud && <CloudFromStore cloud={cloud} mode={sensor.pattern === 'panoramic' && cloud.colors ? 'rgb' : 'flat'} colorOpts={{ flat: [230, 30, 40] }} />}
-      {!pointsOnly && <SensorMarker x={s.pose.x} y={s.pose.y} z={s.pose.z} yaw={s.pose.yaw} pitch={s.pose.pitch} sensor={sensor} label="Scanner" />}
+      {!pointsOnly && <SensorMarker x={s.pose.x} y={s.pose.y} z={s.pose.z} yaw={s.pose.yaw} pitch={s.pose.pitch} scale={s.sceneId === 'C' ? 3 : s.sceneId === 'B' ? 1.8 : 1} sensor={sensor} label="Scanner" />}
       {!pointsOnly && s.view.showRays && info?.viz && <RayLines origin={info.viz.origin} ends={info.viz.ends} hit={info.viz.hit} />}
       <PickLayer />
     </Viewport>

@@ -20,8 +20,6 @@ const PCL = 'Point Cloud Library sample data';
 const ZEN = 'Zenodo';
 const REAL: RealSet[] = [
   { id: 'riegl', label: 'Tree · RIEGL VZ-400 (TLS)', group: 'Terrestrial laser scanning (TLS)', file: 'riegl_vz400_tree.ply', kind: 'Terrestrial (tripod) scan', scanner: 'RIEGL VZ-400 terrestrial laser scanner', fov: { h: 360, vMin: -40, vMax: 60, ch: 1 }, specs: 'rotating mirror, 360° × 100°, range up to ≈ 600 m (datasheet, approx.)', blurb: 'One tree scanned from a tripod with a RIEGL VZ-400 in Russell Square, London. A TLS scan is very dense and has no colour here: only x, y, z.', source: `${ZEN} record 5076045 (UCL, Phil Wilkes), file RSQ01_2017_T102`, license: 'CC BY 4.0' },
-  { id: 'orbis', label: 'Tree · FARO Orbis + HESAI XT32 (MLS)', group: 'Mobile laser scanning (MLS)', file: 'faro_orbis_mls_tree.ply', kind: 'Mobile (handheld) scan', scanner: 'FARO Orbis handheld scanner with a HESAI XT32 lidar', fov: { h: 360, vMin: -16, vMax: 15, ch: 32 }, specs: '32 channels, 360° × 31°, range ≈ 120 m (datasheet, approx.)', blurb: 'One hardwood tree in a Québec forest, scanned by a person walking with a handheld mobile scanner (32-channel lidar + camera). The scan was georeferenced, processed and the tree was segmented from the plot, so it is processed data, not a raw sweep. It has colour and intensity.', source: `${ZEN} record 21515256 (Vandendaele, Havreljuk, Roussel et al.), file DUC0001-01_54`, license: 'CC BY 4.0' },
-  { id: 'lms400', label: 'Table scene · SICK LMS400 (line scanner)', group: 'Line scanner', file: 'table_scene_lms400.pcd', kind: 'Tabletop scene', scanner: 'SICK LMS400 (named in the file name)', fov: { h: 70, vMin: 0, vMax: 0, ch: 1 }, specs: 'single beam swept over ≈ 70° (datasheet, approx.)', blurb: 'A close-range scene recorded with a SICK LMS400 line scanner. One shot is only a single line (a profile). The 3D shape appears only after many profiles are combined using the scanner’s motion or pan-tilt: that is processing, not a single measurement. How this file was captured is not documented.', source: 'Point Cloud Library sample data (tutorials/table_scene_lms400.pcd)', license: 'BSD-3-Clause' },
 ];
 
 const REAL_UP: RealSet = { id: 'upload', label: 'Your file', group: 'Your file', file: '', kind: 'Uploaded file', scanner: 'not specified', blurb: 'The file you opened. Colour and intensity are shown if the file has them.', source: 'Your file', license: 'yours' };
@@ -76,7 +74,7 @@ function ScannerFigure({ p }: { p: { hFov: number; vMin: number; vMax: number; c
 
 export default function Tab2() {
   const s = useLab();
-  const [sel, setSel] = useState('orbis');
+  const [sel, setSel] = useState('riegl');
   const [spec, setSpec] = useState({ name: '', channels: '', hFov: '', vFov: '' });
   const [cloud, setCloud] = useState<PointCloud | null>(null);
   const [busy, setBusy] = useState(false);
@@ -100,7 +98,7 @@ export default function Tab2() {
 
   const viewport = (
     <Viewport home={home} target={target} threshold={0.05} gridSize={Math.max(0.5, cloud ? sizeOf(cloud) / 10 : 1)}>
-      {cloud && <CloudLayer cloud={cloud} mode={colour === 'auto' ? (cloud.colors ? 'rgb' : 'height') : colour === 'intensity' && !cloud.intensity ? 'height' : colour === 'rgb' && !cloud.colors ? 'height' : colour} size={2} budget={s.view.renderBudget} pickable={false} />}
+      {cloud && <CloudLayer cloud={cloud} mode={colour === 'auto' ? (cloud.colors ? 'rgb' : 'height') : colour === 'intensity' && !cloud.intensity ? 'height' : colour === 'rgb' && !cloud.colors ? 'height' : colour} size={2} budget={Math.max(s.view.renderBudget, 400000)} pickable={false} />}
     </Viewport>
   );
 
@@ -108,7 +106,7 @@ export default function Tab2() {
     <div style={{ display: 'grid', gap: 12, paddingTop: 8 }}>
       <div data-testid="gallery-select">
         <Select<string> label="Point cloud" value={sel} onChange={setSel} options={REAL.map((r) => ({ value: r.id, label: r.label }))}
-          groups={[...['Terrestrial laser scanning (TLS)', 'Mobile laser scanning (MLS)', 'Line scanner'].map((g) => ({ label: g, options: REAL.filter((r) => r.group === g).map((r) => ({ value: r.id, label: r.label })) })), ...(sel === 'upload' ? [{ label: 'Your file', options: [{ value: 'upload', label: REAL_UP.label }] }] : [])]} />
+          groups={[...['Terrestrial laser scanning (TLS)'].map((g) => ({ label: g, options: REAL.filter((r) => r.group === g).map((r) => ({ value: r.id, label: r.label })) })), ...(sel === 'upload' ? [{ label: 'Your file', options: [{ value: 'upload', label: REAL_UP.label }] }] : [])]} />
       </div>
       <Select<string> label="Colour by" value={colour} onChange={(v) => setColour(v as typeof colour)} options={[{ value: 'auto', label: 'Automatic' }, { value: 'height', label: 'Height' }, ...(cloud?.intensity ? [{ value: 'intensity', label: 'Intensity' }] : []), ...(cloud?.colors ? [{ value: 'rgb', label: 'RGB colour' }] : [])]} />
       <div className="callout" data-testid="gallery-info" style={{ gap: 8 }}>

@@ -105,37 +105,24 @@ test.describe('LiDAR Learning Lab', () => {
     await expect.poll(() => state(page, (s) => s.accumulate)).toBe(false);
   });
 
-  test('tab 3: point cloud gallery - real TLS, MLS and line-scanner clouds with known scanners', async ({ page }) => {
+  test('tab 3: point cloud gallery - real TLS scan with raw view', async ({ page }) => {
     await go(page, 3);
-    await expect(page.getByTestId('gallery-info')).toContainText('FARO Orbis', { timeout: 60000 });
-    await expect(page.getByTestId('gallery-info')).toContainText('32', { timeout: 60000 });
-    await expect(page.getByRole('button', { name: 'Exercise' })).toHaveCount(0);
-    await page.getByTestId('gallery-select').locator('select').selectOption('riegl');
     await expect(page.getByTestId('gallery-info')).toContainText('RIEGL VZ-400', { timeout: 60000 });
     await expect(page.getByTestId('gallery-info')).toContainText('324,064', { timeout: 60000 });
-    await page.getByTestId('gallery-select').locator('select').selectOption('lms400');
-    await expect(page.getByTestId('gallery-info')).toContainText('460,400', { timeout: 60000 });
+    await expect(page.getByRole('button', { name: 'Exercise' })).toHaveCount(0);
     await page.getByTestId('raw-toggle').click();
     await expect(page.getByTestId('raw-view')).toContainText('FIELDS x y z');
-    await expect.poll(() => state(page, (s) => s.galleryRaw && s.galleryViewed.includes('orbis') && s.galleryViewed.includes('riegl'))).toBe(true);
+    await expect.poll(() => state(page, (s) => s.galleryRaw && s.galleryViewed.includes('riegl'))).toBe(true);
   });
 
-  test('tab 4: two TLS stations then an MLS trajectory', async ({ page }) => {
+  test('tab 4: mobile scanning - single scan then a moving trajectory', async ({ page }) => {
     await go(page, 4);
-    await page.getByTestId('add-station-here').click();
-    await expect.poll(() => state(page, (s) => s.stations.length)).toBe(1);
-    await page.evaluate(() => window.__lab.getState().setPose({ x: -2.6, y: -1.8 }));
-    await page.getByTestId('add-station-here').click();
-    await expect.poll(() => state(page, (s) => s.stations.length)).toBe(2);
-    await expect.poll(() => state(page, (s) => s.tlsCoverage?.coveredPct ?? 0)).toBeGreaterThan(30);
-    await page.getByRole('button', { name: 'Moving (MLS)' }).click();
     await page.getByTestId('run-mls').click();
-    await expect.poll(() => state(page, (s) => s.mls?.cloud?.count ?? 0), { timeout: 60000 }).toBeGreaterThan(500);
+    await expect.poll(() => state(page, (s) => s.mls?.cloud?.count ?? 0), { timeout: 90000 }).toBeGreaterThan(500);
     await page.getByText('Loop preset').click();
     await page.getByTestId('run-mls').click();
-    await expect.poll(() => state(page, (s) => s.mls?.cloud?.count ?? 0), { timeout: 120000 }).toBeGreaterThan(1000);
-    await page.getByRole('button', { name: 'Compare', exact: true }).click();
-    await expect(page.getByTestId('compare-table')).toContainText('Coverage');
+    await expect.poll(() => state(page, (s) => s.mls?.seconds ?? 0), { timeout: 120000 }).toBeGreaterThan(2);
+    await expect.poll(() => state(page, (s) => s.mls?.cloud?.count ?? 0)).toBeGreaterThan(1000);
   });
 
   test('tab 4: SLAM drift + loop closure, and ICP corrects a rigid error', async ({ page }) => {

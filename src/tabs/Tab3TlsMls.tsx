@@ -62,7 +62,8 @@ function buildTrajectory(wps: [number, number][], speed: number, z: number): { t
 export default function Tab3({ labSwitch }: { labSwitch?: React.ReactNode }) {
   const s = useLab();
   const scene = getScene(s.sceneId);
-  const [mode, setMode] = useState<Mode>('tls');
+  const mode = 'mls' as Mode;
+  const setMode = (_m: Mode) => { void _m; };
   const [tripod, setTripod] = useState(1.5);
   const [mlsId, setMlsId] = useState('rot16');
   const [tool, setTool] = useState<'station' | 'waypoint' | null>(null);
@@ -75,8 +76,7 @@ export default function Tab3({ labSwitch }: { labSwitch?: React.ReactNode }) {
   const [mlsCov, setMlsCov] = useState<(CoverageInfo & { unobservedArea: number }) | null>(null);
   const b = scene.bounds;
 
-  const [detail, setDetail] = useState<'std' | 'high'>('high');
-  const stepDeg = detail === 'high' ? 0.2 : 0.3; // equal horizontal and vertical step, as on a real TLS
+  const stepDeg = 0.2; // equal horizontal and vertical step, as on a real TLS
   const tlsSensor: SensorConfig = useMemo(() => ({ ...presetToConfig(getPreset('tls')), hRes: stepDeg, channels: Math.round(150 / stepDeg) }), [stepDeg]);
   const tlsRays = Math.round(360 / stepDeg) * Math.round(150 / stepDeg);
   const mlsSensor: SensorConfig = useMemo(() => presetToConfig(getPreset(mlsId)), [mlsId]);
@@ -231,9 +231,10 @@ export default function Tab3({ labSwitch }: { labSwitch?: React.ReactNode }) {
       {mode === 'compare' && s.mls && <CloudFromStore cloud={s.mls.cloud} mode="flat" colorOpts={{ flat: [255, 159, 10] }} pickable={false} />}
       {!pointsOnly && mode !== 'mls' && missingOn && missingCloud && <CloudLayer cloud={missingCloud} mode="flat" colorOpts={{ flat: [255, 69, 58] }} size={4} budget={40000} pickable={false} />}
       {!pointsOnly && mode !== 'mls' && overlapOn && overlapCloud && <CloudLayer cloud={overlapCloud} mode="flat" colorOpts={{ flat: [48, 209, 88] }} size={3} budget={20000} pickable={false} />}
-      {!pointsOnly && mode !== 'mls' && s.stations.map((st) => <SensorMarker key={st.id} x={st.pose.x} y={st.pose.y} z={st.pose.z} yaw={st.pose.yaw} sensor={tlsSensor} label={`Station ${st.id}`} showFov={false} color="#0a84ff" />)}
+      {false && s.stations.map((st) => <SensorMarker key={st.id} x={st.pose.x} y={st.pose.y} z={st.pose.z} yaw={st.pose.yaw} sensor={tlsSensor} label={`Station ${st.id}`} showFov={false} color="#0a84ff" />)}
       {!pointsOnly && (mode === 'mls' || mode === 'compare') && <PolyLine pts={wpPts} color="#ff9f0a" width={3} />}
       {!pointsOnly && (mode === 'mls' || mode === 'compare') && wpPts.map((p, i) => <Marker key={i} p={p} color="#ff9f0a" r={0.07} label={`${i + 1}`} />)}
+      {!pointsOnly && !platformAt && <SensorMarker x={wpPts[0]?.[0] ?? s.pose.x} y={wpPts[0]?.[1] ?? s.pose.y} z={s.mlsOpts.height} yaw={wpPts.length > 1 ? Math.atan2(wpPts[1][1] - wpPts[0][1], wpPts[1][0] - wpPts[0][0]) : s.pose.yaw} pitch={wpPts.length > 1 ? 0 : s.pose.pitch} scale={s.sceneId === 'C' ? 3 : s.sceneId === 'B' ? 1.8 : 1} sensor={mlsSensor} label="Scanner" color="#30d158" />}
       {!pointsOnly && mode === 'mls' && platformAt && <SensorMarker x={platformAt.x} y={platformAt.y} z={platformAt.z} yaw={platformAt.yaw} sensor={mlsSensor} color="#30d158" label="Platform" />}
     </Viewport>
   );
@@ -271,14 +272,12 @@ export default function Tab3({ labSwitch }: { labSwitch?: React.ReactNode }) {
 
   const controls = (
     <>
-      <Seg value={mode} onChange={(m) => { setMode(m); setTool(null); }} options={[{ value: 'tls', label: 'Static (TLS)' }, { value: 'mls', label: 'Moving (MLS)' }, { value: 'compare', label: 'Compare' }]} label="Mode" />
       <Section title="Floor plan">{plan}</Section>
 
       {mode === 'tls' && (
         <>
           <Section title="Scanner on tripod">
             <p className="hint"><b>Leica RTC360</b>: a tripod laser scanner with a 360° × 150° view and colour. Each station is one long, very dense scan.</p>
-            <Seg value={detail} onChange={setDetail} label="Scan detail" options={[{ value: 'std', label: 'Standard · 0.3°' }, { value: 'high', label: 'Detailed · 0.2°' }]} />
             <span className="caption">{fmtN(tlsRays)} beams per station · point spacing ≈ {(0.1 * Math.tan(stepDeg * D2R) * 1000 / 1).toFixed(1)} cm per metre of range · up to 4 stations</span>
             <Slider label="Tripod height" value={tripod} min={0.5} max={Math.max(1.6, b.max[2] - 0.3)} step={0.05} unit=" m" format={(v) => v.toFixed(2)} onChange={setTripod} />
             <Slider label="Station heading" value={stationYaw} min={-180} max={180} step={5} unit="°" onChange={setStationYaw} />
@@ -317,6 +316,7 @@ export default function Tab3({ labSwitch }: { labSwitch?: React.ReactNode }) {
           <Section title="Mobile platform">
             <SensorPicker value={mlsId} onPick={setMlsId} only={['planar', 'c4', 'c8', 'c16', 'c32', 'c64', 'c128', 'prism', 'mems', 'array']} />
             <Seg value={String(s.mlsOpts.height)} onChange={(v) => s.patch({ mlsOpts: { ...s.mlsOpts, height: parseFloat(v) } })} options={[{ value: '1', label: 'Trolley 1.0 m' }, { value: '1.5', label: 'Handheld 1.5 m' }, { value: '1.8', label: 'Vehicle 1.8 m' }]} />
+            <Slider label="Scanner heading (single scan)" value={Math.round(s.pose.yaw / D2R)} min={-180} max={180} step={1} unit="°" onChange={(d) => s.setPose({ yaw: d * D2R })} hint="The black arrow in the scene shows where the scanner points. Click the floor plan with “Add waypoints” to move it." />
             <Slider label="Platform speed" value={s.mlsOpts.speed} min={0.2} max={4} step={0.1} unit=" m/s" format={(v) => v.toFixed(1)} onChange={(speed) => s.patch({ mlsOpts: { ...s.mlsOpts, speed } })} />
             <Toggle label="Show motion distortion" checked={s.mlsOpts.distortion} onChange={(distortion) => s.patch({ mlsOpts: { ...s.mlsOpts, distortion } })} hint="ON: every point of a sweep is placed with the sweep-start pose, as if the platform did not move during the rotation. Compare with OFF (each point uses its own time-stamped pose)." />
           </Section>

@@ -63,6 +63,7 @@ export interface LabState {
   usedColorModes: string[];
   galleryViewed: string[];
   galleryRaw: boolean;
+  mappingInit: boolean;
   scanLog: { label: string; hRes: number; channels: number; maxRange: number; points: number; spacing: number; coveragePct: number | null; occludedPct: number | null }[];
   exportsLog: { name: string; fmt: string; count: number }[];
   undoCount: number;
@@ -162,6 +163,7 @@ function initial() {
     usedColorModes: [] as string[],
     galleryViewed: [] as string[],
     galleryRaw: false,
+    mappingInit: false,
     scanLog: [] as LabState['scanLog'],
     exportsLog: [] as LabState['exportsLog'],
     undoCount: 0,

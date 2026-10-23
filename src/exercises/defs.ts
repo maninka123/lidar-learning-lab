@@ -29,28 +29,25 @@ export const CHALLENGES: Challenge[] = [
     },
   },
   {
-    id: 2, tab: 3, title: 'Explore real TLS and MLS scans',
-    goal: 'Open a real TLS scan and a real MLS scan in the Point Cloud Gallery and orbit both.',
-    steps: ['Open Point Cloud Gallery.', 'Orbit the scan and read the scanner’s type and field of view.', 'Notice how a single line scanner needs many profiles to make a 3D surface.'],
-    outcome: 'A real scan is noisy and incomplete compared with a simulation, and a line scanner only becomes 3D after processing.',
-    check: (s) => { const t = s.galleryViewed.includes('riegl'), m = s.galleryViewed.includes('orbis'); return { done: t && m, detail: `TLS scan opened: ${t ? 'yes' : 'no'}; MLS scan opened: ${m ? 'yes' : 'no'}.` }; },
+    id: 2, tab: 3, title: 'Explore a real TLS scan',
+    goal: 'Open the real terrestrial laser scan in the Point Cloud Gallery and orbit it.',
+    steps: ['Open Point Cloud Gallery.', 'Orbit and zoom into the branches.', 'Read the scanner type and field of view.'],
+    outcome: 'A real TLS scan is extremely dense: individual branches are visible.',
+    check: (s) => ({ done: s.galleryViewed.includes('riegl'), detail: s.galleryViewed.includes('riegl') ? 'Real TLS scan opened.' : 'Open the RIEGL scan.' }),
   },
   {
     id: 3, tab: 3, title: 'Read a point cloud file',
-    goal: 'Open the Raw view of a real scan and find the header and the first data rows.',
+    goal: 'Open the Raw view of the real scan and find the header and the first data rows.',
     steps: ['In the Point Cloud Gallery press Raw.', 'Find FIELDS, POINTS and DATA in the blue header.', 'Read the first few rows: one point per row.'],
     outcome: 'A point cloud file is a header plus one row of numbers per point.',
     check: (s) => ({ done: s.galleryRaw, detail: s.galleryRaw ? 'Raw view opened.' : 'Open the Raw view.' }),
   },
   {
-    id: 4, tab: 4, title: 'Create TLS and MLS scans of the same room',
-    goal: 'Make at least two static TLS stations and one moving MLS trajectory in the same scene, then compare coverage.',
-    steps: ['In TLS mode place two or three stations and scan.', 'In MLS mode draw waypoints and generate the moving scan.', 'Read the comparison table.'],
-    outcome: 'TLS and MLS are deployment methods; coverage, density and gaps differ because of viewpoints and motion.',
-    check: (s) => {
-      const ok = s.stations.length >= 2 && !!s.mls && s.mls.sceneId === s.sceneId;
-      return { done: ok, detail: `TLS stations: ${s.stations.length}; MLS scan: ${s.mls ? `${s.mls.cloud.count.toLocaleString()} pts` : 'not generated'}.` };
-    },
+    id: 4, tab: 4, title: 'Scan with a moving sensor (MLS)',
+    goal: 'Draw a trajectory with at least three waypoints and generate a moving scan of the room.',
+    steps: ['Open SLAM & Registration → Mobile scanning.', 'Add waypoints (or use a preset) and generate the moving scan.', 'Turn on motion distortion and compare.'],
+    outcome: 'A moving scanner gives every point its own pose; coverage depends on the path.',
+    check: (s) => { const ok = !!s.mls && s.waypoints.length >= 3 && s.mls.sceneId === s.sceneId; return { done: ok, detail: `MLS scan: ${s.mls ? `${s.mls.cloud.count.toLocaleString()} pts` : 'not generated'}; waypoints: ${s.waypoints.length} (need 3).` }; },
   },
   {
     id: 5, tab: 4, title: 'Correct a misaligned scan',
