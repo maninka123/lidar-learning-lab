@@ -13,7 +13,7 @@ import { SceneFromStore, CloudFromStore } from './common';
 import { SensorMarker, PolyLine, Marker, CloudLayer } from '../ui/three';
 import { Plan2D } from '../ui/Plan2D';
 import { Crosshair, Pause, Play, Plus, Trash2, Undo2, Route as RouteIcon } from '../ui/icons';
-import { PRESETS, getPreset, presetToConfig, SensorConfig, pointsPerSecond } from '../sensor/presets';
+import { PRESETS, getPreset, presetToConfig, SensorConfig, pointsPerSecond, raysPerSweep, isSteered } from '../sensor/presets';
 import { runTask } from '../engine/client';
 import { staticPose, PoseSample } from '../sensor/simulate';
 import { concatClouds, selectPoints, PointCloud, transformCloud } from '../core/pointcloud';
@@ -330,7 +330,19 @@ export default function Tab3({ labSwitch }: { labSwitch?: React.ReactNode }) {
               <Btn sm icon={<Trash2 size={15} />} onClick={() => s.patch({ waypoints: [] })} disabled={!s.waypoints.length}>Clear</Btn>
             </div>
             <ol style={{ margin: 0, paddingLeft: '1.3rem', display: 'grid', gap: 2 }}>{s.waypoints.map(([x, y], i) => <li key={i} className="mono" style={{ fontSize: '0.875rem' }}>{x.toFixed(2)}, {y.toFixed(2)}</li>)}</ol>
-            {traj && <p className="hint">{traj.length.toFixed(1)} m · {traj.duration.toFixed(1)} s · ~{fmtN(Math.round(pointsPerSecond(mlsSensor) * traj.duration))} nominal points</p>}
+            {traj && (
+              <>
+                <p className="hint">{traj.length.toFixed(1)} m · {traj.duration.toFixed(1)} s · ~{fmtN(Math.round(pointsPerSecond(mlsSensor) * traj.duration))} nominal points</p>
+                <div className="callout" style={{ gap: 4 }} data-testid="points-calc">
+                  <b>How that number comes about</b>
+                  {!isSteered(mlsSensor.pattern) && <span className="mono" style={{ fontSize: '0.875rem' }}>{fmtN(Math.round(raysPerSweep(mlsSensor) / mlsSensor.channels))} beams per turn ({mlsSensor.hFov.toFixed(0)}° ÷ {mlsSensor.hRes}°) × {mlsSensor.channels} channels = {fmtN(raysPerSweep(mlsSensor))} points per turn</span>}
+                  {isSteered(mlsSensor.pattern) && <span className="mono" style={{ fontSize: '0.875rem' }}>{fmtN(raysPerSweep(mlsSensor))} points per sweep</span>}
+                  <span className="mono" style={{ fontSize: '0.875rem' }}>× {mlsSensor.frequency} turns per second = {fmtN(Math.round(pointsPerSecond(mlsSensor)))} points per second</span>
+                  <span className="mono" style={{ fontSize: '0.875rem' }}>× {traj.duration.toFixed(1)} s ({traj.length.toFixed(1)} m ÷ {s.mlsOpts.speed} m/s) = {fmtN(Math.round(pointsPerSecond(mlsSensor) * traj.duration))} points</span>
+                  <span className="caption">"Nominal" counts every beam fired. Beams that hit nothing (sky, beyond range) return no point, so the real cloud is smaller. A slower platform means a longer time on the path and so more points.</span>
+                </div>
+              </>
+            )}
             <div className="btn-row">
               <Btn variant="primary" icon={<Play size={16} />} onClick={runMls} busy={mlsBusy} testId="run-mls">{s.waypoints.length < 2 ? 'Generate single scan' : 'Generate moving scan'}</Btn>
               <Btn icon={playing ? <Pause size={16} /> : <Play size={16} />} onClick={() => { if (!playing && s.mlsAnim >= 1) useLab.setState({ mlsAnim: 0 }); setPlaying(!playing); }} disabled={!traj}>{playing ? 'Pause' : 'Animate'}</Btn>

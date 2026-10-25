@@ -128,6 +128,7 @@ test.describe('LiDAR Learning Lab', () => {
     await page.getByTestId('run-mls').click();
     await expect.poll(() => state(page, (s) => s.mls?.cloud?.count ?? 0), { timeout: 90000 }).toBeGreaterThan(500);
     await page.getByText('Loop preset').click();
+    await expect(page.getByTestId('points-calc')).toContainText('points per second');
     await page.getByTestId('run-mls').click();
     await expect.poll(() => state(page, (s) => s.mls?.seconds ?? 0), { timeout: 120000 }).toBeGreaterThan(2);
     await expect.poll(() => state(page, (s) => s.mls?.cloud?.count ?? 0)).toBeGreaterThan(1000);
