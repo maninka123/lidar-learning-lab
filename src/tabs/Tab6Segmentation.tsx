@@ -108,10 +108,10 @@ export default function Tab6() {
       {pane === 'setup' && (<>
       <Section title="Point cloud">
         {cloud ? <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}><span>{cloud.name}</span><Badge kind={cloud.meta.kind === 'simulated' ? 'sim' : 'measured'} /><span className="caption">{fmtN(cloud.count)} pts{hasGT ? ' · GT labels' : ''}</span></div> : <p className="hint">Loading the classroom…</p>}
-        <p className="caption">Planes are fitted by rule (RANSAC), clusters group nearby points without knowing what they are. Classes and objects shown as “true” come from the scan file and from grouping the furniture, not from AI predictions.</p>
+        <p className="caption">“True” classes and objects come from the scan file, not from AI.</p>
       </Section>
       <Section title="1 · Plane detection (RANSAC)">
-        <p className="hint">RANSAC finds the flat surfaces (floor, walls, ceiling) by trying planes through random points and keeping the one with the most points close to it. They are taken out first so the objects can be clustered. The distance and the number of tries are measured from the data.</p>
+        <p className="hint">RANSAC finds the floor, walls and ceiling and takes them out first, so the objects can be clustered. Its distance and tries are measured from the data.</p>
         <Slider label="Planes to find, at most" value={p.planeMax} min={0} max={20} step={1} onChange={(planeMax) => setP({ planeMax })} hint="0 skips plane detection." />
         <Slider label="Smallest plane" value={p.planeMinPct} min={0.5} max={10} step={0.5} unit=" % of points" onChange={(planeMinPct) => setP({ planeMinPct })} hint="Stop when the best plane left is smaller than this." />
         <Slider label="Confidence" value={p.planeConfidence * 100} min={90} max={99.9} step={0.1} unit=" %" format={(v) => v.toFixed(1)} onChange={(v) => setP({ planeConfidence: v / 100 })} hint="How sure to be of finding each plane. Higher means more tries." />
