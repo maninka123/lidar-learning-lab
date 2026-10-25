@@ -301,18 +301,19 @@ export function Marker({ p, color, r = 0.08, label }: { p: Vec3; color: string; 
   );
 }
 
-export function MeshLayer({ mesh, color = '#bf5af2', opacity = 0.9, wire = false }: { mesh: { positions: Float32Array; indices: Uint32Array }; color?: string; opacity?: number; wire?: boolean }) {
+export function MeshLayer({ mesh, color = '#bf5af2', opacity = 0.9, wire = false, colors, flat = true }: { mesh: { positions: Float32Array; indices: Uint32Array }; color?: string; opacity?: number; wire?: boolean; colors?: Uint8Array | null; flat?: boolean }) {
   const geom = useMemo(() => {
     const g = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.BufferAttribute(mesh.positions, 3));
     g.setIndex(new THREE.BufferAttribute(mesh.indices, 1));
+    if (colors && colors.length === mesh.positions.length) g.setAttribute('color', new THREE.BufferAttribute(colors, 3, true));
     g.computeVertexNormals();
     return g;
-  }, [mesh]);
+  }, [mesh, colors]);
   useEffect(() => () => geom.dispose(), [geom]);
   return (
     <mesh geometry={geom} raycast={() => null}>
-      <meshStandardMaterial color={color} transparent={opacity < 1} opacity={opacity} wireframe={wire} flatShading side={THREE.DoubleSide} roughness={0.8} />
+      <meshStandardMaterial color={colors ? '#ffffff' : color} vertexColors={!!colors} transparent={opacity < 1} opacity={opacity} wireframe={wire} flatShading={flat} side={THREE.DoubleSide} roughness={0.8} />
     </mesh>
   );
 }

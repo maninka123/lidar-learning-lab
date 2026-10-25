@@ -1,8 +1,7 @@
 import { Suspense, lazy, ReactNode } from 'react';
-import { Layers, PanelLeft, Radar, Info, Boxes, Route, GitMerge, Filter, Network, Camera, Share2, Trophy, Check, Square, Ruler, Eye, Wand, Crosshair } from './ui/icons';
+import { Layers, PanelLeft, Radar, Info, Boxes, Route, GitMerge, Filter, Network, Camera, Share2, Square, Ruler, Eye, Wand, Crosshair, Play } from './ui/icons';
 import { useLab } from './state/store';
 import { Toast } from './ui/shared';
-import { CHALLENGES } from './exercises/defs';
 
 const Tab0 = lazy(() => import('./tabs/Tab0Concepts'));
 const Tab1 = lazy(() => import('./tabs/Tab1Fundamentals'));
@@ -20,34 +19,32 @@ const Tab5 = lazy(() => import('./tabs/Tab5Processing'));
 const Tab6 = lazy(() => import('./tabs/Tab6Segmentation'));
 const Tab7 = lazy(() => import('./tabs/Tab7Recon'));
 const Tab8 = lazy(() => import('./tabs/Tab8SceneGraph'));
-const Tab9 = lazy(() => import('./tabs/Tab9Challenges'));
+const TabVideos = lazy(() => import('./tabs/TabVideos'));
 
 const TABS: { label: string; icon: ReactNode; el: ReactNode }[] = [
   { label: 'What is LiDAR?', icon: <Info size={18} />, el: <Tab0 /> },
   { label: 'Scanner Simulator', icon: <Radar size={18} />, el: <Tab1 /> },
   { label: 'Compare Sensors', icon: <Layers size={18} />, el: <TabCmp /> },
   { label: 'Point Cloud Gallery', icon: <Boxes size={18} />, el: <Tab2 /> },
+  { label: 'Point Cloud Processing', icon: <Filter size={18} />, el: <Tab5 /> },
   { label: 'Point Cloud Registration', icon: <GitMerge size={18} />, el: <TabReg /> },
   { label: 'TLS Scanning', icon: <Crosshair size={18} />, el: <TabTls /> },
   { label: 'SLAM & Mobile Scanning', icon: <Route size={18} />, el: <TabMap /> },
   { label: 'LiDAR + Camera Fusion', icon: <Camera size={18} />, el: <TabFusion /> },
-  { label: 'Point Cloud Processing', icon: <Filter size={18} />, el: <Tab5 /> },
-  { label: 'Clustering & Segmentation', icon: <Network size={18} />, el: <Tab6 /> },
+  { label: 'Meshing & Surfaces', icon: <Wand size={18} />, el: <TabMeshing /> },
   { label: 'Plane Detection', icon: <Square size={18} />, el: <TabPlanes /> },
+  { label: 'Clustering & Segmentation', icon: <Network size={18} />, el: <Tab6 /> },
   { label: 'Scan to CAD', icon: <Ruler size={18} />, el: <TabCad /> },
   { label: 'Change Detection', icon: <Eye size={18} />, el: <TabChange /> },
-  { label: 'Meshing & Surfaces', icon: <Wand size={18} />, el: <TabMeshing /> },
   { label: 'Image to 3D', icon: <Camera size={18} />, el: <Tab7 /> },
   { label: 'Scene Graphs & 3D AI', icon: <Share2 size={18} />, el: <Tab8 /> },
-  { label: 'Challenges', icon: <Trophy size={18} />, el: <Tab9 /> },
+  { label: 'Videos', icon: <Play size={18} />, el: <TabVideos /> },
 ];
 
 export default function App() {
   const tab = useLab((s) => s.tab);
   const setTab = useLab((s) => s.setTab);
   const navOpen = useLab((s) => s.navOpen);
-  const state = useLab();
-  const done = new Set(CHALLENGES.filter((c) => c.check(state).done).map((c) => c.tab));
   return (
     <div className={`app ${navOpen ? '' : 'nav-collapsed'}`}>
       <nav className="sidebar glass" aria-label="Lecture sections">
@@ -60,7 +57,6 @@ export default function App() {
           <button key={t.label} className="nav-item" aria-current={tab === i ? 'page' : undefined} onClick={() => setTab(i)} data-testid={`nav-${i}`} title={t.label}>
             <span className="nav-num">{i + 1}</span>
             <span className="nav-label">{t.label}</span>
-            {done.has(i) && <Check size={16} className="tick" aria-label="Challenge complete" />}
           </button>
         ))}
       </nav>

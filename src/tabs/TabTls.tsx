@@ -218,7 +218,7 @@ export default function TabTls() {
       )}
     </>
   );
-  return <TabFrame title="TLS Scanning & Registration" tab={5} viewport={viewport} controls={controls} learn={null} noPanelTabs envIds={['A', 'B', 'D']} statsRow stats={stats}
+  return <TabFrame title="TLS Scanning & Registration" tab={6} viewport={viewport} controls={controls} learn={null} noPanelTabs envIds={['A', 'B', 'D']} statsRow stats={stats}
     viewExtras={<>
       <Btn sm variant="primary" icon={<Play size={15} />} onClick={scanAll} busy={busy === 'scan'} disabled={stations.length < 1} testId="scan-toolbar">Scan</Btn>
       <Btn sm icon={<Dots size={15} />} variant={pointsOnly ? 'primary' : ''} onClick={() => setPointsOnly(!pointsOnly)} testId="points-only">{pointsOnly ? 'Show scene' : 'Point cloud'}</Btn>

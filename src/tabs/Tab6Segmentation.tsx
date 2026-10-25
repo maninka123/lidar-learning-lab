@@ -1,21 +1,18 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useLab } from '../state/store';
-import { getScene } from '../scenes';
-import { className } from '../scenes/classes';
+import { CLASSROOM_CLASSES, loadClassroomForSegmentation, paintClasses } from '../apps/classroom';
 import { Viewport } from '../ui/Viewport';
 import { TabFrame } from '../ui/TabFrame';
 import { Btn, Callout, Eq, NumberField, Section, Select, Seg, Slider, Toggle, Badge, fmtN } from '../ui/controls';
 import { RawViewer } from '../ui/RawViewer';
 import { writePCD } from '../io/pcd';
 import { FileText } from '../ui/icons';
-import { SceneFromStore, MiniChart } from './common';
+import { MiniChart } from './common';
 import { CloudLayer, BoxOutline } from '../ui/three';
 import { Play, RotateCcw, Plus } from '../ui/icons';
 import { runTask } from '../engine/client';
-import { runScan } from '../state/actions';
 import { SegParams, SegResult } from '../segmentation/segment';
 import { PointCloud } from '../core/pointcloud';
-import { guessClass } from '../graph/sceneGraph';
 import { distinctColor } from '../core/colorize';
 import { Vec3 } from '../core/math';
 
@@ -23,23 +20,23 @@ type Show = 'result' | 'instances' | 'semantic' | 'rgb';
 
 export default function Tab6() {
   const s = useLab();
-  const scene = getScene(s.sceneId);
   const seg = s.seg;
   const p = seg.params;
   const [busy, setBusy] = useState(false);
   const [show, setShow] = useState<Show>('result');
   const [boxes, setBoxes] = useState(true);
+  const [hideCeiling, setHideCeiling] = useState(true);
   const [pane, setPane] = useState<'setup' | 'results'>('setup');
-  const [showRoom, setShowRoom] = useState(false);
   const [rawOpen, setRawOpen] = useState(false);
   const [sweep, setSweep] = useState<{ x: number[]; clusters: number[]; over: number[]; under: number[]; recovered: number[]; label: string } | null>(null);
   const [slots, setSlots] = useState<{ A?: { params: SegParams; clusters: number; recovered: number; over: number; under: number; noise: number }; B?: { params: SegParams; clusters: number; recovered: number; over: number; under: number; noise: number } }>({});
-  const cloud: PointCloud | null = s.clouds['scan'] ?? s.clouds['explorer'] ?? null;
-  // nothing to segment yet: scan the current scene so the tab works straight away
-  useEffect(() => { const st = useLab.getState(); if (!st.clouds['scan'] && !st.clouds['explorer'] && !st.busy) void runScan(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  // the same classroom scan as the Plane Detection tab, with its furniture as the "true objects"
+  const [cloud, setCloud] = useState<PointCloud | null>(null);
+  useEffect(() => { void loadClassroomForSegmentation().then(setCloud).catch((e) => s.notify((e as Error).message, 'error')); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  const classCloud = useMemo(() => (cloud ? paintClasses(cloud) : null), [cloud]);
   const res: SegResult | null = seg.result;
   const gt = seg.gt;
-  const ignore = useMemo(() => scene.objects.filter((o) => o.structural).map((o) => o.instanceId), [scene]);
+  const ignore = useMemo(() => [0], []); // floor, walls and ceiling are not counted as objects
   const setP = (patch: Partial<SegParams>) => useLab.setState({ seg: { ...useLab.getState().seg, params: { ...p, ...patch } } });
   const hasGT = !!cloud?.instances;
 
@@ -72,17 +69,15 @@ export default function Tab6() {
   }
   const snapshot = (slot: 'A' | 'B') => { if (!res || !gt) return; setSlots({ ...slots, [slot]: { params: { ...p }, clusters: res.clusters.length, recovered: gt.recovered.length, over: gt.overSegmented, under: gt.underSegmented, noise: res.noise } }); };
 
-  // class guesses (rule-based, estimated)
+  // the main class (from the scan file) of the points in each cluster
   const guesses = useMemo(() => {
     if (!res || !cloud?.labels) return null;
     return res.clusters.map((c) => {
-      const dim: Vec3 = [c.max[0] - c.min[0], c.max[1] - c.min[1], c.max[2] - c.min[2]];
-      const g = guessClass(dim, c.min[2]);
       const votes = new Map<number, number>();
       for (const i of c.indices) votes.set(cloud.labels![i], (votes.get(cloud.labels![i]) ?? 0) + 1);
       let truth = 0, best = 0;
       for (const [k, v] of votes) if (v > best) { best = v; truth = k; }
-      return { c, guess: g, truth };
+      return { c, truth };
     });
   }, [res, cloud]);
 
@@ -91,13 +86,12 @@ export default function Tab6() {
   const stale = res && cloud && seg.cloudId !== cloud.id;
 
   const viewport = (
-    <Viewport home={scene.cameraHome} target={scene.cameraTarget} hideGrid hideAxes bgOverride="#ffffff">
-      {showRoom && <SceneFromStore interactive={false} />}
+    <Viewport home={[8, -10, 6.5]} target={[0, 0, 1.2]} hideGrid hideAxes bgOverride="#ffffff">
       {cloud && (show === 'result' && resultLabels && !stale
-        ? <CloudLayer cloud={cloud} mode="cluster" colorOpts={{ clusterLabels: resultLabels }} size={s.view.pointSize} budget={s.view.renderBudget} pickable={false} />
+        ? <CloudLayer cloud={cloud} mode="cluster" colorOpts={{ clusterLabels: resultLabels }} size={s.view.pointSize} budget={Math.max(s.view.renderBudget, 150000)} pickable={false} clip={{ on: hideCeiling, min: -1, max: 2.55 }} />
         : show === 'instances' && instLabels
-          ? <CloudLayer cloud={cloud} mode="cluster" colorOpts={{ clusterLabels: instLabels }} size={s.view.pointSize} budget={s.view.renderBudget} pickable={false} />
-          : <CloudLayer cloud={cloud} mode={show === 'semantic' ? 'semantic' : show === 'rgb' ? 'rgb' : 'height'} size={s.view.pointSize} budget={s.view.renderBudget} pickable={false} />)}
+          ? <CloudLayer cloud={cloud} mode="cluster" colorOpts={{ clusterLabels: instLabels }} size={s.view.pointSize} budget={s.view.renderBudget} pickable={false} clip={{ on: hideCeiling, min: -1, max: 2.55 }} />
+          : <CloudLayer cloud={show === 'semantic' && classCloud ? classCloud : cloud} mode={show === 'semantic' || show === 'rgb' ? 'rgb' : 'height'} size={s.view.pointSize} budget={Math.max(s.view.renderBudget, 150000)} pickable={false} clip={{ on: hideCeiling, min: -1, max: 2.55 }} />)}
       {boxes && res && !stale && res.clusters.map((c) => <BoxOutline key={c.id} bbox={{ min: c.min, max: c.max }} color={`rgb(${distinctColor(c.id).map(Math.round).join(',')})`} dashed />)}
     </Viewport>
   );
@@ -112,8 +106,8 @@ export default function Tab6() {
       <Seg value={pane} onChange={setPane} options={[{ value: 'setup', label: 'Settings' }, { value: 'results', label: 'Results' }]} label="Section" />
       {pane === 'setup' && (<>
       <Section title="Point cloud">
-        {cloud ? <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}><span>{cloud.name}</span><Badge kind={cloud.meta.kind === 'simulated' ? 'sim' : 'measured'} /><span className="caption">{fmtN(cloud.count)} pts{hasGT ? ' · GT labels' : ''}</span></div> : <div style={{ display: 'grid', gap: 8 }}><p className="hint">No point cloud yet. Scan the current scene to get one to segment.</p><Btn variant="primary" onClick={() => void runScan()} busy={!!s.busy}>Scan this scene</Btn></div>}
-        <p className="caption">Planes are fitted by rule (RANSAC), clusters group nearby points without knowing what they are. Class labels shown are the simulator’s ground truth, not AI predictions.</p>
+        {cloud ? <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}><span>{cloud.name}</span><Badge kind={cloud.meta.kind === 'simulated' ? 'sim' : 'measured'} /><span className="caption">{fmtN(cloud.count)} pts{hasGT ? ' · GT labels' : ''}</span></div> : <p className="hint">Loading the classroom…</p>}
+        <p className="caption">Planes are fitted by rule (RANSAC), clusters group nearby points without knowing what they are. Classes and objects shown as “true” come from the scan file and from grouping the furniture, not from AI predictions.</p>
       </Section>
       <Section title="1 · Ground & planes (RANSAC)">
         <Toggle label="Remove ground plane" checked={p.removeGround} onChange={(removeGround) => setP({ removeGround })} hint="Largest nearly-horizontal plane (≤ 20° tilt)." />
@@ -133,7 +127,7 @@ export default function Tab6() {
       <Section title="Show">
         <Seg value={show} onChange={setShow} options={[{ value: 'result', label: 'Result' }, { value: 'instances', label: 'True objects' }, { value: 'semantic', label: 'True classes' }]} />
         <Toggle label="Cluster bounding boxes (estimated)" checked={boxes} onChange={setBoxes} />
-        <Toggle label="Show the room" checked={showRoom} onChange={setShowRoom} />
+        <Toggle label="Hide the ceiling" checked={hideCeiling} onChange={setHideCeiling} />
         {stale && <Callout kind="warn">The cloud changed since the last run — press Segment again.</Callout>}
       </Section>
       </>)}
@@ -144,17 +138,16 @@ export default function Tab6() {
           <table className="table"><thead><tr><th>Plane</th><th>Normal</th><th>Pts</th><th>RMSE</th></tr></thead><tbody>
             {res.planes.map((pl, i) => <tr key={i}><td><span style={{ color: `rgb(${distinctColor(i).map(Math.round).join(',')})` }}>●</span> {pl.kind}</td><td className="mono">{pl.normal.map((v) => v.toFixed(2)).join(', ')}</td><td>{fmtN(pl.count)}</td><td className="mono">{(pl.rmse * 100).toFixed(1)} cm</td></tr>)}
           </tbody></table>
-          <table className="table"><thead><tr><th>Cluster</th><th>Pts</th><th>Size (m)</th>{guesses && <th>Rule guess</th>}</tr></thead><tbody>
+          <table className="table"><thead><tr><th>Cluster</th><th>Pts</th><th>Size (m)</th>{guesses && <th>Main class</th>}</tr></thead><tbody>
             {res.clusters.slice(0, 14).map((c, i) => {
               const g = guesses?.[i];
-              return <tr key={c.id}><td><span style={{ color: `rgb(${distinctColor(c.id).map(Math.round).join(',')})` }}>●</span> #{i + 1}</td><td>{fmtN(c.count)}</td><td className="mono">{(c.max[0] - c.min[0]).toFixed(1)}×{(c.max[1] - c.min[1]).toFixed(1)}×{(c.max[2] - c.min[2]).toFixed(1)}</td>{g && <td>{className(g.guess.classId)}{g.guess.classId === g.truth ? ' ✓' : ` ✗ (${className(g.truth)})`}</td>}</tr>;
+              return <tr key={c.id}><td><span style={{ color: `rgb(${distinctColor(c.id).map(Math.round).join(',')})` }}>●</span> #{i + 1}</td><td>{fmtN(c.count)}</td><td className="mono">{(c.max[0] - c.min[0]).toFixed(1)}×{(c.max[1] - c.min[1]).toFixed(1)}×{(c.max[2] - c.min[2]).toFixed(1)}</td>{g && <td>{CLASSROOM_CLASSES[g.truth]?.name ?? '—'}</td>}</tr>;
             })}
           </tbody></table>
           {res.clusters.length > 14 && <span className="caption">…and {res.clusters.length - 14} more clusters.</span>}
           {gt && (
             <Callout kind={gt.recovered.length >= 3 ? 'good' : ''} title="Compared with ground-truth instances">
               Recovered {gt.recovered.length} of {gt.gtObjects} objects (IoU ≥ 0.5, purity ≥ 0.7). <b>{gt.overSegmented}</b> objects split across clusters (over-segmentation), <b>{gt.underSegmented}</b> clusters merge several objects (under-segmentation).
-              {guesses && <div style={{ marginTop: 6 }}>Rule-based class guess correct for {guesses.filter((g) => g.guess.classId === g.truth).length} of {guesses.length} clusters — a crude size heuristic, shown only to contrast with real learned segmentation.</div>}
             </Callout>
           )}
         </Section>
@@ -182,7 +175,7 @@ export default function Tab6() {
   const rawText = useMemo(() => (rawOpen && cloud ? new TextDecoder().decode(writePCD({ id: 'raw', name: 'segmented', count: cloud.count, positions: cloud.positions, meta: cloud.meta, ...(res ? { labels: res.display } : {}) } as PointCloud, false)) : ''), [rawOpen, cloud, res]);
 
   return (
-    <TabFrame title="Clustering & Segmentation" tab={9} viewport={viewport} controls={controls} learn={null} noPanelTabs statsRow stats={stats}
+    <TabFrame title="Clustering & Segmentation" tab={11} noEnv viewport={viewport} controls={controls} learn={null} noPanelTabs statsRow stats={stats}
       viewExtras={<><Btn sm variant="primary" icon={<Play size={15} />} onClick={runMain} busy={busy} disabled={!cloud} testId="run-seg">Segment</Btn><Btn sm icon={<FileText size={15} />} variant={rawOpen ? 'primary' : ''} onClick={() => setRawOpen(!rawOpen)} disabled={!cloud} testId="raw-toggle">Raw</Btn></>}
       overlays={rawOpen && cloud ? <RawViewer text={rawText} filename="segmented.pcd" onClose={() => setRawOpen(false)} /> : null} />
   );

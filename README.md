@@ -17,7 +17,7 @@ Everything is a simulation you can poke, break and fix, with plain-English expla
 
 ## A good way to use it
 
-Go through the tabs in order, one idea at a time, about five minutes each. Each tab starts with a short "what is this?" box and its controls are in the order you need them (1 → 2 → 3). Or jump straight to what you are curious about. The last tab has nine small challenges that check themselves.
+Go through the tabs in order, one idea at a time, about five minutes each. Each tab starts with a short "what is this?" box and its controls are in the order you need them (1 → 2 → 3). Or jump straight to what you are curious about.
 
 ## Tabs
 
@@ -27,19 +27,19 @@ Go through the tabs in order, one idea at a time, about five minutes each. Each 
 | 2 | **Scanner Simulator** | Place a scanner, set FOV, resolution, channels, range and noise, pick commercial presets (Velodyne, Ouster, Hesai, Livox…). |
 | 3 | **Compare Sensors** | Two to four sensors scan the same place side by side. |
 | 4 | **Point Cloud Gallery** | Real clouds with play/pause through frames: Velodyne VLP-16, Ouster OS1/OS0, Livox MID-360, RIEGL TLS. Raw file view; open your own file. |
-| 5 | **Point Cloud Registration** | Two clouds, no scene. Move one by hand or run ICP (point-to-point / point-to-plane); the 4×4 matrix is drawn on the view. |
-| 6 | **TLS Scanning** | Place tripod stations, scan, then register the scans into one cloud. You know the true positions, so you see how close registration gets. |
-| 7 | **SLAM & Mobile Scanning** | Moving scans in a city (handheld, vehicle, UAV) and a SLAM run with drift and loop closure. |
-| 8 | **LiDAR + Camera Fusion** | Measure the offset between a LiDAR and a camera, match points, solve the calibration and colour the cloud. |
-| 9 | **Point Cloud Processing** | A pipeline of filters on an untouched original: crop, voxel, noise, outliers, normals. |
-| 10 | **Clustering & Segmentation** | RANSAC planes, Euclidean clustering, DBSCAN, scored against ground truth. |
+| 5 | **Point Cloud Processing** | A pipeline of filters on an untouched original: crop, voxel, noise, outliers, normals. |
+| 6 | **Point Cloud Registration** | Two clouds, no scene. Move one by hand or run ICP (point-to-point / point-to-plane); the 4×4 matrix is drawn on the view. |
+| 7 | **TLS Scanning** | Place tripod stations, scan, then register the scans into one cloud. You know the true positions, so you see how close registration gets. |
+| 8 | **SLAM & Mobile Scanning** | Moving scans in a city (handheld, vehicle, UAV) and a SLAM run with drift and loop closure. |
+| 9 | **LiDAR + Camera Fusion** | A colourful hall, a LiDAR and a camera. Move the camera into place with translation and rotation sliders, watch the point cloud colour change, press Calculate to see the errors zoomed in, save the calibration, then map a whole walk in colour in a pop-up. |
+| 10 | **Meshing & Surfaces** | Coloured point clouds (the hall from tab 8, a classroom, a tree) into surfaces: voxel, smoothed, height map, close gaps, simplify, colour from the points, export OBJ. |
 | 11 | **Plane Detection** | Fixed vs **adaptive RANSAC** on a classroom scan: spacing, noise and trial count worked out from the data. |
-| 12 | **Scan to CAD** | Slice a classroom, find wall lines, square the corners, export a **DXF** floor plan. |
-| 13 | **Change Detection** | Two scans of a room, align, measure distances, threshold, group: what was removed, moved or added? |
-| 14 | **Meshing & Surfaces** | Turn points into a surface (voxel, smoothed, height map), export OBJ. Videos on SLAM → colour → surface. |
+| 12 | **Clustering & Segmentation** | RANSAC planes, Euclidean clustering and DBSCAN on the same classroom scan, scored against its furniture. |
+| 13 | **Scan to CAD** | Slice a classroom, find wall lines, square the corners, export a **DXF** floor plan. |
+| 14 | **Change Detection** | Two scans of a room, align, measure distances, threshold, group: what was removed, moved or added? |
 | 15 | **Image to 3D** | Scene and input images, three reconstruction methods, meshing, alignment with scale, error map. |
 | 16 | **Scene Graphs & 3D AI** | Objects and relations, offline question answering, link to [local-llm-fit](https://maninka123.github.io/local-llm-fit/). |
-| 17 | **Challenges** | Nine auto-checked exercises with a JSON / PDF summary. |
+| 17 | **Videos** | All the tutorial videos by Dr. Florent Poux in one place. Click one to play it in the middle of the screen, with a Full screen button. |
 
 Viewport: left-drag rotates, right-drag or the **Pan** button moves the cloud, wheel zooms.
 
@@ -84,7 +84,7 @@ Units are metres, Z-up. LAZ is not decoded in the browser (`pdal translate in.la
 ```
 src/core  scenes  sensor  processing  segmentation  registration  recon  graph  io  engine (Web Workers)
 src/apps  (classroom: planes, CAD, change detection, meshing, fusion maths)
-src/exercises  state  ui  tabs      tests/ (Vitest)      e2e/ (Playwright)      docs/screens/
+state  ui  tabs      tests/ (Vitest)      e2e/ (Playwright)      docs/screens/
 ```
 
 Stack: React, TypeScript, Vite, Three.js + React Three Fiber, Zustand, Tailwind CSS. A push to `main` deploys to GitHub Pages (`.github/workflows/pages.yml`; Settings → Pages → Source: GitHub Actions).

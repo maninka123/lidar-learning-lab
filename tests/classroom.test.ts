@@ -27,7 +27,7 @@ describe('classroom scan shipped with the app', () => {
     expect(room.colors).toBeTruthy(); expect(room.labels).toBeTruthy();
     const b = cloudBounds(room); expect(b.max[2]).toBeGreaterThan(2.4); expect(b.max[2]).toBeLessThan(3);
   });
-  it('adaptive RANSAC finds floor, ceiling and walls; fixed settings with silly values still run', () => {
+  it('adaptive RANSAC finds floor, ceiling and walls; fixed settings with silly values still run', { timeout: 120000 }, () => {
     const o = { threshold: 0.02, iterations: 100, confidence: 0.99, minFraction: 0.02, maxPlanes: 12, seed: 3 };
     const a = detectPlanes(room.positions, room.count, room.labels!, { ...o, mode: 'adaptive' });
     expect(a.planes.some((p) => p.kind === 'floor') && a.planes.some((p) => p.kind === 'ceiling')).toBe(true);

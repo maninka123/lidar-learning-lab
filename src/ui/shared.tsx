@@ -8,7 +8,6 @@ import { SCENE_IDS, getScene, SceneId } from '../scenes';
 import { activeCloud, exampleCloud, exportCloudFile, takeScreenshot, uploadCloud } from '../state/actions';
 import { downloadBlob } from '../io/load';
 import { attributesOf, PointCloud } from '../core/pointcloud';
-import { CHALLENGES } from '../exercises/defs';
 
 // ------------------------------------------------------------------ top bar
 function Popover({ label, icon, children, align = 'left', testId }: { label: ReactNode; icon?: ReactNode; children: ReactNode; align?: 'left' | 'right'; testId?: string }) {
@@ -180,34 +179,6 @@ export function DisplaySection({ cloud, extra, open = true, hideColour }: { clou
       <Toggle label="Show ceiling" checked={v.showCeiling} onChange={(x) => setView({ showCeiling: x })} />
       {extra}
     </Section>
-  );
-}
-
-export function ExercisePanel({ tab }: { tab: number }) {
-  const s = useLab();
-  const list = CHALLENGES.filter((c) => c.tab === tab);
-  if (!list.length) return <p className="hint" style={{ paddingTop: 12 }}>No exercise on this tab.</p>;
-  return (
-    <div style={{ display: 'grid', gap: 14, paddingTop: 12 }}>
-      {list.map((c) => {
-        const r = c.check(s);
-        return (
-          <div key={c.id} className="callout" style={{ gap: 8 }} data-testid={`exercise-${c.id}`}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              {r.done ? <Check size={18} color="var(--green)" /> : <Circle size={18} color="var(--text3)" />}
-              <b>Challenge {c.id}</b>
-              <span className="spacer" />
-              <span className="caption" style={{ color: r.done ? 'var(--green)' : undefined }}>{r.done ? 'Complete' : 'In progress'}</span>
-            </div>
-            <h3>{c.title}</h3>
-            <p>{c.goal}</p>
-            <ol style={{ margin: 0, paddingLeft: '1.2rem', display: 'grid', gap: 3 }}>{c.steps.map((st, i) => <li key={i}>{st}</li>)}</ol>
-            <div className="callout good"><b>Automatic check</b>{r.detail}</div>
-            <div className="callout edu"><b>What you should learn</b>{c.outcome}</div>
-          </div>
-        );
-      })}
-    </div>
   );
 }
 

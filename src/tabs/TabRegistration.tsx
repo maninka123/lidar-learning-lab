@@ -227,7 +227,7 @@ export default function TabRegistration() {
   return (
     <TabFrame
       title="Point Cloud Registration"
-      tab={4}
+      tab={5}
       viewport={viewport}
       controls={controls}
       learn={null}

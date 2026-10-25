@@ -107,14 +107,20 @@ function backProject(v: View, zEst: (i: number, j: number, z: number) => number 
   }
 }
 
-export function voxelSurfaceMesh(c: PointCloud, vs: number): { positions: Float32Array; indices: Uint32Array } {
-  const occ = new Set<string>();
+export function voxelSurfaceMesh(c: PointCloud, vs: number, closing = 0): { positions: Float32Array; indices: Uint32Array } {
+  let occ = new Set<string>();
   const key = (x: number, y: number, z: number) => `${x},${y},${z}`;
-  const cells: [number, number, number][] = [];
+  let cells: [number, number, number][] = [];
   for (let i = 0; i < c.count; i++) {
     const x = Math.floor(c.positions[i * 3] / vs), y = Math.floor(c.positions[i * 3 + 1] / vs), z = Math.floor(c.positions[i * 3 + 2] / vs);
     const k = key(x, y, z);
     if (!occ.has(k)) { occ.add(k); cells.push([x, y, z]); }
+  }
+  // "close gaps": grow the filled cells by `closing` cells, then shrink them back. Small holes stay filled, the outline stays put.
+  if (closing > 0) {
+    const N: [number, number, number][] = [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]];
+    for (let r = 0; r < closing; r++) { const grown = new Set(occ); for (const [x, y, z] of cells) for (const d of N) grown.add(key(x + d[0], y + d[1], z + d[2])); occ = grown; cells = Array.from(occ).map((k) => k.split(',').map(Number) as [number, number, number]); }
+    for (let r = 0; r < closing; r++) { const keep = new Set<string>(); for (const [x, y, z] of cells) if (N.every((d) => occ.has(key(x + d[0], y + d[1], z + d[2])))) keep.add(key(x, y, z)); occ = keep; cells = Array.from(occ).map((k) => k.split(',').map(Number) as [number, number, number]); }
   }
   const pos: number[] = [], idx: number[] = [];
   const dirs: [number, number, number][] = [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]];
@@ -135,8 +141,8 @@ export function voxelSurfaceMesh(c: PointCloud, vs: number): { positions: Float3
 }
 
 /** Surface reconstruction from a point cloud: a blocky voxel surface, or the same surface with welded vertices and Laplacian smoothing. */
-export function surfaceMesh(c: PointCloud, o: { method: 'voxel' | 'smooth'; voxel: number; iterations?: number }): { positions: Float32Array; indices: Uint32Array } {
-  const m = voxelSurfaceMesh(c, o.voxel);
+export function surfaceMesh(c: PointCloud, o: { method: 'voxel' | 'smooth'; voxel: number; iterations?: number; closing?: number }): { positions: Float32Array; indices: Uint32Array } {
+  const m = voxelSurfaceMesh(c, o.voxel, o.closing ?? 0);
   if (o.method === 'voxel') return m;
   // weld duplicate vertices
   const map = new Map<string, number>(), remap = new Uint32Array(m.positions.length / 3), vp: number[] = [];
@@ -150,17 +156,20 @@ export function surfaceMesh(c: PointCloud, o: { method: 'voxel' | 'smooth'; voxe
   const idx = Uint32Array.from(m.indices, (i) => remap[i]);
   const n = vp.length / 3, nbr: Set<number>[] = Array.from({ length: n }, () => new Set());
   for (let t = 0; t < idx.length; t += 3) for (let e = 0; e < 3; e++) { const a = idx[t + e], b = idx[t + (e + 1) % 3]; nbr[a].add(b); nbr[b].add(a); }
+  // Taubin smoothing: pull every vertex towards the average of its neighbours (λ), then push it back out a little (μ).
+  // Plain averaging would shrink the surface until thin parts vanish; the second step cancels the shrinking.
   let cur = Float32Array.from(vp);
-  for (let it = 0; it < (o.iterations ?? 6); it++) {
+  const pass = (k: number) => {
     const next = new Float32Array(cur.length);
     for (let v = 0; v < n; v++) {
       const s = nbr[v];
       if (!s.size) { next.set(cur.subarray(v * 3, v * 3 + 3), v * 3); continue; }
       let x = 0, y = 0, z = 0; for (const u of s) { x += cur[u * 3]; y += cur[u * 3 + 1]; z += cur[u * 3 + 2]; }
-      next[v * 3] = cur[v * 3] * 0.4 + (x / s.size) * 0.6; next[v * 3 + 1] = cur[v * 3 + 1] * 0.4 + (y / s.size) * 0.6; next[v * 3 + 2] = cur[v * 3 + 2] * 0.4 + (z / s.size) * 0.6;
+      next[v * 3] = cur[v * 3] + k * (x / s.size - cur[v * 3]); next[v * 3 + 1] = cur[v * 3 + 1] + k * (y / s.size - cur[v * 3 + 1]); next[v * 3 + 2] = cur[v * 3 + 2] + k * (z / s.size - cur[v * 3 + 2]);
     }
     cur = next;
-  }
+  };
+  for (let it = 0; it < (o.iterations ?? 6); it++) { pass(0.5); pass(-0.53); }
   return { positions: cur, indices: idx };
 }
 

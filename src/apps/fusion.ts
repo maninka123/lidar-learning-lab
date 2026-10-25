@@ -31,7 +31,7 @@ export function project(cam: CamPose, p: Vec3, w: number, h: number, fovDeg: num
 }
 
 /** Give every LiDAR point the colour of the photo pixel it lands on (skipping points the camera cannot see). */
-export function colourise(pos: Float32Array, n: number, rig: Rig, e: Extrinsic, img: Image, occlusion = true): { colors: Uint8Array; valid: Uint8Array; count: number } {
+export function colourise(pos: Float32Array, n: number, rig: Rig, e: Extrinsic, img: Image, occlusion = true, tolScale = 1): { colors: Uint8Array; valid: Uint8Array; count: number } {
   const cam = cameraPose(rig, e), colors = new Uint8Array(n * 3).fill(170), valid = new Uint8Array(n);
   let count = 0;
   for (let i = 0; i < n; i++) {
@@ -41,7 +41,7 @@ export function colourise(pos: Float32Array, n: number, rig: Rig, e: Extrinsic, 
     if (iu < 0 || iv < 0 || iu >= img.w || iv >= img.h) continue;
     const k = iv * img.w + iu;
     if (!img.hitMask[k]) continue;
-    if (occlusion && Math.abs(q.z - img.depth[k]) > 0.12 + 0.04 * q.z) continue; // the camera sees something nearer: this point is hidden from it
+    if (occlusion && Math.abs(q.z - img.depth[k]) > (0.12 + 0.04 * q.z) * tolScale) continue; // the camera sees something nearer: this point is hidden from it
     colors[i * 3] = img.rgb[k * 4]; colors[i * 3 + 1] = img.rgb[k * 4 + 1]; colors[i * 3 + 2] = img.rgb[k * 4 + 2];
     valid[i] = 1; count++;
   }
@@ -90,3 +90,37 @@ export function solveExtrinsic(rig: Rig, X: Vec3[], m: [number, number][], init:
   }
   return { e: asE(p), rms: rmsPx(res), iters: it };
 }
+
+/** The calibration is kept in the browser so it can be used again (for example in the mobile mapping pop-up). */
+export interface SavedCalibration { e: Extrinsic; savedAt: number; errCm: number; errDeg: number }
+const KEY = 'lidar-lab-calibration';
+export function loadCalibration(): SavedCalibration | null {
+  try { const v = localStorage.getItem(KEY); return v ? (JSON.parse(v) as SavedCalibration) : null; } catch { return null; }
+}
+export function saveCalibration(c: SavedCalibration): void { try { localStorage.setItem(KEY, JSON.stringify(c)); } catch { /* private window: keep it in memory only */ } }
+
+/** Colour a moving scan from several photos: every point takes its colour from the photo taken closest in time that can see it. */
+export interface Keyframe { t: number; rig: Rig; img: Image }
+export function colourMoving(pos: Float32Array, times: Float32Array | undefined, n: number, frames: Keyframe[], e: Extrinsic): { colors: Uint8Array; count: number } {
+  const colors = new Uint8Array(n * 3).fill(175), best = new Float32Array(n).fill(Infinity);
+  let count = 0;
+  const cams = frames.map((f) => cameraPose(f.rig, e));
+  for (let i = 0; i < n; i++) {
+    const ti = times ? times[i] : 0;
+    const p: Vec3 = [pos[i * 3], pos[i * 3 + 1], pos[i * 3 + 2]];
+    for (let k = 0; k < frames.length; k++) {
+      const dt = Math.abs(frames[k].t - ti); if (dt >= best[i]) continue;
+      const img = frames[k].img, q = project(cams[k], p, img.w, img.h, img.fovDeg); if (!q) continue;
+      const iu = Math.round(q.u), iv = Math.round(q.v); if (iu < 0 || iv < 0 || iu >= img.w || iv >= img.h) continue;
+      const j = iv * img.w + iu; if (!img.hitMask[j] || Math.abs(q.z - img.depth[j]) > 0.12 + 0.04 * q.z) continue;
+      if (best[i] === Infinity) count++;
+      best[i] = dt; colors[i * 3] = img.rgb[j * 4]; colors[i * 3 + 1] = img.rgb[j * 4 + 1]; colors[i * 3 + 2] = img.rgb[j * 4 + 2];
+    }
+  }
+  return { colors, count };
+}
+
+/** The real mounting of the camera on the LiDAR. The learner does not see these numbers until they press Calculate. */
+export const TRUTH: Extrinsic = { tx: 0.14, ty: -0.09, tz: 0.11, yawDeg: 2.5, pitchDeg: -4 };
+export const IMG_W = 320, IMG_H = 240, FOV = 62;
+export const ZERO: Extrinsic = { tx: 0, ty: 0, tz: 0, yawDeg: 0, pitchDeg: 0 };
