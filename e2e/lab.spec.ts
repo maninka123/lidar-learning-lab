@@ -189,13 +189,15 @@ test.describe('LiDAR Learning Lab', () => {
   });
 
   test('tab 12: scene graph on the classroom, offline queries, local-llm-fit card and direct DeepSeek inference (mocked)', async ({ page }) => {
-    await page.route('**/api/deepseek/**', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ choices: [{ message: { content: 'It looks like a classroom per the graph: z near 0 is the floor, and some tables.' } }], usage: { prompt_tokens: 9876, completion_tokens: 21 } }) }));
+    await page.route('**/api/deepseek/**', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ choices: [{ message: { content: '# Summary\n\n**Room:** a classroom per the graph.\n\n- z near 0 is the floor\n- some tables' } }], usage: { prompt_tokens: 9876, completion_tokens: 21 } }) }));
     await go(page, 11);
     await expect(page.getByTestId('ds-preview')).toContainText('points');
     await page.getByTestId('ds-prompt').click();
     await expect(page.getByTestId('ds-prompt-text')).toContainText('System');
     await page.getByTestId('ds-send').click();
     await expect(page.getByTestId('ds-answer')).toContainText('classroom');
+    await expect(page.getByTestId('ds-answer').locator('li')).toHaveCount(2);
+    await expect(page.getByTestId('ds-answer').getByText('Room:', { exact: true })).toBeVisible();
     await expect(page.getByText('Why this is not real point cloud inference')).toBeVisible();
     await page.getByRole('button', { name: '2 · Scene graph' }).click();
     await expect(page.getByTestId('graph-view')).toBeVisible({ timeout: 60000 });

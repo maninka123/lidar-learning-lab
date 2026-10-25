@@ -3,6 +3,7 @@ import { useLab } from '../state/store';
 import { loadClassroomForSegmentation, nodesFromClassroom, paintClasses } from '../apps/classroom';
 import { askDeepSeek, DEEPSEEK_MODEL, estimateTokens, loadOwnKey, NoKeyError, pointCloudToText, saveOwnKey, AiResult } from '../apps/deepseek';
 import { PointCloud } from '../core/pointcloud';
+import { Markdown } from '../ui/Markdown';
 import { className, classColor } from '../scenes/classes';
 import { Viewport } from '../ui/Viewport';
 import { TabFrame } from '../ui/TabFrame';
@@ -132,13 +133,13 @@ export default function Tab8() {
   const preview = useMemo(() => (cloud ? pointCloudToText(cloud, nPts, withColour) : null), [cloud, nPts, withColour]);
   const directPrompt = useMemo(() => ({
     system: 'You are given raw LiDAR point cloud data as plain text. Be honest and short: say what you can and cannot tell from numbers alone.',
-    user: preview ? `Below are ${preview.count} points sampled from a LiDAR scan of one room. Each line is one point: x y z (metres)${withColour ? ' then r g b (0-255)' : ''}.\n\nWhat kind of room is this, and which objects are in it? Give each object with an approximate position. If you cannot tell, say so.\n\n${preview.text}` : '',
+    user: preview ? `Below are ${preview.count} points sampled from a LiDAR scan of one room. Each line is one point: x y z (metres)${withColour ? ' then r g b (0-255)' : ''}.\n\nWhat kind of room is this, and which objects are in it? Give each object with an approximate position.\n\n${preview.text}` : '',
   }), [preview, withColour]);
   async function sendToAi() {
     if (!preview || !cloud) return;
     setAiBusy(true); setAiErr(null);
     const { system, user } = directPrompt;
-    try { const r = await askDeepSeek(system, user, 600, ownKey); setAi({ ...r, sent: preview.count }); setNeedKey(false); }
+    try { const r = await askDeepSeek(system, user, 2500, ownKey); setAi({ ...r, sent: preview.count }); setNeedKey(false); }
     catch (e) { if (e instanceof NoKeyError) { setNeedKey(true); setAiErr('This site has no DeepSeek key of its own. Paste your key below (it stays in your browser) and press Send again.'); } else setAiErr((e as Error).message); }
     finally { setAiBusy(false); }
   }
@@ -170,7 +171,7 @@ export default function Tab8() {
   async function askGraphAi(question: string) {
     setGBusy(true); setGErr(null);
     const p = graphPrompt(question);
-    try { const r = await askDeepSeek(p.system, p.user, 400, ownKey); setGAns({ q: question, r }); setNeedKey(false); }
+    try { const r = await askDeepSeek(p.system, p.user, 1200, ownKey); setGAns({ q: question, r }); setNeedKey(false); }
     catch (e) { if (e instanceof NoKeyError) { setNeedKey(true); setGErr('This site has no DeepSeek key of its own. Paste your key below (it stays in your browser) and press Ask again.'); } else setGErr((e as Error).message); }
     finally { setGBusy(false); }
   }
@@ -218,7 +219,7 @@ export default function Tab8() {
       <Seg value={pane} onChange={setPane} options={[{ value: 'direct', label: '1 · Direct AI' }, { value: 'graph', label: '2 · Scene graph' }, { value: 'ai', label: '3 · Graph → AI' }]} label="Section" />
       {pane === 'direct' && (<>
       <Section title="Direct inference: give the point cloud to an AI">
-        <p className="hint">What if we skip the pipeline and hand the raw point cloud to a language model? The cloud is thinned out, written as text (one point per line) and sent to <b>DeepSeek Flash</b> (<span className="mono">{DEEPSEEK_MODEL}</span>), the cheaper of DeepSeek's two models (the other is the bigger “Pro”). Whatever comes back is the model's own answer.</p>
+        <p className="hint">Skip the pipeline: send the raw points, as text, straight to <b>DeepSeek Flash</b> (<span className="mono">{DEEPSEEK_MODEL}</span>).</p>
         <Slider label="Points to send" value={nPts} min={100} max={3000} step={100} onChange={setNPts} hint="Every point costs tokens (the model's unit of reading). More points cost more and can run over its limit." />
         <Toggle label="Include the colours" checked={withColour} onChange={setWithColour} />
         {preview && cloud && (
@@ -235,7 +236,7 @@ export default function Tab8() {
         {ai && (
           <div className="callout fade-in" style={{ gap: 8 }} data-testid="ds-answer">
             <b>DeepSeek's answer (raw)</b>
-            <pre className="mono" style={{ margin: 0, fontSize: '0.8125rem', whiteSpace: 'pre-wrap', maxHeight: 320, overflow: 'auto' }}>{ai.text}</pre>
+            <Markdown text={ai.text} />
             <span className="caption">{fmtN(ai.sent)} points sent · {fmtN(ai.promptTokens)} tokens read · {fmtN(ai.completionTokens)} written · {(ai.ms / 1000).toFixed(1)} s · {ai.via === 'server' ? 'key held by the server' : 'your own key'} · model: DeepSeek Flash ({DEEPSEEK_MODEL})</span>
             <span className="caption">For comparison, the scan really contains <b>{truthNodes.filter((n) => !n.structural).length} objects</b>: {Object.entries(truthNodes.filter((n) => !n.structural).reduce<Record<string, number>>((a, n) => { const k = n.classLabel ?? 'Object'; a[k] = (a[k] ?? 0) + 1; return a; }, {})).map(([k, v]) => `${v} ${k.toLowerCase()}${v > 1 ? 's' : ''}`).join(', ')}.</span>
           </div>
@@ -268,7 +269,7 @@ export default function Tab8() {
       </>)}
       {pane === 'ai' && (<>
       <Section title="Give the scene graph to an AI">
-        <p className="hint">Same model as step 1 (DeepSeek Flash, the cheaper one). Now the AI gets something it can really read: the <b>scene graph</b>, written as text. Each object has a name, an exact position and size, and the relations between objects were worked out by geometry. The AI only has to read and answer.</p>
+        <p className="hint">Now the AI reads the <b>scene graph</b> as text: named objects with exact positions and sizes, and relations worked out by geometry.</p>
         {graphText && <div className="callout" style={{ gap: 6 }} data-testid="gs-preview"><b>What is sent</b><pre className="mono" style={{ margin: 0, fontSize: '0.8125rem', whiteSpace: 'pre-wrap' }}>{graphText.split('\n').slice(0, 6).join('\n')}{'\n…'}</pre><span className="caption">{fmtN(graphText.split('\n').length)} lines · about {fmtN(Math.round(graphText.length / 3.5))} tokens: far fewer than the raw points, and every number is exact.</span></div>}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 8 }}>
           <input type="text" value={q} placeholder="Ask a spatial question…" onChange={(e) => setQ(e.target.value)} aria-label="Question for the AI" data-testid="gs-question" />
@@ -278,7 +279,7 @@ export default function Tab8() {
         <div className="chip-row">{SUPPORTED_QUESTIONS.map((t) => <button key={t} className="chip" onClick={() => setQ(t)}>{t}</button>)}</div>
         {needKey && <label className="field"><span>Your DeepSeek key (kept only in this browser)</span><input type="password" value={ownKey} onChange={(e) => { setOwnKey(e.target.value); saveOwnKey(e.target.value); }} placeholder="sk-…" autoComplete="off" /></label>}
         {gErr && <Callout kind="warn">{gErr}</Callout>}
-        {gAns && (<div className="callout good fade-in" style={{ gap: 6 }} data-testid="gs-answer"><b>DeepSeek's answer</b><div style={{ whiteSpace: 'pre-wrap' }}>{gAns.r.text}</div><span className="caption">{fmtN(gAns.r.promptTokens)} tokens read · {fmtN(gAns.r.completionTokens)} written · {(gAns.r.ms / 1000).toFixed(1)} s · model: DeepSeek Flash ({DEEPSEEK_MODEL})</span><b>The graph's own answer</b><div>{answerQuery(graph!, gAns.q).answer}</div><span className="caption">Computed directly from the geometry, no AI involved. Compare the two: the AI is only as good as the graph it reads, and it can still slip on numbers.</span></div>)}
+        {gAns && (<div className="callout good fade-in" style={{ gap: 6 }} data-testid="gs-answer"><b>DeepSeek's answer</b><Markdown text={gAns.r.text} /><span className="caption">{fmtN(gAns.r.promptTokens)} tokens read · {fmtN(gAns.r.completionTokens)} written · {(gAns.r.ms / 1000).toFixed(1)} s · model: DeepSeek Flash ({DEEPSEEK_MODEL})</span><b>The graph's own answer</b><div>{answerQuery(graph!, gAns.q).answer}</div><span className="caption">Computed directly from the geometry, no AI involved. Compare the two: the AI is only as good as the graph it reads, and it can still slip on numbers.</span></div>)}
       </Section>
       <Section title="Or ask the graph directly (no AI)">
         <p className="caption">Offline demo: a fixed set of question patterns, not an AI model. Every number comes from the graph geometry.</p>
