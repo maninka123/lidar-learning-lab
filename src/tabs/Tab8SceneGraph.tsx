@@ -238,7 +238,6 @@ export default function Tab8() {
             <b>DeepSeek's answer (raw)</b>
             <Markdown text={ai.text} />
             <span className="caption">{fmtN(ai.sent)} points sent · {fmtN(ai.promptTokens)} tokens read · {fmtN(ai.completionTokens)} written · {(ai.ms / 1000).toFixed(1)} s · {ai.via === 'server' ? 'key held by the server' : 'your own key'} · model: DeepSeek Flash ({DEEPSEEK_MODEL})</span>
-            <span className="caption">For comparison, the scan really contains <b>{truthNodes.filter((n) => !n.structural).length} objects</b>: {Object.entries(truthNodes.filter((n) => !n.structural).reduce<Record<string, number>>((a, n) => { const k = n.classLabel ?? 'Object'; a[k] = (a[k] ?? 0) + 1; return a; }, {})).map(([k, v]) => `${v} ${k.toLowerCase()}${v > 1 ? 's' : ''}`).join(', ')}.</span>
           </div>
         )}
         <Callout kind="edu" title="Why this is not real point cloud inference">
