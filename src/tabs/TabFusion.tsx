@@ -49,23 +49,21 @@ function TransformCard({ e }: { e: Extrinsic }) {
   return (
     <div style={{ background: '#fff', padding: '8px 12px', display: 'grid', gap: 4 }} data-testid="transform-card">
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}><b style={{ fontSize: '0.875rem' }}>Camera relative to the LiDAR</b><span className="caption">LiDAR frame → camera frame</span></div>
-      <div style={{ display: 'flex', gap: 14, alignItems: 'center', flexWrap: 'wrap' }}>
-        <div style={{ display: 'grid', gap: 4 }}>
-          <div style={{ display: 'flex', gap: 10 }}>
-            <div style={{ border: '2.5px solid #0a84ff', borderRadius: 20, padding: '8px 14px', display: 'grid', gridTemplateColumns: 'repeat(3, 4.1em)', gap: '3px 4px', color: '#0a60c9', ...mono }}>
-              {R.flat().map((v, i) => <span key={i}>{num(v)}</span>)}
-            </div>
-            <div style={{ border: '2.5px solid #ff9f0a', borderRadius: 20, padding: '8px 14px', display: 'grid', gridTemplateColumns: '4.1em', gap: '3px 4px', color: '#c77700', ...mono }}>
-              {t.map((v, i) => <span key={i}>{num(v)}</span>)}
-            </div>
+      <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+        <div style={{ display: 'grid', gap: 6, justifyItems: 'start' }}>
+          <div style={{ border: '2.5px solid #0a84ff', borderRadius: 20, padding: '8px 14px', display: 'grid', gridTemplateColumns: 'repeat(3, 4.1em)', gap: '3px 4px', color: '#0a60c9', ...mono }}>
+            {R.flat().map((v, i) => <span key={i}>{num(v)}</span>)}
           </div>
-          <div style={{ ...mono, color: '#9a9aa2', textAlign: 'left', paddingLeft: 14, whiteSpace: 'pre' }}>{'0.000  0.000  0.000     1'}</div>
+          <div style={{ color: '#0a60c9', fontSize: '0.8125rem', paddingLeft: 4 }}><b>Rotation</b> (blue)<br />turn {e.yawDeg.toFixed(1)}° · tilt {e.pitchDeg.toFixed(1)}°<br /><span className="caption">columns: forward, left, up</span></div>
         </div>
-        <div style={{ display: 'grid', gap: 6, fontSize: '0.8125rem' }}>
-          <span style={{ color: '#0a60c9' }}><b>Rotation</b> (blue)<br />turn {e.yawDeg.toFixed(1)}° · tilt {e.pitchDeg.toFixed(1)}°<br /><span className="caption">columns: forward, left, up</span></span>
-          <span style={{ color: '#c77700' }}><b>Translation</b> (orange, metres)<br />{(e.tx * 100).toFixed(1)}, {(e.ty * 100).toFixed(1)}, {(e.tz * 100).toFixed(1)} cm<br /><span className="caption">forward, left, up</span></span>
+        <div style={{ display: 'grid', gap: 6, justifyItems: 'start' }}>
+          <div style={{ border: '2.5px solid #ff9f0a', borderRadius: 20, padding: '8px 14px', display: 'grid', gridTemplateColumns: '4.1em', gap: '3px 4px', color: '#c77700', ...mono }}>
+            {t.map((v, i) => <span key={i}>{num(v)}</span>)}
+          </div>
+          <div style={{ color: '#c77700', fontSize: '0.8125rem', paddingLeft: 4 }}><b>Translation</b> (orange)<br />{(e.tx * 100).toFixed(1)}, {(e.ty * 100).toFixed(1)}, {(e.tz * 100).toFixed(1)} cm<br /><span className="caption">forward, left, up</span></div>
         </div>
       </div>
+      <div style={{ ...mono, color: '#9a9aa2', textAlign: 'left', paddingLeft: 14, whiteSpace: 'pre' }}>{'last row of the matrix:  0   0   0   1'}</div>
     </div>
   );
 }
