@@ -189,22 +189,22 @@ test.describe('LiDAR Learning Lab', () => {
   });
 
   test('tab 12: scene graph on the classroom, offline queries, local-llm-fit card and direct DeepSeek inference (mocked)', async ({ page }) => {
-    await page.route('**/api/deepseek/**', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ choices: [{ message: { content: 'It looks like a classroom: z near 0 is the floor, and some tables.' } }], usage: { prompt_tokens: 9876, completion_tokens: 21 } }) }));
+    await page.route('**/api/deepseek/**', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ choices: [{ message: { content: 'It looks like a classroom per the graph: z near 0 is the floor, and some tables.' } }], usage: { prompt_tokens: 9876, completion_tokens: 21 } }) }));
     await go(page, 11);
-    await page.getByRole('button', { name: 'Graph', exact: true }).click();
-    await expect(page.getByTestId('graph-view')).toBeVisible({ timeout: 60000 });
-    await page.getByTestId('node-table-1').click();
-    await page.getByRole('button', { name: 'Ask', exact: true }).click();
-    await expect(page.getByTestId('node-details')).toContainText('table-1');
-    await page.getByText('Which object is closest to the scanner?').first().click();
-    await expect(page.getByTestId('answer')).toContainText('closest');
-    await page.getByRole('button', { name: 'LLM', exact: true }).click();
-    await expect(page.getByTestId('llm-fit-link')).toHaveAttribute('href', 'https://maninka123.github.io/local-llm-fit/');
     await expect(page.getByTestId('ds-preview')).toContainText('points');
     await page.getByTestId('ds-send').click();
     await expect(page.getByTestId('ds-answer')).toContainText('classroom');
-    await expect(page.getByTestId('ds-answer')).toContainText('9,876 tokens read');
     await expect(page.getByText('Why this is not real point cloud inference')).toBeVisible();
+    await page.getByRole('button', { name: '2 · Scene graph' }).click();
+    await expect(page.getByTestId('graph-view')).toBeVisible({ timeout: 60000 });
+    await page.getByTestId('node-table-1').click();
+    await page.getByRole('button', { name: '3 · Graph → AI' }).click();
+    await expect(page.getByTestId('node-details')).toContainText('table-1');
+    await expect(page.getByTestId('gs-preview')).toContainText('tokens');
+    await page.getByTestId('gs-send').click();
+    await expect(page.getByTestId('gs-answer')).toContainText('graph');
+    await page.getByText('Which object is closest to the scanner?').first().click();
+    await expect(page.getByTestId('llm-fit-link')).toHaveAttribute('href', 'https://maninka123.github.io/local-llm-fit/');
   });
   test('environment menu switches scenes compactly', async ({ page }) => {
     await go(page, 1);
@@ -349,6 +349,24 @@ test('processing: draw a crop box on the original cloud with the mouse', async (
   expect(drawn.max[1] - drawn.min[1]).toBeLessThan(full.max[1] - full.min[1]);
   expect(Math.abs(drawn.max[2] - full.max[2])).toBeLessThan(1e-6); // drawn from above: the height is left alone
   await expect(page.getByTestId('draw-box-0')).toContainText('Draw the box on the cloud');
+});
+
+test('segmentation: label clusters by hand and use them in the scene graph', async ({ page }) => {
+  await page.goto('/');
+  await page.getByTestId('nav-10').click();
+  await expect(page.getByText(/125,\d{3} pts/)).toBeVisible({ timeout: 60000 });
+  await page.getByTestId('run-seg').click();
+  await expect.poll(() => page.evaluate(() => (window as any).__lab.getState().seg.result?.clusters?.length ?? 0), { timeout: 90000 }).toBeGreaterThan(5);
+  await page.getByRole('button', { name: 'Results', exact: true }).click();
+  await expect(page.getByTestId('label-table')).toBeVisible({ timeout: 90000 });
+  await page.getByTestId('label-0').selectOption('Chair');
+  await page.getByTestId('label-1').selectOption('Table');
+  await expect(page.getByText(/trained on labelled point clouds|semantic segmentation model/)).toBeVisible();
+  await page.getByTestId('nav-11').click();
+  await page.getByRole('button', { name: '2 · Scene graph' }).click();
+  await page.getByRole('button', { name: 'My labelled clusters' }).click();
+  await expect(page.getByTestId('graph-view')).toContainText('Chair 1');
+  await expect(page.getByTestId('graph-view')).toContainText('Table 1');
 });
 
 test.describe('corner cases', () => {

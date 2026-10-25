@@ -9,7 +9,7 @@ import { TabFrame } from '../ui/TabFrame';
 import { Btn, Callout, Section, Select, Seg, Slider, Toggle, Badge, fmtN } from '../ui/controls';
 import { CloudLayer, BoxOutline, SensorMarker } from '../ui/three';
 import { ExternalLink, Cpu, Play } from '../ui/icons';
-import { buildGraph, nodesFromSegmentation, REL_LABEL, RelType, SceneGraph, GraphNode, scannerGap } from '../graph/sceneGraph';
+import { buildGraph, nodesFromLabelledClusters, REL_LABEL, RelType, SceneGraph, GraphNode, scannerGap } from '../graph/sceneGraph';
 import { answerQuery, QueryAnswer, SUPPORTED_QUESTIONS, LLM_TOOL_SCHEMA } from '../graph/query';
 import { circularLayout } from '../graph/layout';
 import { Vec3 } from '../core/math';
@@ -100,7 +100,7 @@ export default function Tab8() {
   const [answer, setAnswer] = useState<QueryAnswer | null>(null);
   const [showStructural, setShowStructural] = useState(false);
   const [showLLM, setShowLLM] = useState(false);
-  const [pane, setPane] = useState<'graph' | 'ask' | 'llm'>('ask');
+  const [pane, setPane] = useState<'direct' | 'graph' | 'ai'>('direct');
   const [showFit, setShowFit] = useState(false);
   const seg = s.seg.result;
   // direct inference with DeepSeek
@@ -124,11 +124,29 @@ export default function Tab8() {
   const graph = g.graph;
   useEffect(() => {
     if (!truthNodes.length) return;
-    const nodes = g.source === 'segmentation' && seg ? nodesFromSegmentation(seg) : truthNodes;
+    const nodes = g.source === 'segmentation' && seg ? nodesFromLabelledClusters(seg, s.seg.names) : truthNodes;
     const gr = buildGraph(nodes, { pos: scannerPos, yaw: 0 }, undefined, g.nearThreshold);
     setG({ graph: gr });
-  }, [g.source, g.nearThreshold, truthNodes, vp.x, vp.y, seg]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [g.source, g.nearThreshold, truthNodes, vp.x, vp.y, seg, s.seg.names]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // step 3: the scene graph as text
+  const [gBusy, setGBusy] = useState(false), [gErr, setGErr] = useState<string | null>(null), [gAns, setGAns] = useState<{ q: string; r: AiResult } | null>(null);
+  const graphText = useMemo(() => {
+    if (!graph) return '';
+    const f = (v: number) => v.toFixed(2), lab = (id: string) => graph.nodes.find((n) => n.id === id)?.label ?? id;
+    const objs = graph.nodes.filter((n) => !n.structural);
+    const L = [`Scanner at (${f(graph.scanner.pos[0])}, ${f(graph.scanner.pos[1])}, ${f(graph.scanner.pos[2])}) m. Units are metres; z is up.`, 'OBJECTS (name: centre x y z; size x y z; distance from the scanner to its surface):'];
+    objs.forEach((n) => L.push(`${n.label}: ${n.position.map(f).join(' ')}; ${n.dimensions.map(f).join(' ')}; ${f(scannerGap(graph.scanner.pos, n))} m from the scanner`));
+    L.push('RELATIONS:');
+    graph.edges.filter((e) => ['near', 'above', 'below'].includes(e.type)).slice(0, 700).forEach((e) => L.push(`${lab(e.from)} ${REL_LABEL[e.type]} ${lab(e.to)}${e.value !== undefined ? ` (${f(e.value)} m)` : ''}`));
+    return L.join('\n');
+  }, [graph, g.filters]);
+  async function askGraphAi(question: string) {
+    setGBusy(true); setGErr(null);
+    try { const r = await askDeepSeek('You answer spatial questions about a room using ONLY the scene graph given. Quote numbers from it. If the graph does not say, say so. Be brief.', `SCENE GRAPH\n${graphText}\n\nQUESTION: ${question}`, 400, ownKey); setGAns({ q: question, r }); setNeedKey(false); }
+    catch (e) { if (e instanceof NoKeyError) { setNeedKey(true); setGErr('This site has no DeepSeek key of its own. Paste your key below (it stays in your browser) and press Ask again.'); } else setGErr((e as Error).message); }
+    finally { setGBusy(false); }
+  }
   const nodes = graph?.nodes ?? [];
   const objs = nodes.filter((n) => !n.structural);
   const sel = nodes.find((n) => n.id === g.selectedNode) ?? null;
@@ -170,9 +188,70 @@ export default function Tab8() {
 
   const controls = (
     <>
-      <Seg value={pane} onChange={setPane} options={[{ value: 'ask', label: 'Ask' }, { value: 'graph', label: 'Graph' }, { value: 'llm', label: 'LLM' }]} label="Section" />
-      {pane === 'ask' && (<>
-      <Section title="Ask the scene">
+      <Seg value={pane} onChange={setPane} options={[{ value: 'direct', label: '1 · Direct AI' }, { value: 'graph', label: '2 · Scene graph' }, { value: 'ai', label: '3 · Graph → AI' }]} label="Section" />
+      {pane === 'direct' && (<>
+      <Section title="Direct inference: give the point cloud to an AI">
+        <p className="hint">What if we skip the pipeline and hand the raw point cloud to a language model? The cloud is thinned out, written as text (one point per line) and sent to <b>DeepSeek Flash</b> (<span className="mono">{DEEPSEEK_MODEL}</span>), the cheaper of DeepSeek's two models (the other is the bigger “Pro”). Whatever comes back is the model's own answer.</p>
+        <Slider label="Points to send" value={nPts} min={100} max={3000} step={100} onChange={setNPts} hint="Every point costs tokens (the model's unit of reading). More points cost more and can run over its limit." />
+        <Toggle label="Include the colours" checked={withColour} onChange={setWithColour} />
+        {preview && cloud && (
+          <div className="callout" style={{ gap: 6 }} data-testid="ds-preview">
+            <b>What is sent</b>
+            <pre className="mono" style={{ margin: 0, fontSize: '0.8125rem', whiteSpace: 'pre-wrap' }}>{preview.text.split('\n').slice(0, 5).join('\n')}{'\n…'}</pre>
+            <span className="caption">{fmtN(preview.count)} of {fmtN(cloud.count)} points · about {fmtN(estimateTokens(preview.count, withColour))} tokens. The whole cloud would be about {fmtN(estimateTokens(cloud.count, withColour))} tokens, far more than the model can read at once.</span>
+          </div>
+        )}
+        {needKey && <label className="field"><span>Your DeepSeek key (kept only in this browser)</span><input type="password" value={ownKey} onChange={(e) => { setOwnKey(e.target.value); saveOwnKey(e.target.value); }} placeholder="sk-…" data-testid="ds-key" autoComplete="off" /></label>}
+        <Btn variant="primary" onClick={sendToAi} busy={aiBusy} disabled={!preview} testId="ds-send">Send to DeepSeek</Btn>
+        {aiErr && <Callout kind="warn">{aiErr}</Callout>}
+        {ai && (
+          <div className="callout fade-in" style={{ gap: 8 }} data-testid="ds-answer">
+            <b>DeepSeek's answer (raw)</b>
+            <pre className="mono" style={{ margin: 0, fontSize: '0.8125rem', whiteSpace: 'pre-wrap', maxHeight: 320, overflow: 'auto' }}>{ai.text}</pre>
+            <span className="caption">{fmtN(ai.sent)} points sent · {fmtN(ai.promptTokens)} tokens read · {fmtN(ai.completionTokens)} written · {(ai.ms / 1000).toFixed(1)} s · {ai.via === 'server' ? 'key held by the server' : 'your own key'} · model: DeepSeek Flash ({DEEPSEEK_MODEL})</span>
+            <span className="caption">For comparison, the scan really contains <b>{truthNodes.filter((n) => !n.structural).length} objects</b>: {Object.entries(truthNodes.filter((n) => !n.structural).reduce<Record<string, number>>((a, n) => { const k = n.classLabel ?? 'Object'; a[k] = (a[k] ?? 0) + 1; return a; }, {})).map(([k, v]) => `${v} ${k.toLowerCase()}${v > 1 ? 's' : ''}`).join(', ')}.</span>
+          </div>
+        )}
+        <Callout kind="edu" title="Why this is not real point cloud inference">
+          <ul style={{ margin: 0, paddingLeft: '1.1rem', display: 'grid', gap: 3 }}>
+            <li>A language model reads <b>text</b>; a point cloud is just numbers with no order and no neighbours.</li>
+            <li>It cannot <i>see</i> shape, only guess from patterns (“z ≈ 0, so a floor”).</li>
+            <li>It can read only a sparse handful of points.</li>
+            <li>Positions it gives are approximate or made up; it cannot count or measure reliably.</li>
+            <li>Real 3D AI uses models built for 3D (point-based or voxel networks).</li>
+            <li>Or a pipeline, as in this tab: segment, build a scene graph with exact geometry, and let the language model only <b>ask</b> that graph.</li>
+          </ul>
+        </Callout>
+      </Section>
+      </>)}
+      {pane === 'graph' && (<>
+      <Section title="Objects">
+        <Seg value={g.source} onChange={(source) => setG({ source })} options={[{ value: 'ground-truth', label: 'True objects' }, { value: 'segmentation', label: 'My labelled clusters' }]} />
+        {g.source === 'segmentation' && (!seg || !Object.values(s.seg.names).some(Boolean)) && <Callout kind="warn">Run Clustering & Segmentation (tab 11) and label the clusters in its Results. The clusters you named become the objects of this graph.</Callout>}
+        <Slider label="“Near” threshold" value={g.nearThreshold} min={0.1} max={2} step={0.05} unit=" m" format={(v) => v.toFixed(2)} onChange={(nearThreshold) => setG({ nearThreshold })}  />
+        <Slider label="Scanner position, left–right" value={vp.x} min={-3.5} max={3.5} step={0.1} unit=" m" format={(v) => v.toFixed(1)} onChange={(x) => setVp({ ...vp, x })} />
+        <Slider label="Scanner position, front–back" value={vp.y} min={-5.5} max={5.5} step={0.1} unit=" m" format={(v) => v.toFixed(1)} onChange={(y) => setVp({ ...vp, y })} />
+        <Toggle label="Show floor / walls" checked={showStructural} onChange={setShowStructural} />
+      </Section>
+      <Section title="Relations shown">
+        <div className="chip-row">{(Object.keys(REL_LABEL) as RelType[]).map((t) => <button key={t} className="chip" aria-pressed={!!g.filters[t]} onClick={() => setG({ filters: { ...g.filters, [t]: !g.filters[t] } })}><span style={{ color: g.filters[t] ? '#fff' : REL_COLOR[t] }}>●</span> {REL_LABEL[t]}</button>)}</div>
+        <span className="caption">Left/right are as seen from the scanner. Boxes are axis-aligned, so “intersects” is conservative.</span>
+      </Section>
+      </>)}
+      {pane === 'ai' && (<>
+      <Section title="Give the scene graph to an AI">
+        <p className="hint">Same model as step 1 (DeepSeek Flash, the cheaper one). Now the AI gets something it can really read: the <b>scene graph</b>, written as text. Each object has a name, an exact position and size, and the relations between objects were worked out by geometry. The AI only has to read and answer.</p>
+        {graphText && <div className="callout" style={{ gap: 6 }} data-testid="gs-preview"><b>What is sent</b><pre className="mono" style={{ margin: 0, fontSize: '0.8125rem', whiteSpace: 'pre-wrap' }}>{graphText.split('\n').slice(0, 6).join('\n')}{'\n…'}</pre><span className="caption">{fmtN(graphText.split('\n').length)} lines · about {fmtN(Math.round(graphText.length / 3.5))} tokens: far fewer than the raw points, and every number is exact.</span></div>}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 8 }}>
+          <input type="text" value={q} placeholder="Ask a spatial question…" onChange={(e) => setQ(e.target.value)} aria-label="Question for the AI" data-testid="gs-question" />
+          <Btn variant="primary" onClick={() => void askGraphAi(q || 'What objects are in the room?')} busy={gBusy} disabled={!graphText} testId="gs-send">Ask DeepSeek</Btn>
+        </div>
+        <div className="chip-row">{SUPPORTED_QUESTIONS.map((t) => <button key={t} className="chip" onClick={() => setQ(t)}>{t}</button>)}</div>
+        {needKey && <label className="field"><span>Your DeepSeek key (kept only in this browser)</span><input type="password" value={ownKey} onChange={(e) => { setOwnKey(e.target.value); saveOwnKey(e.target.value); }} placeholder="sk-…" autoComplete="off" /></label>}
+        {gErr && <Callout kind="warn">{gErr}</Callout>}
+        {gAns && (<div className="callout good fade-in" style={{ gap: 6 }} data-testid="gs-answer"><b>DeepSeek's answer</b><div style={{ whiteSpace: 'pre-wrap' }}>{gAns.r.text}</div><span className="caption">{fmtN(gAns.r.promptTokens)} tokens read · {fmtN(gAns.r.completionTokens)} written · {(gAns.r.ms / 1000).toFixed(1)} s · model: DeepSeek Flash ({DEEPSEEK_MODEL})</span><b>The graph's own answer</b><div>{answerQuery(graph!, gAns.q).answer}</div><span className="caption">Computed directly from the geometry, no AI involved. Compare the two: the AI is only as good as the graph it reads, and it can still slip on numbers.</span></div>)}
+      </Section>
+      <Section title="Or ask the graph directly (no AI)">
         <p className="caption">Offline demo: a fixed set of question patterns, not an AI model. Every number comes from the graph geometry.</p>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 8 }}>
           <input type="text" value={q} placeholder="Ask a spatial question…" onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && ask(q)} aria-label="Question" data-testid="query-input" />
@@ -210,48 +289,6 @@ export default function Tab8() {
         <Select value={g.quizAnswer || ''} options={[{ value: '', label: 'Choose…' }, ...objs.map((o) => ({ value: o.id, label: o.label }))]} onChange={(quizAnswer) => setG({ quizAnswer })} />
         {g.quizAnswer && closest && <Callout kind={g.quizAnswer === closest.id ? 'good' : 'bad'}>{g.quizAnswer === closest.id ? `Correct — ${closest.label}, ${graph ? scannerGap(graph.scanner.pos, closest).toFixed(2) : ''} m from the scanner surface.` : 'Not quite. Ask the graph: “Which object is closest to the scanner?”'}</Callout>}
         <span className="caption">Move the scanner in the Graph section to change the answer.</span>
-      </Section>
-      </>)}
-      {pane === 'graph' && (<>
-      <Section title="Objects">
-        <Seg value={g.source} onChange={(source) => setG({ source })} options={[{ value: 'ground-truth', label: 'True objects' }, { value: 'segmentation', label: 'From segmentation' }]} />
-        {g.source === 'segmentation' && !seg && <Callout kind="warn">Run the Clustering & Segmentation tab first (tab 11). Its clusters become nodes with <b>estimated</b> labels from a crude size rule.</Callout>}
-        <Slider label="“Near” threshold" value={g.nearThreshold} min={0.1} max={2} step={0.05} unit=" m" format={(v) => v.toFixed(2)} onChange={(nearThreshold) => setG({ nearThreshold })}  />
-        <Slider label="Scanner position, left–right" value={vp.x} min={-3.5} max={3.5} step={0.1} unit=" m" format={(v) => v.toFixed(1)} onChange={(x) => setVp({ ...vp, x })} />
-        <Slider label="Scanner position, front–back" value={vp.y} min={-5.5} max={5.5} step={0.1} unit=" m" format={(v) => v.toFixed(1)} onChange={(y) => setVp({ ...vp, y })} />
-        <Toggle label="Show floor / walls" checked={showStructural} onChange={setShowStructural} />
-      </Section>
-      <Section title="Relations shown">
-        <div className="chip-row">{(Object.keys(REL_LABEL) as RelType[]).map((t) => <button key={t} className="chip" aria-pressed={!!g.filters[t]} onClick={() => setG({ filters: { ...g.filters, [t]: !g.filters[t] } })}><span style={{ color: g.filters[t] ? '#fff' : REL_COLOR[t] }}>●</span> {REL_LABEL[t]}</button>)}</div>
-        <span className="caption">Left/right are as seen from the scanner. Boxes are axis-aligned, so “intersects” is conservative.</span>
-      </Section>
-      </>)}
-      {pane === 'llm' && (<>
-      <Section title="Direct inference: give the point cloud to an AI">
-        <p className="hint">What if we skip the pipeline and hand the raw point cloud to a language model? The cloud is thinned out, written as text (one point per line) and sent to <b>DeepSeek V4 Flash</b>, a cheap, fast model ({DEEPSEEK_MODEL}). Whatever comes back is the model's own answer.</p>
-        <Slider label="Points to send" value={nPts} min={100} max={3000} step={100} onChange={setNPts} hint="Every point costs tokens (the model's unit of reading). More points cost more and can run over its limit." />
-        <Toggle label="Include the colours" checked={withColour} onChange={setWithColour} />
-        {preview && cloud && (
-          <div className="callout" style={{ gap: 6 }} data-testid="ds-preview">
-            <b>What is sent</b>
-            <pre className="mono" style={{ margin: 0, fontSize: '0.8125rem', whiteSpace: 'pre-wrap' }}>{preview.text.split('\n').slice(0, 5).join('\n')}{'\n…'}</pre>
-            <span className="caption">{fmtN(preview.count)} of {fmtN(cloud.count)} points · about {fmtN(estimateTokens(preview.count, withColour))} tokens. The whole cloud would be about {fmtN(estimateTokens(cloud.count, withColour))} tokens, far more than the model can read at once.</span>
-          </div>
-        )}
-        {needKey && <label className="field"><span>Your DeepSeek key (kept only in this browser)</span><input type="password" value={ownKey} onChange={(e) => { setOwnKey(e.target.value); saveOwnKey(e.target.value); }} placeholder="sk-…" data-testid="ds-key" autoComplete="off" /></label>}
-        <Btn variant="primary" onClick={sendToAi} busy={aiBusy} disabled={!preview} testId="ds-send">Send to DeepSeek</Btn>
-        {aiErr && <Callout kind="warn">{aiErr}</Callout>}
-        {ai && (
-          <div className="callout fade-in" style={{ gap: 8 }} data-testid="ds-answer">
-            <b>DeepSeek's answer (raw)</b>
-            <pre className="mono" style={{ margin: 0, fontSize: '0.8125rem', whiteSpace: 'pre-wrap', maxHeight: 320, overflow: 'auto' }}>{ai.text}</pre>
-            <span className="caption">{fmtN(ai.sent)} points sent · {fmtN(ai.promptTokens)} tokens read · {fmtN(ai.completionTokens)} written · {(ai.ms / 1000).toFixed(1)} s · {ai.via === 'server' ? 'key held by the server' : 'your own key'}</span>
-            <span className="caption">For comparison, the scan really contains <b>{truthNodes.filter((n) => !n.structural).length} objects</b>: {Object.entries(truthNodes.filter((n) => !n.structural).reduce<Record<string, number>>((a, n) => { const k = n.classLabel ?? 'Object'; a[k] = (a[k] ?? 0) + 1; return a; }, {})).map(([k, v]) => `${v} ${k.toLowerCase()}${v > 1 ? 's' : ''}`).join(', ')}.</span>
-          </div>
-        )}
-        <Callout kind="edu" title="Why this is not real point cloud inference">
-          A language model reads <b>text</b>. A point cloud is just thousands of numbers with no order and no neighbours, so the model has no way to <i>see</i> shape: it can only guess from number patterns (like “z is about 0, so a floor”). It can only read a sparse handful of points, positions it gives are approximate or made up, and it cannot count or measure reliably. Real point cloud AI uses models built for 3D (such as point-based or voxel networks), or, as in this tab, a pipeline: segment the cloud, build a scene graph with exact geometry, and let the language model only <b>ask</b> that graph.
-        </Callout>
       </Section>
       <Section title="Using a real LLM">
         <p className="hint">Not active in this app. A real LLM would call tools on a server that read this graph and do the geometry, so it never invents a measurement.</p>

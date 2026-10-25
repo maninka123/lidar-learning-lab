@@ -11,7 +11,7 @@ export interface GraphNode {
   dimensions: Vec3; // AABB size
   bbox: { min: Vec3; max: Vec3 };
   structural: boolean;
-  source: 'ground-truth annotation' | 'rule-based estimate (from clusters)';
+  source: 'ground-truth annotation' | 'rule-based estimate (from clusters)' | 'your label (from clusters)';
   confidence: number | null; // null = not applicable (ground truth)
   instanceId?: number;
   classLabel?: string; // class name when it is not one of the built-in scene classes
@@ -52,6 +52,20 @@ export function guessClass(dim: Vec3, zMin: number): { classId: number; confiden
   if (Math.max(x, y, z) < 1.1 && zMin < 0.2) return { classId: 6, confidence: 0.5 };
   if (foot > 3) return { classId: 15, confidence: 0.4 };
   return { classId: 20, confidence: 0.3 };
+}
+
+const CLASS_BY_NAME: Record<string, number> = { Chair: 6, Table: 5, Cabinet: 7, Other: 20 };
+/** Scene-graph nodes from the clusters you labelled by hand; clusters you left unlabelled are not in the graph. */
+export function nodesFromLabelledClusters(seg: SegResult, names: Record<number, string>): GraphNode[] {
+  const count = new Map<string, number>();
+  return seg.clusters.filter((c) => names[c.id]).map((c) => {
+    const name = names[c.id], n = (count.get(name) ?? 0) + 1; count.set(name, n);
+    return {
+      id: `${name.toLowerCase()}-${n}`, label: `${name} ${n}`, classId: CLASS_BY_NAME[name] ?? 20, classLabel: name,
+      position: [(c.min[0] + c.max[0]) / 2, (c.min[1] + c.max[1]) / 2, (c.min[2] + c.max[2]) / 2] as Vec3,
+      dimensions: [c.max[0] - c.min[0], c.max[1] - c.min[1], c.max[2] - c.min[2]] as Vec3, bbox: { min: c.min, max: c.max }, structural: false, source: 'your label (from clusters)' as const, confidence: null,
+    };
+  });
 }
 
 export function nodesFromSegmentation(seg: SegResult): GraphNode[] {

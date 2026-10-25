@@ -100,7 +100,7 @@ export interface LabState {
   proc: { sourceId: string | null; steps: OpSpec[]; seed: number; result: PipelineResult | null; selected: number; quality: { injected: number; injectedLeft: number; originalKept: number } | null; viewStep: number };
 
   // Segmentation
-  seg: { params: SegParams; result: SegResult | null; gt: ReturnType<typeof emptyGt> | null; cloudId: string | null; labelledScanId?: string };
+  seg: { params: SegParams; result: SegResult | null; gt: ReturnType<typeof emptyGt> | null; cloudId: string | null; labelledScanId?: string; names: Record<number, string> };
 
   // Reconstruction
   recon: {
@@ -187,7 +187,7 @@ function initial() {
       before: null, after: null, recoveredErr: null, icp: { maxIterations: 50, maxCorrDist: 1.0, sample: 3000 },
     },
     proc: { sourceId: null, steps: [] as OpSpec[], seed: 7, result: null, selected: -1, quality: null, viewStep: -1 },
-    seg: { params: { ...DEFAULT_SEG }, result: null, gt: null, cloudId: null },
+    seg: { params: { ...DEFAULT_SEG }, result: null, gt: null, cloudId: null, names: {} },
     recon: { object: 'chair' as ReconObjectId, method: 'photogrammetry' as ReconMethod, views: 8, seed: 5, out: null, lidar: null, ai: null, align: null, cmp: null, errMax: 0.05, layer: 'overlay' as const, layout: 'single' as const, observations: { occlusion: false, missing: false, texture: false, geometry: false } },
     graph: { source: 'ground-truth' as const, nearThreshold: 0.5, graph: null, selectedNode: null, filters: { near: true, above: false, below: false, inside: false, left_of: false, right_of: false, intersects: true, blocks_path: true }, answers: [], quizAnswer: '', queried: false },
   };
@@ -217,7 +217,7 @@ export const useLab = create<LabState>((set, get) => ({
       sceneId: id, pose: { ...sc.defaultPose, pitch: 0 }, clouds: {}, activeCloudId: null, picks: [], selectedObjectId: null, scanInfo: null,
       stations: [], tlsCoverage: null, waypoints: [], mls: null, slam: null, undoCount: 0,
       proc: { ...get().proc, sourceId: null, result: null, steps: [], quality: null },
-      seg: { ...get().seg, result: null, gt: null, cloudId: null },
+      seg: { ...get().seg, result: null, gt: null, cloudId: null, names: {} },
       graph: { ...get().graph, graph: null, selectedNode: null },
       reg: { ...get().reg, A: null, B: null, result: null, before: null, after: null },
     });

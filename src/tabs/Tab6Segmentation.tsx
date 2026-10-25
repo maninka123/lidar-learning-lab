@@ -52,7 +52,7 @@ export default function Tab6() {
   async function runMain() {
     const out = await run();
     if (!out) return;
-    useLab.setState({ seg: { ...useLab.getState().seg, result: out.result, gt: out.gt as never, cloudId: cloud!.id } });
+    useLab.setState({ seg: { ...useLab.getState().seg, result: out.result, gt: out.gt as never, cloudId: cloud!.id, names: {} } });
     setShow('result');
   }
   async function runSweep() {
@@ -140,13 +140,17 @@ export default function Tab6() {
           <table className="table"><thead><tr><th>Plane</th><th>Normal</th><th>Pts</th><th>RMSE</th></tr></thead><tbody>
             {res.planes.map((pl, i) => <tr key={i}><td><span style={{ color: `rgb(${distinctColor(i).map(Math.round).join(',')})` }}>●</span> {pl.kind}</td><td className="mono">{pl.normal.map((v) => v.toFixed(2)).join(', ')}</td><td>{fmtN(pl.count)}</td><td className="mono">{(pl.rmse * 100).toFixed(1)} cm</td></tr>)}
           </tbody></table>
-          <table className="table"><thead><tr><th>Cluster</th><th>Pts</th><th>Size (m)</th>{guesses && <th>Main class</th>}</tr></thead><tbody>
-            {res.clusters.slice(0, 14).map((c, i) => {
-              const g = guesses?.[i];
-              return <tr key={c.id}><td><span style={{ color: `rgb(${distinctColor(c.id).map(Math.round).join(',')})` }}>●</span> #{i + 1}</td><td>{fmtN(c.count)}</td><td className="mono">{(c.max[0] - c.min[0]).toFixed(1)}×{(c.max[1] - c.min[1]).toFixed(1)}×{(c.max[2] - c.min[2]).toFixed(1)}</td>{g && <td>{CLASSROOM_CLASSES[g.truth]?.name ?? '—'}</td>}</tr>;
-            })}
+          <p className="hint"><b>Label the clusters.</b> The clusters only say “these points belong together”; they do not know what they are. Name each one yourself (look at its colour and size). The names you give are used as the objects of the scene graph in the next tab.</p>
+          <table className="table" data-testid="label-table"><thead><tr><th>Cluster</th><th>Pts</th><th>Size (m)</th><th>Label</th></tr></thead><tbody>
+            {res.clusters.map((c, i) => (
+              <tr key={c.id}><td><span style={{ color: `rgb(${distinctColor(c.id).map(Math.round).join(',')})` }}>●</span> #{i + 1}</td><td>{fmtN(c.count)}</td><td className="mono">{(c.max[0] - c.min[0]).toFixed(1)}×{(c.max[1] - c.min[1]).toFixed(1)}×{(c.max[2] - c.min[2]).toFixed(1)}</td>
+                <td><select value={seg.names[c.id] ?? ''} aria-label={`Label for cluster ${i + 1}`} onChange={(e) => useLab.setState({ seg: { ...useLab.getState().seg, names: { ...useLab.getState().seg.names, [c.id]: e.target.value } } })} data-testid={`label-${i}`} style={{ minHeight: '1.9rem' }}>
+                  <option value="">Unlabelled</option><option>Chair</option><option>Table</option><option>Cabinet</option><option>Other</option>
+                </select></td></tr>
+            ))}
           </tbody></table>
-          {res.clusters.length > 14 && <span className="caption">…and {res.clusters.length - 14} more clusters.</span>}
+          <span className="caption">{Object.values(seg.names).filter(Boolean).length} of {res.clusters.length} clusters labelled.</span>
+          <Callout kind="edu" title="Labelling by hand does not scale">Here you named every cluster yourself. In real projects a <b>semantic segmentation model</b> (a neural network trained on labelled point clouds, for example PointNet++, KPConv or Point Transformer) gives every point a class automatically, so no one has to label by hand. Your hand labels are exactly the kind of data such a model is trained on.</Callout>
           {gt && (
             <Callout kind={gt.recovered.length >= 3 ? 'good' : ''} title="Compared with ground-truth instances">
               Recovered {gt.recovered.length} of {gt.gtObjects} objects (IoU ≥ 0.5, purity ≥ 0.7). <b>{gt.overSegmented}</b> objects split across clusters (over-segmentation), <b>{gt.underSegmented}</b> clusters merge several objects (under-segmentation).
