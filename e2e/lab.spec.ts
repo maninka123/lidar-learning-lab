@@ -344,10 +344,21 @@ test.describe('corner cases', () => {
     expect(bad).toEqual([]);
   });
 
-  test('TLS tab: needs two stations, and the city is not left selected in other tabs', async ({ page }) => {
+  test('TLS tab: needs a station, works with just one, and the city is not left selected in other tabs', async ({ page }) => {
     await page.goto('/');
     await page.getByTestId('nav-5').click();
     await expect(page.getByTestId('scan-stations')).toBeDisabled();
+    await page.getByTestId('add-stations-tool').click();
+    await page.getByTestId('environment-menu').click();
+    await page.getByTestId('env-A').click();
+    await page.evaluate(() => (window as any).__lab.getState().patch({ pendingStation: [0, 0] }));
+    await page.getByRole('button', { name: 'Coarse' }).click();
+    await page.getByTestId('scan-stations').click();
+    await expect(page.getByTestId('stats-card')).toContainText(/\d{2,3},\d{3} points scanned/, { timeout: 120000 });
+    await expect(page.getByTestId('stats-card')).toContainText(/Scene covered\s*\d+ %/, { timeout: 60000 });
+    await expect(page.getByTestId('register-tls')).toHaveCount(0);
+    await page.getByTestId('points-only').click();
+    await expect(page.getByTestId('points-only')).toContainText('Show scene');
     await page.getByTestId('environment-menu').click();
     await page.getByTestId('env-D').click();
     await expect.poll(() => page.evaluate(() => (window as any).__lab.getState().sceneId)).toBe('D');

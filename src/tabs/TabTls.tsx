@@ -7,7 +7,7 @@ import { Btn, Callout, Seg, Section, Slider, Toggle, fmtN } from '../ui/controls
 import { SceneFromStore } from './common';
 import { CloudLayer, Marker, PolyLine } from '../ui/three';
 import { Plan2D } from '../ui/Plan2D';
-import { Crosshair, Play, Trash2 } from '../ui/icons';
+import { Crosshair, Dots, Play, Trash2 } from '../ui/icons';
 import { getPreset, presetToConfig, SensorConfig } from '../sensor/presets';
 import { runTask } from '../engine/client';
 import { staticPose } from '../sensor/simulate';
@@ -32,7 +32,7 @@ export default function TabTls() {
   const [tripod, setTripod] = useState(1.5);
   const [step, setStep] = useState(0.5);
   const [scans, setScans] = useState<Scanned[] | null>(null);
-  const [initErr, setInitErr] = useState({ t: 0.6, deg: 8 });
+  const initErr = { t: 0.5, deg: 5 }; // how wrong the rough first guess for each station is: a medium, realistic value
   const [method, setMethod] = useState<Method>('plane');
   const [maxDist, setMaxDist] = useState(1.5);
   const [regs, setRegs] = useState<Reg[] | null>(null);
@@ -40,6 +40,7 @@ export default function TabTls() {
   const [view, setView] = useState<View>('truth');
   const [byStation, setByStation] = useState(true), [cov, setCov] = useState<number | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  const [pointsOnly, setPointsOnly] = useState(false);
   const b = scene.bounds;
 
   // the Environment menu offers Room, Workshop and Street; this tab never uses the small street
@@ -66,7 +67,7 @@ export default function TabTls() {
   const pose = (st: Stn) => rigidFromEuler(st.x, st.y, tripod, 0, 0, 0);
 
   async function scanAll() {
-    if (stations.length < 2) return;
+    if (stations.length < 1) return;
     setBusy('scan'); setRegs(null); setInits(null); setCov(null);
     try {
       const out: Scanned[] = [];
@@ -82,6 +83,9 @@ export default function TabTls() {
         out.push({ local, truth: rigidCompose(T0inv, Tk), world: Tk });
       }
       setScans(out); setView('truth');
+      // how much of the scene these scans see (their true positions are known)
+      const cr = await runTask('coverage', { scene, clouds: out.map((q) => { const c = transformCloud(q.local, q.world); return { positions: c.positions, count: c.count }; }), radius: 0.15 });
+      setCov((100 * cr.covered) / cr.total);
     } catch (e) { s.notify((e as Error).message, 'error'); } finally { setBusy(null); s.patch({ busy: null }); }
   }
 
@@ -129,17 +133,17 @@ export default function TabTls() {
 
   const worst = regs ? Math.max(...regs.map((r) => r.ptErr)) : null;
   const stats = [
-    { k: 'Stations', v: String(stations.length), s: scans ? `${fmtN(scans.reduce((a, q) => a + q.local.count, 0))} points scanned` : stations.length < 2 ? 'place at least 2' : 'ready to scan' },
-    { k: 'Registration error', v: worst !== null ? `${(worst * 100).toFixed(1)} cm` : '—', s: worst !== null ? 'worst station, vs the true pose' : 'average point distance from where it should be' },
+    { k: 'Stations', v: String(stations.length), s: scans ? `${fmtN(scans.reduce((a, q) => a + q.local.count, 0))} points scanned` : stations.length < 1 ? 'place a station' : 'ready to scan' },
+    { k: 'Registration error', v: worst !== null ? `${(worst * 100).toFixed(1)} cm` : '—', s: worst !== null ? 'worst station, vs the true pose' : stations.length === 1 ? 'one station: nothing to register' : 'average point distance from where it should be' },
     { k: 'Scene covered', v: cov !== null ? `${cov.toFixed(0)} %` : '—', s: 'of the surfaces' },
   ];
   const viewport = (
-    <Viewport home={scene.cameraHome} target={scene.cameraTarget}>
-      <SceneFromStore interactive={true} />
-      {stations.length > 1 && <PolyLine pts={stations.map((q) => [q.x, q.y, 0.05] as [number, number, number])} color="#ff9f0a" width={2} dashed />}
-      {stations.map((q, i) => <Marker key={i} p={[q.x, q.y, tripod]} color={`rgb(${COLOURS[i % 6].join(',')})`} r={s.sceneId === 'D' ? 0.7 : 0.15} label={`Station ${i + 1}`} />)}
-      {!byStation && merged && <CloudLayer cloud={merged} mode="height" size={Math.max(2, s.view.pointSize - 1)} budget={Math.max(s.view.renderBudget, 400000)} pickable={false} />}
-      {byStation && placed.map((c, i) => <CloudLayer key={i} cloud={c} mode="flat" colorOpts={{ flat: COLOURS[i % 6] }} size={Math.max(2, s.view.pointSize - 1)} budget={200000} pickable={false} />)}
+    <Viewport home={scene.cameraHome} target={scene.cameraTarget} bgOverride={pointsOnly ? '#ffffff' : undefined} hideGrid={pointsOnly} hideAxes={pointsOnly}>
+      {!pointsOnly && <SceneFromStore interactive={true} />}
+      {!pointsOnly && stations.length > 1 && <PolyLine pts={stations.map((q) => [q.x, q.y, 0.05] as [number, number, number])} color="#ff9f0a" width={2} dashed />}
+      {!pointsOnly && stations.map((q, i) => <Marker key={i} p={[q.x, q.y, tripod]} color={`rgb(${COLOURS[i % 6].join(',')})`} r={s.sceneId === 'D' ? 0.7 : 0.15} label={`Station ${i + 1}`} />)}
+      {(!byStation || placed.length < 2) && merged && <CloudLayer cloud={merged} mode="height" size={Math.max(2, s.view.pointSize - 1)} budget={Math.max(s.view.renderBudget, 400000)} pickable={false} />}
+      {byStation && placed.length > 1 && placed.map((c, i) => <CloudLayer key={i} cloud={c} mode="flat" colorOpts={{ flat: COLOURS[i % 6] }} size={Math.max(2, s.view.pointSize - 1)} budget={200000} pickable={false} />)}
     </Viewport>
   );
 
@@ -155,22 +159,23 @@ export default function TabTls() {
         </div>
         <div className="btn-row" style={{ flexWrap: 'wrap' }}>{presets.map((p) => <Btn key={p.label} sm onClick={() => { setStations(p.pts); clearResults(); }} testId={`tls-preset-${p.pts.length}`}>{p.label}</Btn>)}</div>
         <Plan2D scene={scene} height={200} onClick={(x, y) => tool && add(x, y)} layers={{ paths: stations.length > 1 ? [{ pts: stations.map((q) => [q.x, q.y] as [number, number]), color: '#ff9f0a', dashed: true }] : [], markers: stations.map((q, i) => ({ x: q.x, y: q.y, color: `rgb(${COLOURS[i % 6].join(',')})`, label: String(i + 1), r: 6 })) }} />
-        <p className="hint">Up to 6 stations. Keep neighbouring stations in sight of each other: the scans need to overlap.</p>
+        <p className="hint">One station is enough to get a point cloud. Add more to see the places the first one cannot see; up to 6. Keep neighbouring stations in sight of each other: the scans need to overlap to be registered.</p>
       </Section>
       <Section title="2 · Scan">
         <Seg value={String(step)} onChange={(v) => setStep(parseFloat(v))} label="Detail" options={[{ value: '0.7', label: 'Coarse' }, { value: '0.5', label: 'Medium' }, { value: '0.35', label: 'Fine' }]} />
         <Slider label="Tripod height" value={tripod} min={0.8} max={Math.max(1.8, b.max[2] - 0.3)} step={0.05} unit=" m" format={(v) => v.toFixed(2)} onChange={(v) => { setTripod(v); clearResults(); }} />
         <span className="caption">{fmtN(rays)} beams per station, 360° × 150° (Leica RTC360 style)</span>
-        <Btn variant="primary" icon={<Play size={16} />} onClick={scanAll} busy={busy === 'scan'} disabled={stations.length < 2} testId="scan-stations">Scan all stations</Btn>
+        <Btn variant="primary" icon={<Play size={16} />} onClick={scanAll} busy={busy === 'scan'} disabled={stations.length < 1} testId="scan-stations">{stations.length === 1 ? 'Scan' : 'Scan all stations'}</Btn>
       </Section>
+      {stations.length > 1 && (
       <Section title="3 · Register the scans">
-        <Slider label="How far off is the first guess?" value={initErr.t} min={0} max={3} step={0.1} unit=" m" format={(v) => v.toFixed(1)} onChange={(t) => setInitErr({ ...initErr, t })} hint="Before ICP, you give a rough position for each station (from a sketch or GPS). This is how wrong that guess is." />
-        <Slider label="Guess for the heading is off by" value={initErr.deg} min={0} max={40} step={1} unit="°" onChange={(deg) => setInitErr({ ...initErr, deg })} />
+        <p className="hint">Each scan sits in its own frame. We start from a rough guess of where each station stood (about 0.5 m and 5° off, like a sketch or a phone GPS) and let ICP fit the scans together.</p>
         <Seg value={method} onChange={setMethod} label="ICP type" options={[{ value: 'point', label: 'Point-to-point' }, { value: 'plane', label: 'Point-to-plane' }]} />
         <Slider label="Match distance" value={maxDist} min={0.2} max={5} step={0.1} unit=" m" format={(v) => v.toFixed(1)} onChange={setMaxDist} hint="ICP only pairs points closer than this." />
-        <Btn variant="primary" onClick={register} busy={busy === 'register'} disabled={!scans} testId="register-tls">Register with ICP</Btn>
+        <Btn variant="primary" onClick={register} busy={busy === 'register'} disabled={!scans || scans.length < 2} testId="register-tls">Register with ICP</Btn>
       </Section>
-      {scans && (
+      )}
+      {scans && scans.length > 1 && (
         <Section title="View">
           <Seg value={view} onChange={setView} options={[{ value: 'truth', label: 'True positions' }, { value: 'before', label: 'First guess' }, { value: 'after', label: 'Registered' }]} />
           <Toggle label="Colour each station" checked={byStation} onChange={setByStation} />
@@ -187,5 +192,9 @@ export default function TabTls() {
       )}
     </>
   );
-  return <TabFrame title="TLS Scanning & Registration" tab={5} viewport={viewport} controls={controls} learn={null} noPanelTabs envIds={['A', 'B', 'D']} statsRow stats={stats} />;
+  return <TabFrame title="TLS Scanning & Registration" tab={5} viewport={viewport} controls={controls} learn={null} noPanelTabs envIds={['A', 'B', 'D']} statsRow stats={stats}
+    viewExtras={<>
+      <Btn sm variant="primary" icon={<Play size={15} />} onClick={scanAll} busy={busy === 'scan'} disabled={stations.length < 1} testId="scan-toolbar">Scan</Btn>
+      <Btn sm icon={<Dots size={15} />} variant={pointsOnly ? 'primary' : ''} onClick={() => setPointsOnly(!pointsOnly)} testId="points-only">{pointsOnly ? 'Show scene' : 'Point cloud'}</Btn>
+    </>} />;
 }
