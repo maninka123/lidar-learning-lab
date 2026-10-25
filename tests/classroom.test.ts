@@ -9,6 +9,7 @@ import { makeEpoch2, detectChanges } from '../src/apps/change';
 import { heightMapMesh, meshStats } from '../src/apps/mesh';
 import { surfaceMesh } from '../src/recon/recon';
 import { icp } from '../src/registration/icp';
+import { segment } from '../src/segmentation/segment';
 import { transformCloud } from '../src/core/pointcloud';
 
 /** The real classroom scan that ships with the app. */
@@ -69,4 +70,13 @@ describe('classroom scan shipped with the app', () => {
     const h = heightMapMesh(chairLike, 0.1); expect(meshStats(h).area).toBeGreaterThan(10);
     expect(performance.now() - t0).toBeLessThan(20000);
   }, 60000);
+  it('segmentation: one RANSAC plane step takes out floor and walls, then clusters the furniture', () => {
+    const small = voxelDownsample(room, 0.05);
+    const r = segment(small, { planeConfidence: 0.99, planeMinPct: 2, planeMax: 12, algo: 'euclidean', eps: 0.15, minPts: 8, radius: 0.15, minCluster: 30, seed: 11 });
+    expect(r.planes.some((p) => p.kind === 'floor')).toBe(true);
+    expect(r.planes.filter((p) => p.kind === 'wall').length).toBeGreaterThanOrEqual(3);
+    expect(r.clusters.length).toBeGreaterThanOrEqual(8);
+    const none = segment(small, { planeConfidence: 0.99, planeMinPct: 2, planeMax: 0, algo: 'euclidean', eps: 0.15, minPts: 8, radius: 0.15, minCluster: 30, seed: 11 });
+    expect(none.planes.length).toBe(0);
+  }, 120000);
 });

@@ -9,7 +9,7 @@ export const VIDEOS: Record<string, VideoInfo> = {
   implant: { id: 'Hy4hnWMw5ms', title: '[3D STUDENTS] Implantation Point Cloud', ...FP, about: 'A point cloud shown without colour: just the points.', tab: 9, tabName: 'Meshing & Surfaces' },
   factory: { id: 'Kq8FKKODkog', title: 'Abandonned Point Cloud Series : Old whool factory', ...FP, about: 'An abandoned factory captured as a coloured point cloud.', tab: 9, tabName: 'Meshing & Surfaces' },
   cad: { id: 'Z8uAzTqdSts', title: 'How to Turn 3D Scan to CAD (.dxf, .dwg) for AEC', ...FP, about: 'Slice a scan, find the walls, export a floor plan for CAD.', tab: 12, tabName: 'Scan to CAD' },
-  ransac: { id: 'MJJNIvvAQzc', title: '3D Plane Detection with Adaptive RANSAC (100% Workflow Automation)', ...FP, about: 'Find floors, ceilings and walls automatically, with settings measured from the data.', tab: 10, tabName: 'Plane Detection' },
+  ransac: { id: 'MJJNIvvAQzc', title: '3D Plane Detection with Adaptive RANSAC (100% Workflow Automation)', ...FP, about: 'Find floors, ceilings and walls automatically, with settings measured from the data.', tab: 10, tabName: 'Clustering & Segmentation' },
   change: { id: '38Fu-pDwUoA', title: 'Smart 3D Change Detection: Complete Python Tutorial (point clouds)', ...FP, about: 'Compare two scans of the same place and find what changed.', tab: 13, tabName: 'Change Detection' },
 };
 

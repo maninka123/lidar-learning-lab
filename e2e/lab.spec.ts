@@ -169,7 +169,7 @@ test.describe('LiDAR Learning Lab', () => {
     await page.getByRole('button', { name: 'Result', exact: true }).click();
     await page.getByTestId('reset-original').click();
     await expect.poll(() => state(page, (s) => s.proc.steps.length)).toBe(0);
-    await go(page, 11);
+    await go(page, 10);
     await page.getByTestId('run-seg').click();
     await expect.poll(() => state(page, (s) => s.seg.gt?.recovered?.length ?? 0), { timeout: 60000 }).toBeGreaterThanOrEqual(3);
   });
@@ -188,23 +188,24 @@ test.describe('LiDAR Learning Lab', () => {
     await expect(page.getByTestId('recon-stats')).toBeVisible({ timeout: 90000 });
   });
 
-  test('tab 8: scene graph, node selection and offline queries (incl. local-llm-fit card)', async ({ page }) => {
-    await go(page, 15);
+  test('tab 12: scene graph on the classroom, offline queries, local-llm-fit card and direct DeepSeek inference (mocked)', async ({ page }) => {
+    await page.route('**/api/deepseek/**', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ choices: [{ message: { content: 'It looks like a classroom: z near 0 is the floor, and some tables.' } }], usage: { prompt_tokens: 9876, completion_tokens: 21 } }) }));
+    await go(page, 11);
     await page.getByRole('button', { name: 'Graph', exact: true }).click();
+    await expect(page.getByTestId('graph-view')).toBeVisible({ timeout: 60000 });
     await page.getByTestId('node-table-1').click();
     await page.getByRole('button', { name: 'Ask', exact: true }).click();
     await expect(page.getByTestId('node-details')).toContainText('table-1');
-    await expect.poll(() => state(page, (s) => s.selectedObjectId)).toBe('table-1');
-    await page.getByTestId('query-input').fill('Which objects intersect the walking corridor?');
-    await page.getByTestId('ask').click();
-    await expect(page.getByTestId('answer')).toContainText(/Box in corridor/i);
     await page.getByText('Which object is closest to the scanner?').first().click();
     await expect(page.getByTestId('answer')).toContainText('closest');
     await page.getByRole('button', { name: 'LLM', exact: true }).click();
-    const link = page.getByTestId('llm-fit-link');
-    await expect(link).toHaveAttribute('href', 'https://maninka123.github.io/local-llm-fit/');
+    await expect(page.getByTestId('llm-fit-link')).toHaveAttribute('href', 'https://maninka123.github.io/local-llm-fit/');
+    await expect(page.getByTestId('ds-preview')).toContainText('points');
+    await page.getByTestId('ds-send').click();
+    await expect(page.getByTestId('ds-answer')).toContainText('classroom');
+    await expect(page.getByTestId('ds-answer')).toContainText('9,876 tokens read');
+    await expect(page.getByText('Why this is not real point cloud inference')).toBeVisible();
   });
-
   test('environment menu switches scenes compactly', async ({ page }) => {
     await go(page, 1);
     await page.getByTestId('environment-menu').click();
@@ -262,15 +263,6 @@ test('tab 6: Street is always the big city, also after switching labs and enviro
 test.describe('classroom applications', () => {
   test.beforeEach(async ({ page }) => { await page.goto('/'); });
   const go2 = async (page: any, n: number) => { await page.getByTestId(`nav-${n}`).click(); };
-  test('tab 9: adaptive RANSAC finds the room planes', async ({ page }) => {
-    await go2(page, 10);
-    await expect(page.getByTestId('stats-card')).toContainText(/Planes found\s*\d+/, { timeout: 90000 });
-    const t = await page.getByTestId('stats-card').innerText();
-    expect(parseInt(t.match(/Planes found\s*(\d+)/)![1])).toBeGreaterThanOrEqual(5);
-    await page.getByRole('button', { name: 'Fixed settings' }).click();
-    await page.getByTestId('detect-planes').click();
-    await expect(page.getByText('Fixed vs adaptive')).toBeVisible({ timeout: 90000 });
-  });
   test('tab 10: scan to CAD finds walls and exports a DXF', async ({ page }) => {
     await go2(page, 12);
     await expect(page.getByTestId('stats-card')).toContainText(/Walls found\s*\d+/, { timeout: 90000 });
@@ -379,7 +371,7 @@ test.describe('corner cases', () => {
     page.on('pageerror', (e) => bad.push(`pageerror: ${e.message}`));
     page.on('console', (m) => { if (m.type() === 'error' && !/Failed to load resource|ERR_|favicon|ytimg|youtube/i.test(m.text())) bad.push(`console: ${m.text()}`); });
     await page.goto('/');
-    for (let i = 0; i < 16; i++) { await page.getByTestId(`nav-${i}`).click(); await page.waitForTimeout(700); await expect(page.locator('canvas').first()).toBeVisible(); }
+    for (let i = 0; i < 15; i++) { await page.getByTestId(`nav-${i}`).click(); await page.waitForTimeout(700); await expect(page.locator('canvas').first()).toBeVisible(); }
     expect(bad).toEqual([]);
   });
 
@@ -405,13 +397,8 @@ test.describe('corner cases', () => {
     await expect.poll(() => page.evaluate(() => (window as any).__lab.getState().sceneId)).not.toBe('D');
   });
 
-  test('plane detection with extreme settings, CAD with a slice at the ceiling, change detection without edits', async ({ page }) => {
+  test('CAD with a slice at the ceiling, change detection without edits', async ({ page }) => {
     await page.goto('/');
-    await page.getByTestId('nav-10').click();
-    await expect(page.getByTestId('stats-card')).toContainText(/Planes found\s*\d+/, { timeout: 90000 });
-    await page.getByRole('button', { name: 'Fixed settings' }).click();
-    await page.getByTestId('detect-planes').click();
-    await expect(page.getByTestId('stats-card')).toContainText(/Planes found\s*\d+/);
     await page.getByTestId('nav-12').click();
     await expect(page.getByTestId('stats-card')).toContainText(/Walls found\s*\d+/, { timeout: 90000 });
     await page.getByTestId('nav-13').click();

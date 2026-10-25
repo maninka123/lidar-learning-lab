@@ -1,5 +1,5 @@
 import { Suspense, lazy, ReactNode } from 'react';
-import { Layers, PanelLeft, Radar, Info, Boxes, Route, GitMerge, Filter, Network, Camera, Share2, Square, Ruler, Eye, Wand, Crosshair } from './ui/icons';
+import { Layers, PanelLeft, Radar, Info, Boxes, Route, GitMerge, Filter, Network, Camera, Share2, Ruler, Eye, Wand, Crosshair } from './ui/icons';
 import { useLab } from './state/store';
 import { Toast } from './ui/shared';
 
@@ -11,7 +11,6 @@ const TabMap = lazy(() => import('./tabs/TabMapping'));
 const TabTls = lazy(() => import('./tabs/TabTls'));
 const TabFusion = lazy(() => import('./tabs/TabFusion'));
 const TabReg = lazy(() => import('./tabs/TabRegistration'));
-const TabPlanes = lazy(() => import('./tabs/TabPlanes'));
 const TabCad = lazy(() => import('./tabs/TabScanToCad'));
 const TabChange = lazy(() => import('./tabs/TabChange'));
 const TabMeshing = lazy(() => import('./tabs/TabMeshing'));
@@ -31,12 +30,11 @@ const TABS: { label: string; icon: ReactNode; el: ReactNode }[] = [
   { label: 'SLAM & Mobile Scanning', icon: <Route size={18} />, el: <TabMap /> },
   { label: 'LiDAR + Camera Fusion', icon: <Camera size={18} />, el: <TabFusion /> },
   { label: 'Meshing & Surfaces', icon: <Wand size={18} />, el: <TabMeshing /> },
-  { label: 'Plane Detection', icon: <Square size={18} />, el: <TabPlanes /> },
   { label: 'Clustering & Segmentation', icon: <Network size={18} />, el: <Tab6 /> },
+  { label: 'Scene Graphs & 3D AI', icon: <Share2 size={18} />, el: <Tab8 /> },
   { label: 'Scan to CAD', icon: <Ruler size={18} />, el: <TabCad /> },
   { label: 'Change Detection', icon: <Eye size={18} />, el: <TabChange /> },
   { label: 'Image to 3D', icon: <Camera size={18} />, el: <Tab7 /> },
-  { label: 'Scene Graphs & 3D AI', icon: <Share2 size={18} />, el: <Tab8 /> },
 ];
 
 export default function App() {

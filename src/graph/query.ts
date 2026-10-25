@@ -31,7 +31,7 @@ export const SUPPORTED_QUESTIONS = [
   'What objects are in the room?',
   'Which object is closest to the scanner?',
   'What is next to the table?',
-  'Which objects intersect the walking corridor?',
+  'What is next to chair 1?',
   'What is the distance between table 1 and chair 2?',
   'What is on top of table 1?',
   'How many chairs are there?',

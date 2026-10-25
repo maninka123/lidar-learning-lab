@@ -14,6 +14,7 @@ export interface GraphNode {
   source: 'ground-truth annotation' | 'rule-based estimate (from clusters)';
   confidence: number | null; // null = not applicable (ground truth)
   instanceId?: number;
+  classLabel?: string; // class name when it is not one of the built-in scene classes
 }
 export type RelType = 'near' | 'above' | 'below' | 'inside' | 'left_of' | 'right_of' | 'intersects' | 'blocks_path';
 export interface GraphEdge { from: string; to: string; type: RelType; value?: number; note?: string }

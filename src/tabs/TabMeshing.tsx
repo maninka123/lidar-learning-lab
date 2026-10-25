@@ -41,8 +41,9 @@ export default function TabMeshing() {
   // "hide the roof" removes the ceiling points before anything is built, so both the points and the surface are open from above
   const cloud = useMemo<PointCloud | null>(() => {
     if (!fullCloud || !hideCeiling || src === 'tree') return fullCloud;
+    // the classroom file labels its ceiling points (class 0); the hall's ceiling is its highest flat layer
     const top = cloudBounds(fullCloud).max[2] - 0.15, ids: number[] = [];
-    for (let i = 0; i < fullCloud.count; i++) if (fullCloud.positions[i * 3 + 2] <= top) ids.push(i);
+    for (let i = 0; i < fullCloud.count; i++) { const roof = src === 'classroom' && fullCloud.labels ? fullCloud.labels[i] === 0 : fullCloud.positions[i * 3 + 2] > top; if (!roof) ids.push(i); }
     return selectPoints(fullCloud, ids, fullCloud.name);
   }, [fullCloud, hideCeiling, src]);
   useEffect(() => { setMesh(null); setCell(DEFAULT_CELL[src]); }, [src]);

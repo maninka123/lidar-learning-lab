@@ -12,7 +12,7 @@ Everything is a simulation you can poke, break and fix, with plain-English expla
 |:-:|:-:|:-:|
 | ![What is LiDAR](docs/screens/01-what-is-lidar.jpg) **What is LiDAR?** | ![Scanner simulator](docs/screens/02-scanner-simulator.jpg) **Scanner Simulator** | ![Gallery](docs/screens/04-point-cloud-gallery.jpg) **Real point clouds** |
 | ![Registration](docs/screens/05-registration.jpg) **Registration** | ![TLS](docs/screens/05b-tls.jpg) **TLS stations** | ![SLAM](docs/screens/06-slam.jpg) **SLAM** |
-| ![Fusion](docs/screens/06b-fusion.jpg) **LiDAR + camera** | ![Planes](docs/screens/08b-plane-detection.jpg) **Plane detection** | ![CAD](docs/screens/08c-scan-to-cad.jpg) **Scan to CAD** |
+| ![Fusion](docs/screens/06b-fusion.jpg) **LiDAR + camera** | ![Segmentation](docs/screens/08-segmentation.jpg) **Segmentation** | ![CAD](docs/screens/08c-scan-to-cad.jpg) **Scan to CAD** |
 | ![Change](docs/screens/08d-change-detection.jpg) **Change detection** | ![Meshing](docs/screens/08e-meshing.jpg) **Meshing** | ![Image to 3D](docs/screens/09-image-to-3d.jpg) **Image to 3D** |
 
 ## A good way to use it
@@ -33,12 +33,11 @@ Go through the tabs in order, one idea at a time, about five minutes each. Each 
 | 8 | **SLAM & Mobile Scanning** | Moving scans in a city (handheld, vehicle, UAV) and a SLAM run with drift and loop closure. |
 | 9 | **LiDAR + Camera Fusion** | A colourful hall, a LiDAR and a camera. Move the camera into place with translation and rotation sliders, watch the point cloud colour change, press Calculate to see the errors zoomed in, save the calibration, then map a whole walk in colour in a pop-up. |
 | 10 | **Meshing & Surfaces** | Coloured point clouds (the hall from tab 8, a classroom, a tree) into surfaces: voxel, smoothed, height map, close gaps, simplify, colour from the points, export OBJ. |
-| 11 | **Plane Detection** | Fixed vs **adaptive RANSAC** on a classroom scan: spacing, noise and trial count worked out from the data. |
-| 12 | **Clustering & Segmentation** | RANSAC planes, Euclidean clustering and DBSCAN on the same classroom scan, scored against its furniture. |
+| 11 | **Clustering & Segmentation** | RANSAC plane detection (floor, walls, ceiling taken out with a few settings), then Euclidean clustering or DBSCAN on the same classroom scan, scored against its furniture. |
+| 12 | **Scene Graphs & 3D AI** | Objects and relations, offline question answering, link to [local-llm-fit](https://maninka123.github.io/local-llm-fit/). |
 | 13 | **Scan to CAD** | Slice a classroom, find wall lines, square the corners, export a **DXF** floor plan. |
 | 14 | **Change Detection** | Two scans of a room, align, measure distances, threshold, group: what was removed, moved or added? |
 | 15 | **Image to 3D** | Scene and input images, three reconstruction methods, meshing, alignment with scale, error map. |
-| 16 | **Scene Graphs & 3D AI** | Objects and relations, offline question answering, link to [local-llm-fit](https://maninka123.github.io/local-llm-fit/). |
 
 Viewport: left-drag rotates, right-drag or the **Pan** button moves the cloud, wheel zooms.
 

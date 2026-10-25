@@ -71,8 +71,8 @@ export default function TabChange() {
 
   const viewport = (
     <Viewport home={[8, -10, 6.5]} target={[0, 0, 1.2]} gridSize={1} hideAxes bgOverride="#ffffff">
-      {painted.a && <CloudLayer cloud={painted.a} mode="rgb" size={Math.max(2, s.view.pointSize - 1)} budget={Math.max(s.view.renderBudget, 300000)} pickable={false} clip={{ on: hideCeiling, min: -1, max: 2.55 }} />}
-      {addedOnly && <CloudLayer cloud={addedOnly} mode="rgb" size={Math.max(3, s.view.pointSize)} budget={200000} pickable={false} clip={{ on: hideCeiling, min: -1, max: 2.55 }} />}
+      {painted.a && <CloudLayer cloud={painted.a} mode="rgb" size={Math.max(2, s.view.pointSize - 1)} budget={Math.max(s.view.renderBudget, 300000)} pickable={false} clip={{ on: hideCeiling, min: -1, max: 2.28 }} />}
+      {addedOnly && <CloudLayer cloud={addedOnly} mode="rgb" size={Math.max(3, s.view.pointSize)} budget={200000} pickable={false} clip={{ on: hideCeiling, min: -1, max: 2.28 }} />}
     </Viewport>
   );
   const nRem = res ? res.removed.reduce((a, v) => a + v, 0) : 0, nAdd = res ? res.added.reduce((a, v) => a + v, 0) : 0;

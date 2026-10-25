@@ -18,6 +18,7 @@ export interface PlaneOpts {
   minFraction: number; // stop when the best plane holds fewer than this fraction of all points
   maxPlanes: number;
   seed: number;
+  maxThreshold?: number; // adaptive: never accept points farther than this from a plane (default 6 cm)
 }
 
 /** Median distance to the nearest neighbour: the typical point spacing. */
@@ -93,7 +94,7 @@ export function detectPlanes(pos: Float32Array, n: number, labels: ArrayLike<num
     {
       const r = first.map((j) => Math.abs(res(j))).sort((a, b) => a - b);
       sigma = 1.4826 * (r[r.length >> 1] ?? 0);
-      if (o.mode === 'adaptive') thr = Math.min(0.06, Math.max(0.6 * spacing, 3 * sigma));
+      if (o.mode === 'adaptive') thr = Math.min(o.maxThreshold ?? 0.06, Math.max(0.6 * spacing, 3 * sigma));
     }
     const inl: number[] = [], rest: number[] = [];
     for (let k = 0; k < remaining.length; k++) { const j = remaining[k]; (Math.abs(res(j)) <= thr ? inl : rest).push(j); }

@@ -1,13 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLab } from '../state/store';
-import { getScene } from '../scenes';
+import { loadClassroomForSegmentation, nodesFromClassroom, paintClasses } from '../apps/classroom';
+import { askDeepSeek, DEEPSEEK_MODEL, estimateTokens, loadOwnKey, NoKeyError, pointCloudToText, saveOwnKey, AiResult } from '../apps/deepseek';
+import { PointCloud } from '../core/pointcloud';
 import { className, classColor } from '../scenes/classes';
 import { Viewport } from '../ui/Viewport';
 import { TabFrame } from '../ui/TabFrame';
 import { Btn, Callout, Section, Select, Seg, Slider, Toggle, Badge, fmtN } from '../ui/controls';
-import { SceneLayer, BoxOutline, CorridorVolume, SensorMarker } from '../ui/three';
+import { CloudLayer, BoxOutline, SensorMarker } from '../ui/three';
 import { ExternalLink, Cpu, Play } from '../ui/icons';
-import { buildGraph, nodesFromScene, nodesFromSegmentation, REL_LABEL, RelType, SceneGraph, GraphNode, scannerGap } from '../graph/sceneGraph';
+import { buildGraph, nodesFromSegmentation, REL_LABEL, RelType, SceneGraph, GraphNode, scannerGap } from '../graph/sceneGraph';
 import { answerQuery, QueryAnswer, SUPPORTED_QUESTIONS, LLM_TOOL_SCHEMA } from '../graph/query';
 import { circularLayout } from '../graph/layout';
 import { Vec3 } from '../core/math';
@@ -85,7 +87,13 @@ function GraphView({ graph, filters, selected, onSelect, showStructural, highlig
 
 export default function Tab8() {
   const s = useLab();
-  const scene = getScene(s.sceneId);
+  // the same classroom scan as the Clustering & Segmentation tab
+  const [cloud, setCloud] = useState<PointCloud | null>(null);
+  useEffect(() => { void loadClassroomForSegmentation().then(setCloud).catch((e) => s.notify((e as Error).message, 'error')); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  const classCloud = useMemo(() => (cloud ? paintClasses(cloud) : null), [cloud]);
+  const truthNodes = useMemo(() => (cloud ? nodesFromClassroom(cloud) : []), [cloud]);
+  const [vp, setVp] = useState({ x: 0, y: 0 }); // where the "scanner" stands in the room
+  const scannerPos: Vec3 = [vp.x, vp.y, 1.2];
   const g = s.graph;
   const setG = (patch: Partial<typeof g>) => useLab.setState({ graph: { ...useLab.getState().graph, ...patch } });
   const [q, setQ] = useState('');
@@ -95,13 +103,31 @@ export default function Tab8() {
   const [pane, setPane] = useState<'graph' | 'ask' | 'llm'>('ask');
   const [showFit, setShowFit] = useState(false);
   const seg = s.seg.result;
+  // direct inference with DeepSeek
+  const [nPts, setNPts] = useState(800), [withColour, setWithColour] = useState(true);
+  const [ownKey, setOwnKey] = useState(() => loadOwnKey());
+  const [needKey, setNeedKey] = useState(false);
+  const [aiBusy, setAiBusy] = useState(false);
+  const [ai, setAi] = useState<(AiResult & { sent: number }) | null>(null);
+  const [aiErr, setAiErr] = useState<string | null>(null);
+  const preview = useMemo(() => (cloud ? pointCloudToText(cloud, nPts, withColour) : null), [cloud, nPts, withColour]);
+  async function sendToAi() {
+    if (!preview || !cloud) return;
+    setAiBusy(true); setAiErr(null);
+    const system = 'You are given raw LiDAR point cloud data as plain text. Be honest and short: say what you can and cannot tell from numbers alone.';
+    const user = `Below are ${preview.count} points sampled from a LiDAR scan of one room. Each line is one point: x y z (metres)${withColour ? ' then r g b (0-255)' : ''}.\n\nWhat kind of room is this, and which objects are in it? Give each object with an approximate position. If you cannot tell, say so.\n\n${preview.text}`;
+    try { const r = await askDeepSeek(system, user, 600, ownKey); setAi({ ...r, sent: preview.count }); setNeedKey(false); }
+    catch (e) { if (e instanceof NoKeyError) { setNeedKey(true); setAiErr('This site has no DeepSeek key of its own. Paste your key below (it stays in your browser) and press Send again.'); } else setAiErr((e as Error).message); }
+    finally { setAiBusy(false); }
+  }
 
   const graph = g.graph;
   useEffect(() => {
-    const nodes = g.source === 'segmentation' && seg ? nodesFromSegmentation(seg) : nodesFromScene(scene);
-    const gr = buildGraph(nodes, { pos: [s.pose.x, s.pose.y, s.pose.z] as Vec3, yaw: s.pose.yaw }, scene.corridor, g.nearThreshold);
+    if (!truthNodes.length) return;
+    const nodes = g.source === 'segmentation' && seg ? nodesFromSegmentation(seg) : truthNodes;
+    const gr = buildGraph(nodes, { pos: scannerPos, yaw: 0 }, undefined, g.nearThreshold);
     setG({ graph: gr });
-  }, [g.source, g.nearThreshold, s.sceneId, s.pose.x, s.pose.y, s.pose.z, s.pose.yaw, seg]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [g.source, g.nearThreshold, truthNodes, vp.x, vp.y, seg]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const nodes = graph?.nodes ?? [];
   const objs = nodes.filter((n) => !n.structural);
@@ -118,18 +144,16 @@ export default function Tab8() {
   };
   const closest = graph ? [...objs].sort((a, b) => scannerGap(graph.scanner.pos, a) - scannerGap(graph.scanner.pos, b))[0] : null;
 
-  const selectNode = (id: string | null) => { setG({ selectedNode: id }); s.patch({ selectedObjectId: id && scene.objects.some((o) => o.id === id) ? id : null }); };
+  const selectNode = (id: string | null) => setG({ selectedNode: id });
   const hlIds = [...new Set([...(sel ? [sel.id] : []), ...highlight])];
 
   const viewport = (
     <div style={{ position: 'absolute', inset: 0, display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 2 }}>
       <div style={{ position: 'relative' }}>
-        <Viewport id="sg3d" home={scene.cameraHome} target={scene.cameraTarget} hideGrid hideAxes bgOverride="#ffffff">
-          {g.source === 'ground-truth' && <SceneLayer scene={scene} opacity={Math.max(0.35, s.view.sceneOpacity)} showCeiling={s.view.showCeiling} highlight={hlIds} interactive={false} />}
-          {g.source === 'segmentation' && s.view.showScene && <SceneLayer scene={scene} opacity={0.15} showCeiling={false} interactive={false} />}
-          {graph && nodes.filter((n) => !n.structural && g.source === 'segmentation').map((n) => <BoxOutline key={n.id} bbox={n.bbox} color={hlIds.includes(n.id) ? '#ffd60a' : '#ff375f'} dashed />)}
-          {graph?.corridor && <CorridorVolume scene={scene} />}
-          <SensorMarker x={s.pose.x} y={s.pose.y} z={s.pose.z} yaw={s.pose.yaw} sensor={s.sensor} label="Scanner" showFov={false} />
+        <Viewport id="sg3d" home={[8, -10, 6.5]} target={[0, 0, 1.2]} hideGrid hideAxes bgOverride="#ffffff">
+          {classCloud && <CloudLayer cloud={classCloud} mode="rgb" size={Math.max(2, s.view.pointSize - 1)} budget={Math.max(s.view.renderBudget, 150000)} pickable={false} clip={{ on: true, min: -1, max: 2.28 }} />}
+          {graph && nodes.filter((n) => !n.structural).map((n) => <BoxOutline key={n.id} bbox={n.bbox} color={hlIds.includes(n.id) ? '#ffd60a' : g.source === 'segmentation' ? '#ff375f' : '#0a84ff'} dashed={g.source === 'segmentation'} />)}
+          <SensorMarker x={scannerPos[0]} y={scannerPos[1]} z={scannerPos[2]} yaw={0} sensor={s.sensor} label="Scanner" showFov={false} scale={1.4} />
         </Viewport>
       </div>
       <div style={{ position: 'relative', background: 'var(--bg)' }}>
@@ -142,7 +166,6 @@ export default function Tab8() {
   const stats = [
     { k: 'Objects', v: objs.length, s: `${graph ? graph.edges.length : 0} relations` },
     { k: 'Closest to scanner', v: closest ? closest.label : '—', s: closest && graph ? `${scannerGap(graph.scanner.pos, closest).toFixed(2)} m away` : undefined },
-    { k: 'Blocking the corridor', v: graph ? graph.edges.filter((e) => e.type === 'blocks_path').length : 0 },
   ];
 
   const controls = (
@@ -171,7 +194,7 @@ export default function Tab8() {
             <b>{sel.label}</b>
             <table className="table"><tbody>
               <tr><td>ID</td><td className="mono">{sel.id}</td></tr>
-              <tr><td>Semantic label</td><td>{className(sel.classId)}</td></tr>
+              <tr><td>Semantic label</td><td>{sel.classLabel ?? className(sel.classId)}</td></tr>
               <tr><td>Position</td><td className="mono">{sel.position.map((v) => v.toFixed(2)).join(', ')} m</td></tr>
               <tr><td>Dimensions</td><td className="mono">{sel.dimensions.map((v) => v.toFixed(2)).join(' × ')} m</td></tr>
               <tr><td>Bounding box</td><td className="mono">{sel.bbox.min.map((v) => v.toFixed(2)).join(', ')} → {sel.bbox.max.map((v) => v.toFixed(2)).join(', ')}</td></tr>
@@ -186,14 +209,16 @@ export default function Tab8() {
         <p>Which object is closest to the scanner?</p>
         <Select value={g.quizAnswer || ''} options={[{ value: '', label: 'Choose…' }, ...objs.map((o) => ({ value: o.id, label: o.label }))]} onChange={(quizAnswer) => setG({ quizAnswer })} />
         {g.quizAnswer && closest && <Callout kind={g.quizAnswer === closest.id ? 'good' : 'bad'}>{g.quizAnswer === closest.id ? `Correct — ${closest.label}, ${graph ? scannerGap(graph.scanner.pos, closest).toFixed(2) : ''} m from the scanner surface.` : 'Not quite. Ask the graph: “Which object is closest to the scanner?”'}</Callout>}
-        <span className="caption">Move the scanner in the Scanner Simulator to change the answer.</span>
+        <span className="caption">Move the scanner in the Graph section to change the answer.</span>
       </Section>
       </>)}
       {pane === 'graph' && (<>
       <Section title="Objects">
         <Seg value={g.source} onChange={(source) => setG({ source })} options={[{ value: 'ground-truth', label: 'True objects' }, { value: 'segmentation', label: 'From segmentation' }]} />
-        {g.source === 'segmentation' && !seg && <Callout kind="warn">Run the Clustering & Segmentation tab first. Clusters will become nodes with <b>estimated</b> labels from a crude size rule.</Callout>}
+        {g.source === 'segmentation' && !seg && <Callout kind="warn">Run the Clustering & Segmentation tab first (tab 11). Its clusters become nodes with <b>estimated</b> labels from a crude size rule.</Callout>}
         <Slider label="“Near” threshold" value={g.nearThreshold} min={0.1} max={2} step={0.05} unit=" m" format={(v) => v.toFixed(2)} onChange={(nearThreshold) => setG({ nearThreshold })}  />
+        <Slider label="Scanner position, left–right" value={vp.x} min={-3.5} max={3.5} step={0.1} unit=" m" format={(v) => v.toFixed(1)} onChange={(x) => setVp({ ...vp, x })} />
+        <Slider label="Scanner position, front–back" value={vp.y} min={-5.5} max={5.5} step={0.1} unit=" m" format={(v) => v.toFixed(1)} onChange={(y) => setVp({ ...vp, y })} />
         <Toggle label="Show floor / walls" checked={showStructural} onChange={setShowStructural} />
       </Section>
       <Section title="Relations shown">
@@ -202,6 +227,32 @@ export default function Tab8() {
       </Section>
       </>)}
       {pane === 'llm' && (<>
+      <Section title="Direct inference: give the point cloud to an AI">
+        <p className="hint">What if we skip the pipeline and hand the raw point cloud to a language model? The cloud is thinned out, written as text (one point per line) and sent to <b>DeepSeek V4 Flash</b>, a cheap, fast model ({DEEPSEEK_MODEL}). Whatever comes back is the model's own answer.</p>
+        <Slider label="Points to send" value={nPts} min={100} max={3000} step={100} onChange={setNPts} hint="Every point costs tokens (the model's unit of reading). More points cost more and can run over its limit." />
+        <Toggle label="Include the colours" checked={withColour} onChange={setWithColour} />
+        {preview && cloud && (
+          <div className="callout" style={{ gap: 6 }} data-testid="ds-preview">
+            <b>What is sent</b>
+            <pre className="mono" style={{ margin: 0, fontSize: '0.8125rem', whiteSpace: 'pre-wrap' }}>{preview.text.split('\n').slice(0, 5).join('\n')}{'\n…'}</pre>
+            <span className="caption">{fmtN(preview.count)} of {fmtN(cloud.count)} points · about {fmtN(estimateTokens(preview.count, withColour))} tokens. The whole cloud would be about {fmtN(estimateTokens(cloud.count, withColour))} tokens, far more than the model can read at once.</span>
+          </div>
+        )}
+        {needKey && <label className="field"><span>Your DeepSeek key (kept only in this browser)</span><input type="password" value={ownKey} onChange={(e) => { setOwnKey(e.target.value); saveOwnKey(e.target.value); }} placeholder="sk-…" data-testid="ds-key" autoComplete="off" /></label>}
+        <Btn variant="primary" onClick={sendToAi} busy={aiBusy} disabled={!preview} testId="ds-send">Send to DeepSeek</Btn>
+        {aiErr && <Callout kind="warn">{aiErr}</Callout>}
+        {ai && (
+          <div className="callout fade-in" style={{ gap: 8 }} data-testid="ds-answer">
+            <b>DeepSeek's answer (raw)</b>
+            <pre className="mono" style={{ margin: 0, fontSize: '0.8125rem', whiteSpace: 'pre-wrap', maxHeight: 320, overflow: 'auto' }}>{ai.text}</pre>
+            <span className="caption">{fmtN(ai.sent)} points sent · {fmtN(ai.promptTokens)} tokens read · {fmtN(ai.completionTokens)} written · {(ai.ms / 1000).toFixed(1)} s · {ai.via === 'server' ? 'key held by the server' : 'your own key'}</span>
+            <span className="caption">For comparison, the scan really contains <b>{truthNodes.filter((n) => !n.structural).length} objects</b>: {Object.entries(truthNodes.filter((n) => !n.structural).reduce<Record<string, number>>((a, n) => { const k = n.classLabel ?? 'Object'; a[k] = (a[k] ?? 0) + 1; return a; }, {})).map(([k, v]) => `${v} ${k.toLowerCase()}${v > 1 ? 's' : ''}`).join(', ')}.</span>
+          </div>
+        )}
+        <Callout kind="edu" title="Why this is not real point cloud inference">
+          A language model reads <b>text</b>. A point cloud is just thousands of numbers with no order and no neighbours, so the model has no way to <i>see</i> shape: it can only guess from number patterns (like “z is about 0, so a floor”). It can only read a sparse handful of points, positions it gives are approximate or made up, and it cannot count or measure reliably. Real point cloud AI uses models built for 3D (such as point-based or voxel networks), or, as in this tab, a pipeline: segment the cloud, build a scene graph with exact geometry, and let the language model only <b>ask</b> that graph.
+        </Callout>
+      </Section>
       <Section title="Using a real LLM">
         <p className="hint">Not active in this app. A real LLM would call tools on a server that read this graph and do the geometry, so it never invents a measurement.</p>
         <Btn sm onClick={() => setShowLLM(!showLLM)}>{showLLM ? 'Hide' : 'Show'} example tool contract</Btn>
@@ -223,6 +274,6 @@ export default function Tab8() {
     </>
   );
 
-  return <TabFrame title="Scene Graph" tab={15} viewport={viewport} controls={controls} learn={null} noPanelTabs statsRow stats={stats} hideViewControls />;
+  return <TabFrame title="Scene Graph" tab={11} viewport={viewport} controls={controls} learn={null} noPanelTabs statsRow stats={stats} hideViewControls />;
   void Badge; void fmtN; void ({} as GraphNode);
 }

@@ -8,6 +8,7 @@ import { RawViewer } from '../ui/RawViewer';
 import { writePCD } from '../io/pcd';
 import { FileText } from '../ui/icons';
 import { MiniChart } from './common';
+import { Credit } from '../ui/VideoCard';
 import { CloudLayer, BoxOutline } from '../ui/three';
 import { Play, RotateCcw, Plus } from '../ui/icons';
 import { runTask } from '../engine/client';
@@ -30,7 +31,7 @@ export default function Tab6() {
   const [rawOpen, setRawOpen] = useState(false);
   const [sweep, setSweep] = useState<{ x: number[]; clusters: number[]; over: number[]; under: number[]; recovered: number[]; label: string } | null>(null);
   const [slots, setSlots] = useState<{ A?: { params: SegParams; clusters: number; recovered: number; over: number; under: number; noise: number }; B?: { params: SegParams; clusters: number; recovered: number; over: number; under: number; noise: number } }>({});
-  // the same classroom scan as the Plane Detection tab, with its furniture as the "true objects"
+  // the classroom scan, with its furniture as the "true objects"
   const [cloud, setCloud] = useState<PointCloud | null>(null);
   useEffect(() => { void loadClassroomForSegmentation().then(setCloud).catch((e) => s.notify((e as Error).message, 'error')); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const classCloud = useMemo(() => (cloud ? paintClasses(cloud) : null), [cloud]);
@@ -88,10 +89,10 @@ export default function Tab6() {
   const viewport = (
     <Viewport home={[8, -10, 6.5]} target={[0, 0, 1.2]} hideGrid hideAxes bgOverride="#ffffff">
       {cloud && (show === 'result' && resultLabels && !stale
-        ? <CloudLayer cloud={cloud} mode="cluster" colorOpts={{ clusterLabels: resultLabels }} size={s.view.pointSize} budget={Math.max(s.view.renderBudget, 150000)} pickable={false} clip={{ on: hideCeiling, min: -1, max: 2.55 }} />
+        ? <CloudLayer cloud={cloud} mode="cluster" colorOpts={{ clusterLabels: resultLabels }} size={s.view.pointSize} budget={Math.max(s.view.renderBudget, 150000)} pickable={false} clip={{ on: hideCeiling, min: -1, max: 2.28 }} />
         : show === 'instances' && instLabels
-          ? <CloudLayer cloud={cloud} mode="cluster" colorOpts={{ clusterLabels: instLabels }} size={s.view.pointSize} budget={s.view.renderBudget} pickable={false} clip={{ on: hideCeiling, min: -1, max: 2.55 }} />
-          : <CloudLayer cloud={show === 'semantic' && classCloud ? classCloud : cloud} mode={show === 'semantic' || show === 'rgb' ? 'rgb' : 'height'} size={s.view.pointSize} budget={Math.max(s.view.renderBudget, 150000)} pickable={false} clip={{ on: hideCeiling, min: -1, max: 2.55 }} />)}
+          ? <CloudLayer cloud={cloud} mode="cluster" colorOpts={{ clusterLabels: instLabels }} size={s.view.pointSize} budget={s.view.renderBudget} pickable={false} clip={{ on: hideCeiling, min: -1, max: 2.28 }} />
+          : <CloudLayer cloud={show === 'semantic' && classCloud ? classCloud : cloud} mode={show === 'semantic' || show === 'rgb' ? 'rgb' : 'height'} size={s.view.pointSize} budget={Math.max(s.view.renderBudget, 150000)} pickable={false} clip={{ on: hideCeiling, min: -1, max: 2.28 }} />)}
       {boxes && res && !stale && res.clusters.map((c) => <BoxOutline key={c.id} bbox={{ min: c.min, max: c.max }} color={`rgb(${distinctColor(c.id).map(Math.round).join(',')})`} dashed />)}
     </Viewport>
   );
@@ -109,12 +110,12 @@ export default function Tab6() {
         {cloud ? <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}><span>{cloud.name}</span><Badge kind={cloud.meta.kind === 'simulated' ? 'sim' : 'measured'} /><span className="caption">{fmtN(cloud.count)} pts{hasGT ? ' · GT labels' : ''}</span></div> : <p className="hint">Loading the classroom…</p>}
         <p className="caption">Planes are fitted by rule (RANSAC), clusters group nearby points without knowing what they are. Classes and objects shown as “true” come from the scan file and from grouping the furniture, not from AI predictions.</p>
       </Section>
-      <Section title="1 · Ground & planes (RANSAC)">
-        <Toggle label="Remove ground plane" checked={p.removeGround} onChange={(removeGround) => setP({ removeGround })} hint="Largest nearly-horizontal plane (≤ 20° tilt)." />
-        <Slider label="Extra planes to peel (walls…)" value={p.extraPlanes} min={0} max={8} step={1} onChange={(extraPlanes) => setP({ extraPlanes })} hint="Plane / object separation: remove walls before clustering." />
-        <Slider label="Distance threshold" value={p.ransacThreshold} min={0.005} max={0.2} step={0.005} unit=" m" format={(v) => v.toFixed(3)} onChange={(ransacThreshold) => setP({ ransacThreshold })} />
-        <Slider label="Max iterations" value={p.ransacIterations} min={10} max={1000} step={10} onChange={(ransacIterations) => setP({ ransacIterations })} />
-              </Section>
+      <Section title="1 · Plane detection (RANSAC)">
+        <p className="hint">RANSAC finds the flat surfaces (floor, walls, ceiling) by trying planes through random points and keeping the one with the most points close to it. They are taken out first so the objects can be clustered. The distance and the number of tries are measured from the data.</p>
+        <Slider label="Planes to find, at most" value={p.planeMax} min={0} max={20} step={1} onChange={(planeMax) => setP({ planeMax })} hint="0 skips plane detection." />
+        <Slider label="Smallest plane" value={p.planeMinPct} min={0.5} max={10} step={0.5} unit=" % of points" onChange={(planeMinPct) => setP({ planeMinPct })} hint="Stop when the best plane left is smaller than this." />
+        <Slider label="Confidence" value={p.planeConfidence * 100} min={90} max={99.9} step={0.1} unit=" %" format={(v) => v.toFixed(1)} onChange={(v) => setP({ planeConfidence: v / 100 })} hint="How sure to be of finding each plane. Higher means more tries." />
+      </Section>
       <Section title="2 · Clustering (unsupervised)">
         <Seg value={p.algo} onChange={(algo) => setP({ algo })} options={[{ value: 'euclidean', label: 'Euclidean' }, { value: 'dbscan', label: 'DBSCAN' }, { value: 'none', label: 'None' }]} />
         {p.algo === 'euclidean' && <Slider label="Cluster radius" value={p.radius} min={0.02} max={1} step={0.01} unit=" m" format={(v) => v.toFixed(2)} onChange={(radius) => setP({ radius })} hint="Too small → one object breaks into pieces (over-segmentation). Too large → neighbours merge (under-segmentation)." />}
@@ -124,6 +125,7 @@ export default function Tab6() {
         </>)}
         <Slider label="Min cluster size" value={p.minCluster} min={5} max={500} step={5} onChange={(minCluster) => setP({ minCluster })} />
       </Section>
+      <Section title="Tutorial"><Credit keys={['ransac']} title="" /></Section>
       <Section title="Show">
         <Seg value={show} onChange={setShow} options={[{ value: 'result', label: 'Result' }, { value: 'instances', label: 'True objects' }, { value: 'semantic', label: 'True classes' }]} />
         <Toggle label="Cluster bounding boxes (estimated)" checked={boxes} onChange={setBoxes} />
@@ -175,7 +177,7 @@ export default function Tab6() {
   const rawText = useMemo(() => (rawOpen && cloud ? new TextDecoder().decode(writePCD({ id: 'raw', name: 'segmented', count: cloud.count, positions: cloud.positions, meta: cloud.meta, ...(res ? { labels: res.display } : {}) } as PointCloud, false)) : ''), [rawOpen, cloud, res]);
 
   return (
-    <TabFrame title="Clustering & Segmentation" tab={11} noEnv viewport={viewport} controls={controls} learn={null} noPanelTabs statsRow stats={stats}
+    <TabFrame title="Clustering & Segmentation" tab={10} noEnv viewport={viewport} controls={controls} learn={null} noPanelTabs statsRow stats={stats}
       viewExtras={<><Btn sm variant="primary" icon={<Play size={15} />} onClick={runMain} busy={busy} disabled={!cloud} testId="run-seg">Segment</Btn><Btn sm icon={<FileText size={15} />} variant={rawOpen ? 'primary' : ''} onClick={() => setRawOpen(!rawOpen)} disabled={!cloud} testId="raw-toggle">Raw</Btn></>}
       overlays={rawOpen && cloud ? <RawViewer text={rawText} filename="segmented.pcd" onClose={() => setRawOpen(false)} /> : null} />
   );

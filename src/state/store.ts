@@ -136,7 +136,7 @@ export const DEFAULT_VIEW: ViewOpts = {
   renderBudget: 150000, clipOn: false, clipMin: -1, clipMax: 20, showRays: true,
 };
 
-const DEFAULT_SEG: SegParams = { removeGround: true, extraPlanes: 5, ransacThreshold: 0.03, ransacIterations: 200, algo: 'euclidean', eps: 0.15, minPts: 8, radius: 0.15, minCluster: 30, seed: 11 };
+const DEFAULT_SEG: SegParams = { planeConfidence: 0.99, planeMinPct: 2, planeMax: 12, algo: 'euclidean', eps: 0.15, minPts: 8, radius: 0.15, minCluster: 30, seed: 11 };
 const DEFAULT_SLAM: SlamParams = { seed: 3, steps: 48, odom: 'noisy', transNoise: 0.012, rotNoiseDeg: 0.35, rotBiasDeg: 0.25, scaleErr: 0.015, loopClosure: false, z: 1.4 };
 
 const initialScene = getScene('A');

@@ -1,13 +1,12 @@
 import { PointCloud } from '../core/pointcloud';
-import { ransacPlane } from './ransac';
+import { detectPlanes, PlaneKind } from '../apps/planes';
 import { dbscan, euclideanClustering } from './clustering';
 
 export type ClusterAlgo = 'euclidean' | 'dbscan' | 'none';
 export interface SegParams {
-  removeGround: boolean;
-  extraPlanes: number; // additional (e.g. wall) planes to peel off
-  ransacThreshold: number;
-  ransacIterations: number;
+  planeConfidence: number; // RANSAC: how sure to be of finding each plane (0.9 .. 0.999)
+  planeMinPct: number; // smallest plane, % of all points
+  planeMax: number; // most planes to take out (0 = none)
   algo: ClusterAlgo;
   eps: number; // DBSCAN eps
   minPts: number; // DBSCAN minPts
@@ -19,7 +18,7 @@ export interface SegParams {
 export interface SegResult {
   /** per-point id: planes 0..P-1, clusters P.., −1 unassigned/noise */
   display: Int32Array;
-  planes: { kind: 'ground' | 'plane'; normal: [number, number, number]; d: number; count: number; rmse: number }[];
+  planes: { kind: PlaneKind; normal: [number, number, number]; d: number; count: number; rmse: number }[];
   clusters: { id: number; count: number; centroid: [number, number, number]; min: [number, number, number]; max: [number, number, number]; indices: Int32Array }[];
   noise: number;
   ms: number;
@@ -35,19 +34,14 @@ export function segment(cloud: PointCloud, p: SegParams): SegResult {
 
   const candidates = () => { const a: number[] = []; for (let i = 0; i < n; i++) if (remaining[i]) a.push(i); return Int32Array.from(a); };
 
-  if (p.removeGround) {
-    const fit = ransacPlane(cloud.positions, n, { threshold: p.ransacThreshold, iterations: p.ransacIterations, seed: p.seed, candidates: candidates(), maxTiltDeg: 20 });
-    if (fit && fit.inliers.length > 10) {
-      for (const i of fit.inliers) { display[i] = planes.length; remaining[i] = 0; }
-      planes.push({ kind: 'ground', normal: fit.normal, d: fit.d, count: fit.inliers.length, rmse: fit.rmse });
-    }
-  }
-  for (let k = 0; k < p.extraPlanes; k++) {
-    const cand = candidates();
-    const fit = ransacPlane(cloud.positions, n, { threshold: p.ransacThreshold, iterations: p.ransacIterations, seed: p.seed + 101 * (k + 1), candidates: cand });
-    if (!fit || fit.inliers.length < Math.max(30, 0.03 * n)) break;
-    for (const i of fit.inliers) { display[i] = planes.length; remaining[i] = 0; }
-    planes.push({ kind: 'plane', normal: fit.normal, d: fit.d, count: fit.inliers.length, rmse: fit.rmse });
+  // 1) RANSAC plane detection (the settings that matter are measured from the data); planes are taken out before clustering
+  if (p.planeMax > 0) {
+    const run = detectPlanes(cloud.positions, n, null, { mode: 'adaptive', threshold: 0.02, iterations: 100, confidence: p.planeConfidence, minFraction: p.planeMinPct / 100, maxPlanes: p.planeMax, seed: p.seed });
+    // only the room itself (floor, ceiling, walls) is taken out: table tops and other flat things are objects
+    run.planes.filter((pl) => pl.kind === 'floor' || pl.kind === 'ceiling' || pl.kind === 'wall').forEach((pl) => {
+      for (const i of pl.inliers) { display[i] = planes.length; remaining[i] = 0; }
+      planes.push({ kind: pl.kind, normal: pl.normal, d: pl.d, count: pl.inliers.length, rmse: pl.sigma });
+    });
   }
 
   const rest = candidates();
