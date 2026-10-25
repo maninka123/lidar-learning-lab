@@ -1,6 +1,6 @@
 import { simulateScan, ScanRequest } from '../sensor/simulate';
 import { runPipeline, OpSpec } from '../processing/pipeline';
-import { segment, SegParams, evaluateAgainstGT } from '../segmentation/segment';
+import { segment, SegParams, SegResult, evaluateAgainstGT } from '../segmentation/segment';
 import { icp, IcpOptions, evaluateAlignment } from '../registration/icp';
 import { runSlam, SlamParams } from '../registration/slam';
 import { reconstruct, ReconParams, scanObject, alignToLidar, compareReconstruction, ReconObjectId } from '../recon/recon';
@@ -13,8 +13,8 @@ import { Rigid } from '../core/math';
 export const tasks = {
   scan: (req: ScanRequest) => simulateScan(req),
   pipeline: (p: { original: PointCloud; steps: OpSpec[]; seed: number }) => runPipeline(p.original, p.steps, p.seed),
-  segment: (p: { cloud: PointCloud; params: SegParams; ignore: number[] }) => {
-    const result = segment(p.cloud, p.params);
+  segment: (p: { cloud: PointCloud; params: SegParams; ignore: number[]; fromPlanes?: SegResult }) => {
+    const result = segment(p.cloud, p.params, p.fromPlanes);
     const gt = evaluateAgainstGT(p.cloud, result, new Set(p.ignore));
     return { result, gt };
   },

@@ -38,20 +38,40 @@ export default function Tab6() {
   const res: SegResult | null = seg.result;
   const gt = seg.gt;
   const ignore = useMemo(() => [0], []); // floor, walls and ceiling are not counted as objects
-  const setP = (patch: Partial<SegParams>) => useLab.setState({ seg: { ...useLab.getState().seg, params: { ...p, ...patch } } });
+  const setP = (patch: Partial<SegParams>) => { if ('planeMax' in patch || 'planeMinPct' in patch || 'planeConfidence' in patch) setPlaneRes(null); setP0(patch); };
+  const setP0 = (patch: Partial<SegParams>) => useLab.setState({ seg: { ...useLab.getState().seg, params: { ...p, ...patch } } });
   const hasGT = !!cloud?.instances;
 
-  async function run(params = p) {
+  // two stages: 1) planes (RANSAC)  2) clusters (unsupervised) on what is left
+  const [planeRes, setPlaneRes] = useState<SegResult | null>(null);
+  const planesOnly = (r: SegResult): SegResult => { const d = r.display.slice(); for (let i = 0; i < d.length; i++) if (d[i] >= r.planes.length) d[i] = -1; return { ...r, display: d, clusters: [], noise: d.reduce((a, v) => a + (v < 0 ? 1 : 0), 0) }; };
+  async function runPlanes() {
+    if (!cloud) return;
+    const out = await run({ ...p, algo: 'none' });
+    if (!out) return;
+    setPlaneRes(out.result);
+    useLab.setState({ seg: { ...useLab.getState().seg, result: out.result, gt: null, cloudId: cloud.id, names: {} } });
+    setShow('result');
+  }
+  async function runCluster() {
+    if (!cloud) return;
+    const out = await run(p, planeRes ?? undefined);
+    if (!out) return;
+    useLab.setState({ seg: { ...useLab.getState().seg, result: out.result, gt: out.gt as never, cloudId: cloud.id, names: {} } });
+    setShow('result');
+  }
+  async function run(params = p, fromPlanes?: SegResult) {
     if (!cloud) return null;
     setBusy(true);
     try {
-      const out = await runTask('segment', { cloud, params, ignore });
+      const out = await runTask('segment', { cloud, params, ignore, fromPlanes });
       return out;
     } catch (e) { s.notify((e as Error).message, 'error'); return null; } finally { setBusy(false); }
   }
   async function runMain() {
     const out = await run();
     if (!out) return;
+    setPlaneRes(planesOnly(out.result));
     useLab.setState({ seg: { ...useLab.getState().seg, result: out.result, gt: out.gt as never, cloudId: cloud!.id, names: {} } });
     setShow('result');
   }
@@ -115,6 +135,8 @@ export default function Tab6() {
         <Slider label="Planes to find, at most" value={p.planeMax} min={0} max={20} step={1} onChange={(planeMax) => setP({ planeMax })} hint="0 skips plane detection." />
         <Slider label="Smallest plane" value={p.planeMinPct} min={0.5} max={10} step={0.5} unit=" % of points" onChange={(planeMinPct) => setP({ planeMinPct })} hint="Stop when the best plane left is smaller than this." />
         <Slider label="Confidence" value={p.planeConfidence * 100} min={90} max={99.9} step={0.1} unit=" %" format={(v) => v.toFixed(1)} onChange={(v) => setP({ planeConfidence: v / 100 })} hint="How sure to be of finding each plane. Higher means more tries." />
+        <Btn variant="primary" icon={<Play size={16} />} onClick={runPlanes} busy={busy} disabled={!cloud || p.planeMax === 0} testId="run-planes">Detect planes</Btn>
+        {planeRes && <span className="caption">{planeRes.planes.length} planes found in {planeRes.ms.toFixed(0)} ms. Now cluster what is left.</span>}
       </Section>
       <Section title="2 · Clustering (unsupervised)">
         <Seg value={p.algo} onChange={(algo) => setP({ algo })} options={[{ value: 'euclidean', label: 'Euclidean' }, { value: 'dbscan', label: 'DBSCAN' }, { value: 'none', label: 'None' }]} />
@@ -124,6 +146,8 @@ export default function Tab6() {
           <Slider label="Min points" value={p.minPts} min={2} max={40} step={1} onChange={(minPts) => setP({ minPts })} hint="Points with fewer neighbours become noise." />
         </>)}
         <Slider label="Min cluster size" value={p.minCluster} min={5} max={500} step={5} onChange={(minCluster) => setP({ minCluster })} />
+              <Btn variant="primary" icon={<Play size={16} />} onClick={runCluster} busy={busy} disabled={!cloud || (p.planeMax > 0 && !planeRes)} testId="run-cluster">Cluster</Btn>
+        {p.planeMax > 0 && !planeRes && <span className="caption">Detect the planes first (stage 1).</span>}
       </Section>
       <Section title="Tutorial"><Credit keys={['ransac']} title="" /></Section>
       <Section title="Show">

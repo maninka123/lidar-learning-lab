@@ -2,13 +2,13 @@ import { SceneDef, SceneObject, Primitive, box, cyl, sph, place, finalize } from
 
 /** Scene D: a small city district built for SLAM. Two long east-west roads, two north-south roads, four crossings,
  *  a school, parked vehicles, pedestrians, trees, lamp posts and traffic lights. Only used by the SLAM & Mobile Scanning tab. */
-const car = (x: number, y: number, yaw: number): Primitive[] =>
+export const car = (x: number, y: number, yaw: number): Primitive[] =>
   place([
     box([0, 0, 0.6], [4.2, 1.8, 0.75]),
     box([-0.2, 0, 1.3], [2.3, 1.6, 0.65], 0, { mat: { color: glass, reflectivity: 0.12 } }),
     ...[[-1.3, -0.9], [1.3, -0.9], [-1.3, 0.9], [1.3, 0.9]].map(([px, py]) => cyl([px, py, 0.32], 0.32, 0.25, 'y', { mat: { color: [25, 25, 25], reflectivity: 0.08 } })),
   ], x, y, 0, yaw);
-const bus = (x: number, y: number, yaw: number): Primitive[] =>
+export const bus = (x: number, y: number, yaw: number): Primitive[] =>
   place([
     box([0, 0, 1.7], [10, 2.5, 2.6]),
     box([0, 0, 2.2], [9.6, 2.55, 0.8], 0, { mat: { color: glass, reflectivity: 0.12 } }),
@@ -16,7 +16,7 @@ const bus = (x: number, y: number, yaw: number): Primitive[] =>
   ], x, y, 0, yaw);
 const truck = (x: number, y: number, yaw: number): Primitive[] =>
   place([box([-1.5, 0, 1.7], [5, 2.4, 2.8]), box([2.6, 0, 1.2], [2, 2.3, 1.9]), ...[[-3, -1.1], [2.5, -1.1], [-3, 1.1], [2.5, 1.1]].map(([px, py]) => cyl([px, py, 0.5], 0.5, 0.3, 'y', { mat: { color: [25, 25, 25], reflectivity: 0.08 } }))], x, y, 0, yaw);
-const person = (x: number, y: number, z0: number): Primitive[] => [
+export const person = (x: number, y: number, z0: number): Primitive[] => [
   cyl([x, y + 0.1, z0 + 0.45], 0.085, 0.9, 'z'), cyl([x, y - 0.1, z0 + 0.45], 0.085, 0.9, 'z'),
   box([x, y, z0 + 1.2], [0.24, 0.42, 0.6]), cyl([x, y + 0.28, z0 + 1.17], 0.05, 0.6, 'z'), cyl([x, y - 0.28, z0 + 1.17], 0.05, 0.6, 'z'), sph([x, y, z0 + 1.66], 0.12),
 ];

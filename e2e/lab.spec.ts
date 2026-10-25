@@ -373,6 +373,18 @@ test('segmentation: label clusters by hand and use them in the scene graph', asy
   await expect(page.getByTestId('graph-view')).toContainText('Table 1');
 });
 
+test('segmentation: planes first, then clusters, as two separate stages', async ({ page }) => {
+  await page.goto('/');
+  await page.getByTestId('nav-10').click();
+  await expect(page.getByText(/125,\d{3} pts/)).toBeVisible({ timeout: 60000 });
+  await expect(page.getByTestId('run-cluster')).toBeDisabled();
+  await page.getByTestId('run-planes').click();
+  await expect(page.getByText(/planes found in/)).toBeVisible({ timeout: 90000 });
+  await expect.poll(() => page.evaluate(() => (window as any).__lab.getState().seg.result?.clusters?.length)).toBe(0);
+  await page.getByTestId('run-cluster').click();
+  await expect.poll(() => page.evaluate(() => (window as any).__lab.getState().seg.result?.clusters?.length ?? 0), { timeout: 90000 }).toBeGreaterThan(5);
+});
+
 test.describe('corner cases', () => {
   test('TLS tab: changing the environment while a scan is running leaves nothing of the old one behind', async ({ page }) => {
     await page.goto('/');

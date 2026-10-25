@@ -25,17 +25,19 @@ export interface SegResult {
   nonPlanar: number;
 }
 
-export function segment(cloud: PointCloud, p: SegParams): SegResult {
+/** `fromPlanes`: reuse the planes of an earlier plane-detection run and only do the clustering stage. */
+export function segment(cloud: PointCloud, p: SegParams, fromPlanes?: SegResult): SegResult {
   const t0 = typeof performance !== 'undefined' ? performance.now() : Date.now();
   const n = cloud.count;
   const display = new Int32Array(n).fill(-1);
   const remaining = new Uint8Array(n).fill(1);
   const planes: SegResult['planes'] = [];
+  if (fromPlanes) { planes.push(...fromPlanes.planes); for (let i = 0; i < n; i++) if (fromPlanes.display[i] >= 0 && fromPlanes.display[i] < planes.length) { display[i] = fromPlanes.display[i]; remaining[i] = 0; } }
 
   const candidates = () => { const a: number[] = []; for (let i = 0; i < n; i++) if (remaining[i]) a.push(i); return Int32Array.from(a); };
 
   // 1) RANSAC plane detection (the settings that matter are measured from the data); planes are taken out before clustering
-  if (p.planeMax > 0) {
+  if (!fromPlanes && p.planeMax > 0) {
     const run = detectPlanes(cloud.positions, n, null, { mode: 'adaptive', threshold: 0.02, iterations: 100, confidence: p.planeConfidence, minFraction: p.planeMinPct / 100, maxPlanes: p.planeMax, seed: p.seed });
     // only the room itself (floor, ceiling, walls) is taken out: table tops and other flat things are objects
     run.planes.filter((pl) => pl.kind === 'floor' || pl.kind === 'ceiling' || pl.kind === 'wall').forEach((pl) => {
