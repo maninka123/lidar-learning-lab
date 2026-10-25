@@ -83,13 +83,14 @@ export interface ViewportProps {
   threshold?: number;
   label?: string;
   labelPos?: 'bl' | 'br' | 'tl';
+  labelTop?: number; // distance of a top label from the top edge (default leaves room for the view toolbar)
   bgOverride?: string;
   gridSize?: number;
   hideGrid?: boolean;
   hideAxes?: boolean;
 }
 
-export function Viewport({ children, home = [8, -9, 6.5], target = [0, 0, 1], group, id = 'main', primary = true, threshold = 0.05, label, labelPos = 'br', bgOverride, gridSize = 1, hideGrid, hideAxes }: ViewportProps) {
+export function Viewport({ children, home = [8, -9, 6.5], target = [0, 0, 1], group, id = 'main', primary = true, threshold = 0.05, label, labelPos = 'br', labelTop = 66, bgOverride, gridSize = 1, hideGrid, hideAxes }: ViewportProps) {
   const bg = useLab((s) => s.view.background);
   const showGrid = useLab((s) => s.view.showGrid);
   const showAxes = useLab((s) => s.view.showAxes);
@@ -120,7 +121,7 @@ export function Viewport({ children, home = [8, -9, 6.5], target = [0, 0, 1], gr
         {showAxes && !hideAxes && <axesHelper args={[1.2 * gridSize]} raycast={() => null} />}
         {children}
       </Canvas>
-      {label && <div className="overlay card glass" style={{ ...(labelPos === 'tl' ? { top: 66 } : { bottom: 12 }), [labelPos === 'br' ? 'right' : 'left']: 12, padding: '0.3rem 0.7rem', fontSize: '0.875rem', fontWeight: 600 }}>{label}</div>}
+      {label && <div className="overlay card glass" style={{ ...(labelPos === 'tl' ? { top: labelTop } : { bottom: 12 }), [labelPos === 'br' ? 'right' : 'left']: 12, padding: '0.3rem 0.7rem', fontSize: '0.875rem', fontWeight: 600 }}>{label}</div>}
     </div>
   );
 }

@@ -293,6 +293,7 @@ test.describe('classroom applications', () => {
     await go2(page, 9);
     await page.getByTestId('video-X57nSQZePyE').click();
     await expect(page.locator('iframe[src*="X57nSQZePyE"]')).toBeVisible();
+    await expect(page.getByTestId('video-fullscreen')).toBeVisible();
     await page.getByTestId('video-close').click();
     await page.getByTestId('build-surface').click();
     await expect(page.getByTestId('stats-card')).toContainText(/Triangles\s*[\d,]{4,}/, { timeout: 60000 });
@@ -337,6 +338,27 @@ test('tab 8: LiDAR + camera fusion - estimate, calculate, save and map', async (
   await expect(page.getByTestId('fusion-mapping')).toHaveCount(0);
 });
 
+test('processing: draw a crop box on the original cloud with the mouse', async ({ page }) => {
+  await page.goto('/');
+  await page.getByTestId('nav-4').click();
+  await expect.poll(() => page.evaluate(() => Object.keys((window as any).__lab.getState().clouds).length), { timeout: 60000 }).toBeGreaterThan(0);
+  await page.getByTestId('add-type').locator('select').selectOption('crop');
+  await page.getByTestId('add-step').click();
+  const box = (await page.locator('canvas').first().boundingBox())!;
+  const full = await page.evaluate(() => (window as any).__lab.getState().proc.steps[0]);
+  await page.mouse.move(box.x + box.width * 0.35, box.y + box.height * 0.35);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width * 0.65, box.y + box.height * 0.7, { steps: 6 });
+  await page.mouse.up();
+  await expect.poll(() => page.evaluate(() => (window as any).__lab.getState().proc.steps[0].max[0])).not.toBe(full.max[0]);
+  const drawn = await page.evaluate(() => (window as any).__lab.getState().proc.steps[0]);
+  expect(drawn.type).toBe('crop');
+  expect(drawn.max[0] - drawn.min[0]).toBeLessThan(full.max[0] - full.min[0]);
+  expect(drawn.max[1] - drawn.min[1]).toBeLessThan(full.max[1] - full.min[1]);
+  expect(Math.abs(drawn.max[2] - full.max[2])).toBeLessThan(1e-6); // drawn from above: the height is left alone
+  await expect(page.getByTestId('draw-box-0')).toContainText('Draw the box on the cloud');
+});
+
 test.describe('corner cases', () => {
   test('TLS tab: changing the environment while a scan is running leaves nothing of the old one behind', async ({ page }) => {
     await page.goto('/');
@@ -357,7 +379,7 @@ test.describe('corner cases', () => {
     page.on('pageerror', (e) => bad.push(`pageerror: ${e.message}`));
     page.on('console', (m) => { if (m.type() === 'error' && !/Failed to load resource|ERR_|favicon|ytimg|youtube/i.test(m.text())) bad.push(`console: ${m.text()}`); });
     await page.goto('/');
-    for (let i = 0; i < 17; i++) { await page.getByTestId(`nav-${i}`).click(); await page.waitForTimeout(700); await expect(page.locator('canvas, [data-testid="videos-page"]').first()).toBeVisible(); }
+    for (let i = 0; i < 16; i++) { await page.getByTestId(`nav-${i}`).click(); await page.waitForTimeout(700); await expect(page.locator('canvas').first()).toBeVisible(); }
     expect(bad).toEqual([]);
   });
 
@@ -399,16 +421,4 @@ test.describe('corner cases', () => {
     await page.getByTestId('find-changes').click();
     await expect(page.getByText('4 · What changed')).toBeVisible({ timeout: 120000 });
   });
-});
-
-test('videos tab lists every video and plays one in a pop-up with a full screen button', async ({ page }) => {
-  await page.goto('/');
-  await page.getByTestId('nav-16').click();
-  await expect(page.getByTestId('videos-page')).toContainText('Dr. Florent Poux');
-  await page.getByTestId('video-MJJNIvvAQzc').click();
-  await expect(page.locator('iframe[src*="MJJNIvvAQzc"]')).toBeVisible();
-  await expect(page.getByTestId('video-fullscreen')).toBeVisible();
-  await page.getByTestId('video-close').click();
-  await page.getByTestId('video-tab-cad').click();
-  await expect.poll(() => page.evaluate(() => (window as any).__lab.getState().tab)).toBe(12);
 });

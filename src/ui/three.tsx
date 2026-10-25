@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
+import { useThree } from '@react-three/fiber';
 import { Line, Edges } from '@react-three/drei';
 import { PointCloud } from '../core/pointcloud';
 import { colorize, ColorMode, ColorOpts } from '../core/colorize';
@@ -316,4 +317,60 @@ export function MeshLayer({ mesh, color = '#bf5af2', opacity = 0.9, wire = false
       <meshStandardMaterial color={colors ? '#ffffff' : color} vertexColors={!!colors} transparent={opacity < 1} opacity={opacity} wireframe={wire} flatShading={flat} side={THREE.DoubleSide} roughness={0.8} />
     </mesh>
   );
+}
+
+/**
+ * Draw a rectangle on the view with the mouse (like CloudCompare's segment tool): every point that falls inside the rectangle on the
+ * screen is selected, and the smallest box around them is reported. The camera is locked while drawing; Escape cancels.
+ */
+export function ScreenBoxSelect({ active, cloud, onBox, onCancel }: { active: boolean; cloud: PointCloud | null; onBox: (min: Vec3, max: Vec3, count: number, viewAxis: 0 | 1 | 2) => void; onCancel?: () => void }) {
+  const { camera, gl, controls } = useThree();
+  const cb = useRef({ onBox, onCancel });
+  cb.current = { onBox, onCancel };
+  useEffect(() => {
+    if (!active || !cloud) return;
+    const el = gl.domElement, host = el.parentElement;
+    if (!host) return;
+    const ctl = controls as unknown as { enabled: boolean } | null;
+    const was = ctl?.enabled; if (ctl) ctl.enabled = false;
+    const cursor = el.style.cursor; el.style.cursor = 'crosshair';
+    const band = document.createElement('div');
+    Object.assign(band.style, { position: 'absolute', border: '2px dashed #0a84ff', background: 'rgba(10,132,255,.14)', pointerEvents: 'none', display: 'none', zIndex: '6' });
+    host.appendChild(band);
+    let start: [number, number] | null = null;
+    const at = (e: PointerEvent): [number, number] => { const r = el.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; };
+    const draw = (a: [number, number], b: [number, number]) => { band.style.left = `${Math.min(a[0], b[0])}px`; band.style.top = `${Math.min(a[1], b[1])}px`; band.style.width = `${Math.abs(a[0] - b[0])}px`; band.style.height = `${Math.abs(a[1] - b[1])}px`; };
+    const down = (e: PointerEvent) => { if (e.button !== 0) return; e.preventDefault(); start = at(e); band.style.display = 'block'; draw(start, start); try { el.setPointerCapture(e.pointerId); } catch { /* ignore */ } };
+    const move = (e: PointerEvent) => { if (start) draw(start, at(e)); };
+    const up = (e: PointerEvent) => {
+      if (!start) return;
+      const a = start, b = at(e); start = null; band.style.display = 'none';
+      const x0 = Math.min(a[0], b[0]), x1 = Math.max(a[0], b[0]), y0 = Math.min(a[1], b[1]), y1 = Math.max(a[1], b[1]);
+      if (x1 - x0 < 6 || y1 - y0 < 6) return;
+      const r = el.getBoundingClientRect(), v = new THREE.Vector3();
+      camera.updateMatrixWorld();
+      const min: Vec3 = [Infinity, Infinity, Infinity], max: Vec3 = [-Infinity, -Infinity, -Infinity];
+      let n = 0;
+      for (let i = 0; i < cloud.count; i++) {
+        const px = cloud.positions[i * 3], py = cloud.positions[i * 3 + 1], pz = cloud.positions[i * 3 + 2];
+        v.set(px, py, pz).project(camera);
+        if (v.z < -1 || v.z > 1) continue;
+        const sx = ((v.x + 1) / 2) * r.width, sy = ((1 - v.y) / 2) * r.height;
+        if (sx < x0 || sx > x1 || sy < y0 || sy > y1) continue;
+        n++;
+        if (px < min[0]) min[0] = px; if (py < min[1]) min[1] = py; if (pz < min[2]) min[2] = pz;
+        if (px > max[0]) max[0] = px; if (py > max[1]) max[1] = py; if (pz > max[2]) max[2] = pz;
+      }
+      const dir = new THREE.Vector3(); camera.getWorldDirection(dir);
+      const ax = Math.abs(dir.x) >= Math.abs(dir.y) && Math.abs(dir.x) >= Math.abs(dir.z) ? 0 : Math.abs(dir.y) >= Math.abs(dir.z) ? 1 : 2; // the axis we are looking along
+      if (n > 0) cb.current.onBox(min, max, n, ax);
+    };
+    const key = (e: KeyboardEvent) => { if (e.key === 'Escape') cb.current.onCancel?.(); };
+    el.addEventListener('pointerdown', down, true); el.addEventListener('pointermove', move); el.addEventListener('pointerup', up); window.addEventListener('keydown', key);
+    return () => {
+      el.removeEventListener('pointerdown', down, true); el.removeEventListener('pointermove', move); el.removeEventListener('pointerup', up); window.removeEventListener('keydown', key);
+      band.remove(); el.style.cursor = cursor; if (ctl && was !== undefined) ctl.enabled = was;
+    };
+  }, [active, cloud, camera, gl, controls]);
+  return null;
 }

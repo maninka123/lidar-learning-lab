@@ -83,7 +83,7 @@ export default function FusionMapping({ calib, onClose }: { calib: SavedCalibrat
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 380px', minHeight: 0 }}>
           <div style={{ position: 'relative', minHeight: 0 }}>
-            <Viewport id="mapping-3d" hideGrid bgOverride="#ffffff" label={res ? (layer === 'colour' ? 'Coloured, registered point cloud' : 'Point cloud before colouring') : 'Choose a path, then press Scan and colour'} labelPos="tl" home={[-9, -8, 7]} target={[0, 0, 1]} threshold={0.05}>
+            <Viewport id="mapping-3d" hideGrid bgOverride="#ffffff" label={res ? (layer === 'colour' ? 'Coloured, registered point cloud' : 'Point cloud before colouring') : 'Choose a path, then press Scan and colour'} labelPos="tl" labelTop={12} home={[-9, -8, 7]} target={[0, 0, 1]} threshold={0.05}>
               <SceneLayer scene={scene} opacity={res ? 0.08 : 0.35} showCeiling={false} interactive={false} />
               {wps.length > 1 && <PolyLine pts={wps.map((w) => [w[0], w[1], 0.05] as [number, number, number])} color="#ff9f0a" width={3} dashed />}
               {shown && <CloudLayer cloud={layer === 'colour' ? shown : res!.cloud} mode={layer === 'colour' ? 'rgb' : 'height'} size={2} budget={350000} pickable={false} />}

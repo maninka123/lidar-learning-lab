@@ -128,7 +128,7 @@ export default function TabMeshing() {
       </Section>
       <Section title="Videos">
         <Credit keys={['implant', 'library', 'university', 'factory']} title="" />
-        <p className="caption">The first video shows points only, without colour; the others have colour from the camera. All videos are by Dr. Florent Poux. More on the Videos tab.</p>
+        <p className="caption">The first video shows points only, without colour; the others have colour from the camera. All videos are by Dr. Florent Poux.</p>
       </Section>
     </>
   );

@@ -39,7 +39,6 @@ Go through the tabs in order, one idea at a time, about five minutes each. Each 
 | 14 | **Change Detection** | Two scans of a room, align, measure distances, threshold, group: what was removed, moved or added? |
 | 15 | **Image to 3D** | Scene and input images, three reconstruction methods, meshing, alignment with scale, error map. |
 | 16 | **Scene Graphs & 3D AI** | Objects and relations, offline question answering, link to [local-llm-fit](https://maninka123.github.io/local-llm-fit/). |
-| 17 | **Videos** | All the tutorial videos by Dr. Florent Poux in one place. Click one to play it in the middle of the screen, with a Full screen button. |
 
 Viewport: left-drag rotates, right-drag or the **Pan** button moves the cloud, wheel zooms.
 

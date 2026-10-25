@@ -1,5 +1,5 @@
 import { Suspense, lazy, ReactNode } from 'react';
-import { Layers, PanelLeft, Radar, Info, Boxes, Route, GitMerge, Filter, Network, Camera, Share2, Square, Ruler, Eye, Wand, Crosshair, Play } from './ui/icons';
+import { Layers, PanelLeft, Radar, Info, Boxes, Route, GitMerge, Filter, Network, Camera, Share2, Square, Ruler, Eye, Wand, Crosshair } from './ui/icons';
 import { useLab } from './state/store';
 import { Toast } from './ui/shared';
 
@@ -19,7 +19,6 @@ const Tab5 = lazy(() => import('./tabs/Tab5Processing'));
 const Tab6 = lazy(() => import('./tabs/Tab6Segmentation'));
 const Tab7 = lazy(() => import('./tabs/Tab7Recon'));
 const Tab8 = lazy(() => import('./tabs/Tab8SceneGraph'));
-const TabVideos = lazy(() => import('./tabs/TabVideos'));
 
 const TABS: { label: string; icon: ReactNode; el: ReactNode }[] = [
   { label: 'What is LiDAR?', icon: <Info size={18} />, el: <Tab0 /> },
@@ -38,7 +37,6 @@ const TABS: { label: string; icon: ReactNode; el: ReactNode }[] = [
   { label: 'Change Detection', icon: <Eye size={18} />, el: <TabChange /> },
   { label: 'Image to 3D', icon: <Camera size={18} />, el: <Tab7 /> },
   { label: 'Scene Graphs & 3D AI', icon: <Share2 size={18} />, el: <Tab8 /> },
-  { label: 'Videos', icon: <Play size={18} />, el: <TabVideos /> },
 ];
 
 export default function App() {

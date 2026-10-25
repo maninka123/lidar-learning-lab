@@ -190,13 +190,13 @@ export default function TabFusion() {
   const viewport = (
     <div style={{ position: 'absolute', inset: 0, display: 'grid', gridTemplateColumns: '1.25fr 1fr', gap: 2, background: '#d9d9de' }}>
       <div style={{ position: 'relative' }}>
-        <Viewport id="fusion-cloud" hideGrid hideAxes bgOverride="#ffffff" label={showCloud === 'colour' ? (updating ? 'Colouring…' : 'Coloured point cloud') : 'Point cloud before colouring'} labelPos="tl" home={cloudHome} target={cloudTarget} threshold={0.05}>
+        <Viewport id="fusion-cloud" hideGrid hideAxes bgOverride="#ffffff" label={showCloud === 'colour' ? (updating ? 'Colouring…' : 'Coloured point cloud') : 'Point cloud before colouring'} labelPos="tl" labelTop={12} home={cloudHome} target={cloudTarget} threshold={0.05}>
           {plainCloud && <CloudLayer cloud={showCloud === 'colour' && withColours ? withColours : plainCloud} mode={showCloud === 'colour' && withColours ? 'rgb' : 'height'} size={Math.max(2, s.view.pointSize)} budget={Math.max(s.view.renderBudget, 200000)} pickable={false} />}
         </Viewport>
       </div>
       <div style={{ display: 'grid', gridTemplateRows: '1fr auto 0.8fr', gap: 2, minHeight: 0 }}>
         <div style={{ position: 'relative' }}>
-          <Viewport id="fusion-scene" hideGrid bgOverride="#ffffff" label="The scene with the two sensors" labelPos="tl" home={sceneHome} target={sceneTarget} threshold={0.05}>
+          <Viewport id="fusion-scene" hideGrid bgOverride="#ffffff" label="The scene with the two sensors" labelPos="tl" labelTop={12} home={sceneHome} target={sceneTarget} threshold={0.05}>
             <SceneLayer scene={scene} opacity={0.6} showCeiling={false} interactive={false} hide={WALLS} />
             <SensorMarker x={rig.x} y={rig.y} z={rig.z} yaw={rig.yaw} sensor={lidar} color="#0a84ff" showFov={false} scale={modelScale} />
             <PolyLine pts={[[rig.x, rig.y, rig.z], camTrue.pos]} color="#ff9f0a" width={3} dashed />

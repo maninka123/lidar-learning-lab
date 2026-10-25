@@ -75,7 +75,7 @@ export default function TabScanToCad() {
   const viewport = (
     <div style={{ position: 'absolute', inset: 0, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2, background: '#d9d9de' }}>
       <div style={{ position: 'relative' }}>
-        <Viewport id="cad-3d" hideGrid hideAxes bgOverride="#ffffff" label="The scan: the slice is red" labelPos="tl" home={[7, -9, 7]} target={[0, 0, 1.2]}>
+        <Viewport id="cad-3d" hideGrid hideAxes bgOverride="#ffffff" label="The scan: the slice is red" labelPos="tl" labelTop={12} home={[7, -9, 7]} target={[0, 0, 1.2]}>
           {shown && <CloudLayer cloud={shown} mode="rgb" size={Math.max(2, s.view.pointSize - 1)} budget={Math.max(s.view.renderBudget, 300000)} pickable={false} clip={{ on: cutAbove, min: -1, max: zMax + 0.01 }} />}
           {raw && raw.map((sg, i) => <PolyLine key={i} pts={[[sg.x1, sg.y1, z], [sg.x2, sg.y2, z]]} color="#0a84ff" width={4} />)}
         </Viewport>

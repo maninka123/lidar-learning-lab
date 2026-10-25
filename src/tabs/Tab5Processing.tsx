@@ -8,7 +8,8 @@ import { RawViewer } from '../ui/RawViewer';
 import { writePCD } from '../io/pcd';
 import { FileText } from '../ui/icons';
 import { SceneFromStore } from './common';
-import { CloudLayer } from '../ui/three';
+import { BoxOutline, CloudLayer, ScreenBoxSelect } from '../ui/three';
+import { viewBus } from '../ui/viewBus';
 import { Download, Play, Plus, Trash2, RotateCcw } from '../ui/icons';
 import { runTask } from '../engine/client';
 import { OpSpec, OpType, OP_LABEL, defaultOp, PipelineResult } from '../processing/pipeline';
@@ -83,6 +84,7 @@ export default function Tab5() {
   const [showRoom, setShowRoom] = useState(false);
   const [rawOpen, setRawOpen] = useState(false);
   const [addType, setAddType] = useState<OpType>('noise');
+  const [drawing, setDrawing] = useState<number | null>(null); // index of the crop step whose box is being drawn on the original cloud
   const reqId = useRef(0);
   const setProc = (patch: Partial<typeof proc>) => useLab.setState({ proc: { ...useLab.getState().proc, ...patch } });
 
@@ -126,11 +128,30 @@ export default function Tab5() {
 
   const update = (i: number, o: OpSpec) => setProc({ steps: proc.steps.map((x, k) => (k === i ? o : x)) });
   const addStep = () => {
+    if (addType === 'crop') { addAndDraw(); return; } // choosing Crop box starts drawing the box straight away
     const op = defaultOp(addType);
     if (op.type === 'crop' && b) { op.min = [b.min[0] + 0.5, b.min[1] + 0.5, b.min[2]]; op.max = [b.max[0] - 0.5, b.max[1] - 0.5, b.max[2]]; }
     const prev = proc.steps;
     setProc({ steps: [...prev, op], viewStep: prev.length });
     pushUndo(`add ${OP_LABEL[addType]}`, () => setProc({ steps: prev }));
+  };
+  // a rectangle drawn in a view sets the two box sides across the view; the side along the view keeps its value (so draw from above, then from the front)
+  const drawBox = (i: number) => (min: [number, number, number], max: [number, number, number], count: number, axis: 0 | 1 | 2) => {
+    const pad = 0.02, op = proc.steps[i];
+    if (!op || op.type !== 'crop') return;
+    const nmin = [...op.min] as [number, number, number], nmax = [...op.max] as [number, number, number];
+    for (let a = 0; a < 3; a++) if (a !== axis) { nmin[a] = min[a] - pad; nmax[a] = max[a] + pad; }
+    update(i, { ...op, min: nmin, max: nmax });
+    setDrawing(null);
+    useLab.getState().notify(`Crop box set around ${fmtN(count)} points. Draw again from another side to set the third direction.`, 'ok');
+  };
+  const addAndDraw = () => {
+    const prev = proc.steps, op = defaultOp('crop');
+    if (op.type === 'crop' && b) { op.min = [b.min[0], b.min[1], b.min[2]]; op.max = [b.max[0], b.max[1], b.max[2]]; }
+    setProc({ steps: [...prev, op], viewStep: prev.length });
+    pushUndo('add crop box', () => setProc({ steps: prev }));
+    setDrawing(prev.length);
+    viewBus.emit('top');
   };
   const removeStep = (i: number) => { const prev = proc.steps; setProc({ steps: prev.filter((_, k) => k !== i), viewStep: -1 }); pushUndo('remove step', () => setProc({ steps: prev })); };
   const move = (i: number, d: -1 | 1) => { const a = [...proc.steps]; const j = i + d; if (j < 0 || j >= a.length) return; [a[i], a[j]] = [a[j], a[i]]; setProc({ steps: a }); };
@@ -144,8 +165,10 @@ export default function Tab5() {
   const viewport = (
     <div style={{ position: 'absolute', inset: 0, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
       <div style={{ position: 'relative' }}>
-        <Viewport id="proc-a" group="proc" primary hideGrid hideAxes bgOverride="#ffffff" labelPos="tl" label="Original (never changed)" home={scene.cameraHome} target={scene.cameraTarget}>
+        <Viewport id="proc-a" group="proc" primary hideGrid hideAxes bgOverride="#ffffff" labelPos="tl" label={drawing !== null ? 'Drag a rectangle over the part to keep (Esc to cancel)' : 'Original (never changed)'} home={scene.cameraHome} target={scene.cameraTarget}>
           {showRoom && <SceneFromStore interactive={false} />}
+          <ScreenBoxSelect active={drawing !== null} cloud={leftCloud} onBox={(mn, mx, n, ax) => drawing !== null && drawBox(drawing)(mn, mx, n, ax)} onCancel={() => setDrawing(null)} />
+          {proc.steps.map((op, i) => op.type === 'crop' && <BoxOutline key={i} bbox={{ min: op.min, max: op.max }} color={op.invert ? '#ff453a' : '#0a84ff'} dashed={i !== viewIdx} />)}
           {leftCloud && <CloudLayer cloud={leftCloud} mode={mode} size={s.view.pointSize} budget={s.view.renderBudget} colorOpts={{ heightRange, flat: [230, 30, 40], clusterLabels: tagLabels(leftCloud) }} pickable={false} />}
         </Viewport>
       </div>
@@ -181,6 +204,15 @@ export default function Tab5() {
                 <Btn sm variant="danger" icon={<Trash2 size={14} />} onClick={() => removeStep(i)} title="Remove step" />
               </div>
               <span className="caption">{OP_HELP[op.type]}</span>
+              {op.type === 'crop' && (
+                <div style={{ display: 'grid', gap: 4 }}>
+                  <div className="btn-row">
+                    <Btn sm variant={drawing === i ? 'primary' : ''} onClick={() => { if (drawing !== i) viewBus.emit('top'); setDrawing(drawing === i ? null : i); }} testId={`draw-box-${i}`}>{drawing === i ? 'Drag on the cloud… (click to cancel)' : 'Draw the box on the cloud'}</Btn>
+                    <Btn sm onClick={() => viewBus.emit('top')}>From above</Btn><Btn sm onClick={() => viewBus.emit('front')}>From the front</Btn><Btn sm onClick={() => viewBus.emit('side')}>From the side</Btn>
+                  </div>
+                  <span className="caption">Drag a rectangle over the part you want in the left view, as in CloudCompare. Draw from above to set the footprint, then from the front or the side to set the height. You can still fine-tune the numbers.</span>
+                </div>
+              )}
               <OpEditor op={op} onChange={(o) => update(i, o)} />
               {res?.steps[i] && <span className="caption mono">{fmtN(res.steps[i].before)} → {fmtN(res.steps[i].after)} pts · {res.steps[i].ms.toFixed(0)} ms{res.steps[i].injectedRemoved !== undefined ? ` · outliers removed ${res.steps[i].injectedRemoved} · original lost ${res.steps[i].originalLost}` : ''}</span>}
             </div>
@@ -188,9 +220,10 @@ export default function Tab5() {
           {!proc.steps.length && <p className="hint">No steps yet — add one below.</p>}
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 8 }}>
-          <Select value={addType} options={OP_TYPES.map((t) => ({ value: t, label: OP_LABEL[t] }))} onChange={setAddType} />
-          <Btn icon={<Plus size={16} />} onClick={addStep} disabled={!original} testId="add-step">Add</Btn>
+          <div data-testid="add-type"><Select value={addType} options={OP_TYPES.map((t) => ({ value: t, label: OP_LABEL[t] }))} onChange={setAddType} /></div>
+          <Btn icon={<Plus size={16} />} onClick={addStep} disabled={!original} testId="add-step">{addType === 'crop' ? 'Add and draw' : 'Add'}</Btn>
         </div>
+        {addType === 'crop' && <p className="hint">Pressing Add and draw switches to a view from above: drag a rectangle over the part of the original cloud you want to keep.</p>}
         <div className="btn-row">
           {([['Noise + outliers', ['noise', 'outliers']], ['Noise + outliers + clean', ['noise', 'outliers', 'sor']]] as [string, OpType[]][]).map(([label, types]) => (
             <Btn key={label} sm onClick={() => { const prev = proc.steps; setProc({ steps: types.map((t) => defaultOp(t)), viewStep: types.length - 1 }); pushUndo('preset', () => setProc({ steps: prev })); }} disabled={!original}>{label}</Btn>
