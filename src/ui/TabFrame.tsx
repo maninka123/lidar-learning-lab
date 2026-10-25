@@ -1,6 +1,7 @@
 import { ReactNode, useState } from 'react';
 import { useLab } from '../state/store';
 import { Seg } from './controls';
+import type { SceneId } from '../scenes';
 import { ExercisePanel, StatsCard, TopBar, ViewControls } from './shared';
 
 export interface TabFrameProps {
@@ -17,16 +18,17 @@ export interface TabFrameProps {
   hideExercise?: boolean;
   noPanelTabs?: boolean;
   topExtras?: ReactNode;
+  envIds?: SceneId[]; // environments offered in the Environment menu (default: the three standard scenes)
   noEnv?: boolean; // hide the Environment menu (tabs that do not use a scene)
   simple?: boolean; // controls only: no Exercise / Learn panes, minimal top bar
 }
 
-export function TabFrame({ title, tab, viewport, controls, learn, stats, overlays, hideViewControls, simple, viewExtras, statsRow, hideExercise, noPanelTabs, topExtras, noEnv }: TabFrameProps) {
+export function TabFrame({ title, tab, viewport, controls, learn, stats, overlays, hideViewControls, simple, viewExtras, statsRow, hideExercise, noPanelTabs, topExtras, noEnv, envIds }: TabFrameProps) {
   const open = useLab((s) => s.rightOpen);
   const [pane, setPane] = useState<'controls' | 'exercise' | 'learn'>('controls');
   return (
     <>
-      <TopBar title={title} minimal={simple} extra={topExtras} noEnv={noEnv} />
+      <TopBar title={title} minimal={simple} extra={topExtras} noEnv={noEnv} envIds={envIds} />
       <div className="tab-body">
         <div className="stage" data-testid="stage">
           {viewport}

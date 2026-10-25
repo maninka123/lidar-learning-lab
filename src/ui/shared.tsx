@@ -33,7 +33,7 @@ function Popover({ label, icon, children, align = 'left', testId }: { label: Rea
   );
 }
 
-function EnvironmentMenu() {
+function EnvironmentMenu({ ids }: { ids?: SceneId[] }) {
   const s = useLab();
   const sc = getScene(s.sceneId);
   const SHORT: Record<string, string> = { A: 'Room', B: 'Workshop', C: 'Street', D: 'Street' };
@@ -41,7 +41,7 @@ function EnvironmentMenu() {
     <Popover label={`Environment · ${SHORT[s.sceneId]}`} icon={<Database size={16} />} testId="environment-menu">
       <div style={{ minWidth: 260, display: 'grid', gap: 8 }}>
         <div className="seg block" role="group" aria-label="Environment">
-          {(s.sceneId === 'D' ? (['A', 'B', 'D'] as SceneId[]) : SCENE_IDS).map((id) => <button key={id} aria-pressed={s.sceneId === id} onClick={() => s.setScene(id as SceneId)} data-testid={`env-${id}`}>{SHORT[id]}</button>)}
+          {(ids ?? (s.sceneId === 'D' ? (['A', 'B', 'D'] as SceneId[]) : SCENE_IDS)).map((id) => <button key={id} aria-pressed={s.sceneId === id} onClick={() => s.setScene(id as SceneId)} data-testid={`env-${id}`}>{SHORT[id]}</button>)}
         </div>
         <p className="hint">{sc.name.split('·')[1]?.trim()} — {sc.description}</p>
       </div>
@@ -87,14 +87,14 @@ function ExportMenu() {
   );
 }
 
-export function TopBar({ title, minimal, extra, noEnv }: { title: string; minimal?: boolean; extra?: ReactNode; noEnv?: boolean }) {
+export function TopBar({ title, minimal, extra, noEnv, envIds }: { title: string; minimal?: boolean; extra?: ReactNode; noEnv?: boolean; envIds?: SceneId[] }) {
   const s = useLab();
   const [confirm, setConfirm] = useState(false);
   useEffect(() => { if (confirm) { const t = setTimeout(() => setConfirm(false), 3000); return () => clearTimeout(t); } }, [confirm]);
   return (
     <header className="topbar glass">
       <h1>{title}</h1>
-      {!minimal && !noEnv && <EnvironmentMenu />}
+      {!minimal && !noEnv && <EnvironmentMenu ids={envIds} />}
       {extra}
       <div className="spacer" />
       {!minimal && <Btn icon={<Undo2 size={16} />} onClick={doUndo} disabled={s.undoCount === 0} title="Undo last action" testId="undo">{extra ? '' : 'Undo'}</Btn>}

@@ -235,7 +235,7 @@ export default function Tab3({ labSwitch }: { labSwitch?: React.ReactNode }) {
       {false && s.stations.map((st) => <SensorMarker key={st.id} x={st.pose.x} y={st.pose.y} z={st.pose.z} yaw={st.pose.yaw} sensor={tlsSensor} label={`Station ${st.id}`} showFov={false} color="#0a84ff" />)}
       {!pointsOnly && (mode === 'mls' || mode === 'compare') && <PolyLine pts={wpPts} color="#ff9f0a" width={3} />}
       {!pointsOnly && (mode === 'mls' || mode === 'compare') && wpPts.map((p, i) => <Marker key={i} p={p} color="#ff9f0a" r={0.07} label={`${i + 1}`} />)}
-      {!pointsOnly && !platformAt && <SensorMarker x={wpPts[0]?.[0] ?? s.pose.x} y={wpPts[0]?.[1] ?? s.pose.y} z={s.mlsOpts.height} yaw={wpPts.length > 1 ? Math.atan2(wpPts[1][1] - wpPts[0][1], wpPts[1][0] - wpPts[0][0]) : s.pose.yaw} pitch={wpPts.length > 1 ? 0 : s.pose.pitch} scale={s.sceneId === 'C' ? 3 : s.sceneId === 'B' ? 1.8 : 1} sensor={mlsSensor} label="Scanner" color="#30d158" />}
+      {!pointsOnly && !platformAt && <SensorMarker x={wpPts[0]?.[0] ?? s.pose.x} y={wpPts[0]?.[1] ?? s.pose.y} z={s.mlsOpts.height} yaw={wpPts.length > 1 ? Math.atan2(wpPts[1][1] - wpPts[0][1], wpPts[1][0] - wpPts[0][0]) : s.pose.yaw} pitch={wpPts.length > 1 ? 0 : s.pose.pitch} scale={s.sceneId === 'C' || s.sceneId === 'D' ? 3 : s.sceneId === 'B' ? 1.8 : 1} sensor={mlsSensor} label="Scanner" color="#30d158" />}
       {!pointsOnly && mode === 'mls' && platformAt && <SensorMarker x={platformAt.x} y={platformAt.y} z={platformAt.z} yaw={platformAt.yaw} sensor={mlsSensor} color="#30d158" label="Platform" />}
     </Viewport>
   );
@@ -367,6 +367,7 @@ export default function Tab3({ labSwitch }: { labSwitch?: React.ReactNode }) {
     <TabFrame
       title="SLAM & Mobile Scanning"
       tab={5}
+      envIds={['A', 'B', 'D']}
       viewport={viewport}
       controls={controls}
       learn={null}

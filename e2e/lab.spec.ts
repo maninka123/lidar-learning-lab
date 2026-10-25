@@ -252,3 +252,17 @@ test('viewport: right-drag and the Pan button move the view like CloudCompare', 
   await page.waitForTimeout(800);
   expect(await shot()).not.toBe(b);
 });
+
+test('tab 6: Street is always the big city, also after switching labs and environments', async ({ page }) => {
+  await page.goto('/');
+  await page.getByTestId('nav-5').click();
+  await expect.poll(() => page.evaluate(() => (window as any).__lab.getState().sceneId)).toBe('D');
+  await page.getByRole('button', { name: 'SLAM', exact: true }).click();
+  await page.getByRole('button', { name: 'Mobile scanning', exact: true }).click();
+  await expect.poll(() => page.evaluate(() => (window as any).__lab.getState().sceneId)).toBe('D');
+  await page.getByTestId('environment-menu').click();
+  await page.getByTestId('env-A').click();
+  await page.getByTestId('env-D').click();
+  await expect.poll(() => page.evaluate(() => (window as any).__lab.getState().sceneId)).toBe('D');
+  await expect(page.getByTestId('env-C')).toHaveCount(0);
+});

@@ -82,7 +82,7 @@ export interface ViewportProps {
   primary?: boolean;
   threshold?: number;
   label?: string;
-  labelPos?: 'bl' | 'br';
+  labelPos?: 'bl' | 'br' | 'tl';
   bgOverride?: string;
   gridSize?: number;
   hideGrid?: boolean;
@@ -120,7 +120,7 @@ export function Viewport({ children, home = [8, -9, 6.5], target = [0, 0, 1], gr
         {showAxes && !hideAxes && <axesHelper args={[1.2 * gridSize]} raycast={() => null} />}
         {children}
       </Canvas>
-      {label && <div className="overlay card glass" style={{ bottom: 12, [labelPos === 'br' ? 'right' : 'left']: 12, padding: '0.3rem 0.7rem', fontSize: '0.875rem', fontWeight: 600 }}>{label}</div>}
+      {label && <div className="overlay card glass" style={{ ...(labelPos === 'tl' ? { top: 66 } : { bottom: 12 }), [labelPos === 'br' ? 'right' : 'left']: 12, padding: '0.3rem 0.7rem', fontSize: '0.875rem', fontWeight: 600 }}>{label}</div>}
     </div>
   );
 }

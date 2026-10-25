@@ -144,13 +144,13 @@ export default function Tab5() {
   const viewport = (
     <div style={{ position: 'absolute', inset: 0, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
       <div style={{ position: 'relative' }}>
-        <Viewport id="proc-a" group="proc" primary hideGrid hideAxes bgOverride="#ffffff" labelPos="bl" label="Original (never changed)" home={scene.cameraHome} target={scene.cameraTarget}>
+        <Viewport id="proc-a" group="proc" primary hideGrid hideAxes bgOverride="#ffffff" labelPos="tl" label="Original (never changed)" home={scene.cameraHome} target={scene.cameraTarget}>
           {showRoom && <SceneFromStore interactive={false} />}
           {leftCloud && <CloudLayer cloud={leftCloud} mode={mode} size={s.view.pointSize} budget={s.view.renderBudget} colorOpts={{ heightRange, flat: [230, 30, 40], clusterLabels: tagLabels(leftCloud) }} pickable={false} />}
         </Viewport>
       </div>
       <div style={{ position: 'relative' }}>
-        <Viewport id="proc-b" group="proc" primary={false} hideGrid hideAxes bgOverride="#ffffff" labelPos="bl" label={res && viewIdx >= 0 ? `Processed · step ${viewIdx + 1}: ${OP_LABEL[res.steps[viewIdx].op.type]}` : 'Processed'} home={scene.cameraHome} target={scene.cameraTarget}>
+        <Viewport id="proc-b" group="proc" primary={false} hideGrid hideAxes bgOverride="#ffffff" labelPos="tl" label={res && viewIdx >= 0 ? `Processed · step ${viewIdx + 1}: ${OP_LABEL[res.steps[viewIdx].op.type]}` : 'Processed'} home={scene.cameraHome} target={scene.cameraTarget}>
           {showRoom && <SceneFromStore interactive={false} />}
           {rightCloud && <CloudLayer cloud={rightCloud} mode={mode} size={s.view.pointSize} budget={s.view.renderBudget} colorOpts={{ heightRange, flat: [230, 30, 40], clusterLabels: tagLabels(rightCloud) }} pickable={false} />}
         </Viewport>

@@ -108,8 +108,8 @@ export default function Tab7() {
   const photoLayer = r.layer === 'photo';
   const viewport = r.layout === 'split' && !photoLayer ? (
     <div style={{ position: 'absolute', inset: 0, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
-      <div style={{ position: 'relative' }}><Viewport id="r-a" group="recon" primary hideGrid hideAxes bgOverride="#ffffff" labelPos="bl" label="LiDAR measurement" home={home} target={target} threshold={0.01} gridSize={0.25}>{content('lidar')}</Viewport></div>
-      <div style={{ position: 'relative' }}><Viewport id="r-b" group="recon" primary={false} hideGrid hideAxes bgOverride="#ffffff" labelPos="bl" label={aligned ? 'Reconstruction (aligned)' : 'Reconstruction (not aligned)'} home={home} target={target} threshold={0.01} gridSize={0.25}>{content('recon')}</Viewport></div>
+      <div style={{ position: 'relative' }}><Viewport id="r-a" group="recon" primary hideGrid hideAxes bgOverride="#ffffff" labelPos="tl" label="LiDAR measurement" home={home} target={target} threshold={0.01} gridSize={0.25}>{content('lidar')}</Viewport></div>
+      <div style={{ position: 'relative' }}><Viewport id="r-b" group="recon" primary={false} hideGrid hideAxes bgOverride="#ffffff" labelPos="tl" label={aligned ? 'Reconstruction (aligned)' : 'Reconstruction (not aligned)'} home={home} target={target} threshold={0.01} gridSize={0.25}>{content('recon')}</Viewport></div>
     </div>
   ) : photoLayer ? (
     <div style={{ position: 'absolute', inset: 0, overflow: 'auto', background: '#f5f5f7', padding: '76px 16px 16px' }} data-testid="photo-gallery">
