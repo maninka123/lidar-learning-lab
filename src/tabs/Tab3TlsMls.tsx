@@ -366,7 +366,7 @@ export default function Tab3({ labSwitch }: { labSwitch?: React.ReactNode }) {
   return (
     <TabFrame
       title="SLAM & Mobile Scanning"
-      tab={5}
+      tab={6}
       envIds={['A', 'B', 'D']}
       viewport={viewport}
       controls={controls}

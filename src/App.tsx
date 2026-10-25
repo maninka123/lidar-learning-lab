@@ -1,5 +1,5 @@
 import { Suspense, lazy, ReactNode } from 'react';
-import { Layers, PanelLeft, Radar, Info, Boxes, Route, GitMerge, Filter, Network, Camera, Share2, Trophy, Check } from './ui/icons';
+import { Layers, PanelLeft, Radar, Info, Boxes, Route, GitMerge, Filter, Network, Camera, Share2, Trophy, Check, Square, Ruler, Eye, Wand, Crosshair } from './ui/icons';
 import { useLab } from './state/store';
 import { Toast } from './ui/shared';
 import { CHALLENGES } from './exercises/defs';
@@ -9,7 +9,13 @@ const Tab1 = lazy(() => import('./tabs/Tab1Fundamentals'));
 const Tab2 = lazy(() => import('./tabs/Tab2Explorer'));
 const TabCmp = lazy(() => import('./tabs/TabCompareSensors'));
 const TabMap = lazy(() => import('./tabs/TabMapping'));
+const TabTls = lazy(() => import('./tabs/TabTls'));
+const TabFusion = lazy(() => import('./tabs/TabFusion'));
 const TabReg = lazy(() => import('./tabs/TabRegistration'));
+const TabPlanes = lazy(() => import('./tabs/TabPlanes'));
+const TabCad = lazy(() => import('./tabs/TabScanToCad'));
+const TabChange = lazy(() => import('./tabs/TabChange'));
+const TabMeshing = lazy(() => import('./tabs/TabMeshing'));
 const Tab5 = lazy(() => import('./tabs/Tab5Processing'));
 const Tab6 = lazy(() => import('./tabs/Tab6Segmentation'));
 const Tab7 = lazy(() => import('./tabs/Tab7Recon'));
@@ -22,9 +28,15 @@ const TABS: { label: string; icon: ReactNode; el: ReactNode }[] = [
   { label: 'Compare Sensors', icon: <Layers size={18} />, el: <TabCmp /> },
   { label: 'Point Cloud Gallery', icon: <Boxes size={18} />, el: <Tab2 /> },
   { label: 'Point Cloud Registration', icon: <GitMerge size={18} />, el: <TabReg /> },
+  { label: 'TLS Scanning', icon: <Crosshair size={18} />, el: <TabTls /> },
   { label: 'SLAM & Mobile Scanning', icon: <Route size={18} />, el: <TabMap /> },
+  { label: 'LiDAR + Camera Fusion', icon: <Camera size={18} />, el: <TabFusion /> },
   { label: 'Point Cloud Processing', icon: <Filter size={18} />, el: <Tab5 /> },
   { label: 'Clustering & Segmentation', icon: <Network size={18} />, el: <Tab6 /> },
+  { label: 'Plane Detection', icon: <Square size={18} />, el: <TabPlanes /> },
+  { label: 'Scan to CAD', icon: <Ruler size={18} />, el: <TabCad /> },
+  { label: 'Change Detection', icon: <Eye size={18} />, el: <TabChange /> },
+  { label: 'Meshing & Surfaces', icon: <Wand size={18} />, el: <TabMeshing /> },
   { label: 'Image to 3D', icon: <Camera size={18} />, el: <Tab7 /> },
   { label: 'Scene Graphs & 3D AI', icon: <Share2 size={18} />, el: <Tab8 /> },
   { label: 'Challenges', icon: <Trophy size={18} />, el: <Tab9 /> },
