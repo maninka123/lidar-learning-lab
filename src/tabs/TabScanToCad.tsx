@@ -111,5 +111,5 @@ export default function TabScanToCad() {
       <Section title="View"><Toggle label="Show the slice points in the plan" checked={showPts} onChange={setShowPts} /></Section>
     </>
   );
-  return <TabFrame title="Scan to CAD" tab={12} viewport={viewport} controls={controls} learn={null} noPanelTabs noEnv statsRow stats={stats} hideViewControls />;
+  return <TabFrame title="Scan to CAD" tab={13} viewport={viewport} controls={controls} learn={null} noPanelTabs noEnv statsRow stats={stats} hideViewControls />;
 }

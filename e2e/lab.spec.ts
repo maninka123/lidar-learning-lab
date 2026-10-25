@@ -175,7 +175,7 @@ test.describe('LiDAR Learning Lab', () => {
   });
 
   test('tab 7: LiDAR vs reconstruction needs valid alignment before reporting errors', async ({ page }) => {
-    await go(page, 14);
+    await go(page, 15);
     await expect(page.getByRole('button', { name: 'Exercise' })).toHaveCount(0);
     await expect.poll(() => state(page, (s) => !!s.recon.lidar), { timeout: 60000 }).toBe(true);
     await page.getByTestId('reconstruct').click();
@@ -268,7 +268,7 @@ test.describe('classroom applications', () => {
   test.beforeEach(async ({ page }) => { await page.goto('/'); });
   const go2 = async (page: any, n: number) => { await page.getByTestId(`nav-${n}`).click(); };
   test('tab 10: scan to CAD finds walls and exports a DXF', async ({ page }) => {
-    await go2(page, 12);
+    await go2(page, 13);
     await expect(page.getByTestId('stats-card')).toContainText(/Walls found\s*\d+/, { timeout: 90000 });
     const t = await page.getByTestId('stats-card').innerText();
     expect(parseInt(t.match(/Walls found\s*(\d+)/)![1])).toBeGreaterThanOrEqual(4);
@@ -276,7 +276,7 @@ test.describe('classroom applications', () => {
     expect(dl.suggestedFilename()).toBe('classroom_walls.dxf');
   });
   test('tab 11: change detection finds the edits', async ({ page }) => {
-    await go2(page, 13);
+    await go2(page, 14);
     await expect(page.getByTestId('make-scan2')).toBeEnabled({ timeout: 90000 });
     await page.getByTestId('make-scan2').click();
     await expect(page.getByTestId('align-scans')).toBeEnabled({ timeout: 90000 });
@@ -385,6 +385,22 @@ test('segmentation: planes first, then clusters, as two separate stages', async 
   await expect.poll(() => page.evaluate(() => (window as any).__lab.getState().seg.result?.clusters?.length ?? 0), { timeout: 90000 }).toBeGreaterThan(5);
 });
 
+test('tab 13: moving vehicle series, segmentation, tracking, temporal graph and AI question (mocked)', async ({ page }) => {
+  await page.route('**/api/deepseek/**', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ choices: [{ message: { content: '## Moving\n\n- **person**: crosses ahead' } }], usage: { prompt_tokens: 2000, completion_tokens: 12 } }) }));
+  await page.goto('/');
+  await page.getByTestId('nav-12').click();
+  await expect(page.getByTestId('seg-stats')).toContainText('ms', { timeout: 180000 });
+  await expect(page.getByTestId('track-count')).toContainText(/\d+ tracked objects/);
+  await expect(page.getByTestId('timeline')).toBeVisible();
+  await expect(page.getByTestId('events')).toContainText('f');
+  await page.getByTestId('mv-play').click();
+  await page.getByTestId('mv-play').click();
+  await page.getByTestId('mv-prompt').click();
+  await expect(page.getByTestId('mv-prompt-text')).toContainText('TEMPORAL SCENE GRAPH');
+  await page.getByTestId('mv-ask').click();
+  await expect(page.getByTestId('mv-answer')).toContainText('crosses ahead');
+});
+
 test.describe('corner cases', () => {
   test('TLS tab: changing the environment while a scan is running leaves nothing of the old one behind', async ({ page }) => {
     await page.goto('/');
@@ -405,7 +421,7 @@ test.describe('corner cases', () => {
     page.on('pageerror', (e) => bad.push(`pageerror: ${e.message}`));
     page.on('console', (m) => { if (m.type() === 'error' && !/Failed to load resource|ERR_|favicon|ytimg|youtube/i.test(m.text())) bad.push(`console: ${m.text()}`); });
     await page.goto('/');
-    for (let i = 0; i < 15; i++) { await page.getByTestId(`nav-${i}`).click(); await page.waitForTimeout(700); await expect(page.locator('canvas').first()).toBeVisible(); }
+    for (let i = 0; i < 16; i++) { await page.getByTestId(`nav-${i}`).click(); await page.waitForTimeout(700); await expect(page.locator('canvas').first()).toBeVisible(); }
     expect(bad).toEqual([]);
   });
 
@@ -433,9 +449,9 @@ test.describe('corner cases', () => {
 
   test('CAD with a slice at the ceiling, change detection without edits', async ({ page }) => {
     await page.goto('/');
-    await page.getByTestId('nav-12').click();
-    await expect(page.getByTestId('stats-card')).toContainText(/Walls found\s*\d+/, { timeout: 90000 });
     await page.getByTestId('nav-13').click();
+    await expect(page.getByTestId('stats-card')).toContainText(/Walls found\s*\d+/, { timeout: 90000 });
+    await page.getByTestId('nav-14').click();
     await expect(page.getByTestId('make-scan2')).toBeEnabled({ timeout: 90000 });
     for (const name of ['One object removed', 'One object moved', 'A new box added', 'Scanner position slightly off']) await page.getByText(name, { exact: true }).click();
     await page.getByTestId('make-scan2').click();

@@ -11,6 +11,7 @@ const TabMap = lazy(() => import('./tabs/TabMapping'));
 const TabTls = lazy(() => import('./tabs/TabTls'));
 const TabFusion = lazy(() => import('./tabs/TabFusion'));
 const TabReg = lazy(() => import('./tabs/TabRegistration'));
+const TabMoving = lazy(() => import('./tabs/TabMoving'));
 const TabCad = lazy(() => import('./tabs/TabScanToCad'));
 const TabChange = lazy(() => import('./tabs/TabChange'));
 const TabMeshing = lazy(() => import('./tabs/TabMeshing'));
@@ -32,6 +33,7 @@ const TABS: { label: string; icon: ReactNode; el: ReactNode }[] = [
   { label: 'Meshing & Surfaces', icon: <Wand size={18} />, el: <TabMeshing /> },
   { label: 'Clustering & Segmentation', icon: <Network size={18} />, el: <Tab6 /> },
   { label: 'Scene Graphs & 3D AI', icon: <Share2 size={18} />, el: <Tab8 /> },
+  { label: 'Moving Scene & Temporal Graph', icon: <Route size={18} />, el: <TabMoving /> },
   { label: 'Scan to CAD', icon: <Ruler size={18} />, el: <TabCad /> },
   { label: 'Change Detection', icon: <Eye size={18} />, el: <TabChange /> },
   { label: 'Image to 3D', icon: <Camera size={18} />, el: <Tab7 /> },

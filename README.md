@@ -35,9 +35,10 @@ Go through the tabs in order, one idea at a time, about five minutes each. Each 
 | 10 | **Meshing & Surfaces** | Coloured point clouds (the hall from tab 8, a classroom, a tree) into surfaces: voxel, smoothed, height map, close gaps, simplify, colour from the points, export OBJ. |
 | 11 | **Clustering & Segmentation** | RANSAC plane detection (floor, walls, ceiling taken out with a few settings), then Euclidean clustering or DBSCAN on the same classroom scan, scored against its furniture. |
 | 12 | **Scene Graphs & 3D AI** | Objects and relations, offline question answering, link to [local-llm-fit](https://maninka123.github.io/local-llm-fit/). |
-| 13 | **Scan to CAD** | Slice a classroom, find wall lines, square the corners, export a **DXF** floor plan. |
-| 14 | **Change Detection** | Two scans of a room, align, measure distances, threshold, group: what was removed, moved or added? |
-| 15 | **Image to 3D** | Scene and input images, three reconstruction methods, meshing, alignment with scale, error map. |
+| 13 | **Moving Scene & Temporal Graph** | A vehicle drives through a street and scans every 0.8 s (a point cloud series). Each frame is segmented fast (ground out, cluster, name by size), objects are tracked from frame to frame, and the result is a **temporal scene graph** with events (approaching, crossing, passing). A language model answers questions from it. |
+| 14 | **Scan to CAD** | Slice a classroom, find wall lines, square the corners, export a **DXF** floor plan. |
+| 15 | **Change Detection** | Two scans of a room, align, measure distances, threshold, group: what was removed, moved or added? |
+| 16 | **Image to 3D** | Scene and input images, three reconstruction methods, meshing, alignment with scale, error map. |
 
 Viewport: left-drag rotates, right-drag or the **Pan** button moves the cloud, wheel zooms.
 

@@ -122,5 +122,5 @@ export default function TabChange() {
       )}
     </>
   );
-  return <TabFrame title="Change Detection" tab={13} viewport={viewport} controls={controls} learn={null} noPanelTabs noEnv statsRow stats={stats} />;
+  return <TabFrame title="Change Detection" tab={14} viewport={viewport} controls={controls} learn={null} noPanelTabs noEnv statsRow stats={stats} />;
 }
