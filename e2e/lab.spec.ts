@@ -335,6 +335,20 @@ test('tab 8: LiDAR + camera fusion - measure, match, solve and colour', async ({
 });
 
 test.describe('corner cases', () => {
+  test('TLS tab: changing the environment while a scan is running leaves nothing of the old one behind', async ({ page }) => {
+    await page.goto('/');
+    await page.getByTestId('nav-5').click();
+    await page.getByTestId('tls-preset-3').click();
+    await page.getByRole('button', { name: 'Fine' }).click();
+    await page.getByTestId('scan-stations').click();
+    await page.getByTestId('environment-menu').click();
+    await page.getByTestId('env-B').click();
+    await page.waitForTimeout(20000);
+    await expect(page.getByTestId('stats-card')).toContainText(/Stations\s*0/);
+    await expect(page.getByTestId('stats-card')).not.toContainText('points scanned');
+    await expect(page.getByTestId('scan-stations')).toBeDisabled();
+  });
+
   test('every tab opens without page errors or console errors', async ({ page }) => {
     const bad: string[] = [];
     page.on('pageerror', (e) => bad.push(`pageerror: ${e.message}`));

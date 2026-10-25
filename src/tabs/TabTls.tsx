@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLab } from '../state/store';
 import { getScene } from '../scenes';
 import { Viewport } from '../ui/Viewport';
@@ -42,6 +42,7 @@ export default function TabTls() {
   const [busy, setBusy] = useState<string | null>(null);
   const [pointsOnly, setPointsOnly] = useState(false);
   const b = scene.bounds;
+  const gen = useRef(0); // bumped whenever the environment changes, so a scan still running for the old one is thrown away
 
   // the Environment menu offers Room, Workshop and Street; this tab never uses the small street
   useEffect(() => {
@@ -50,7 +51,7 @@ export default function TabTls() {
     // leaving the tab: stop adding stations, and put the usual environment back if the city was picked here
     return () => { useLab.getState().patch({ interaction: 'select' }); if (useLab.getState().sceneId === 'D') useLab.getState().setScene(prev === 'D' ? 'C' : prev === 'C' ? 'C' : prev); };
   }, []);
-  useEffect(() => { setStations([]); setScans(null); setRegs(null); setInits(null); setCov(null); }, [s.sceneId]);
+  useEffect(() => { gen.current++; setStations([]); setScans(null); setRegs(null); setInits(null); setCov(null); setBusy(null); }, [s.sceneId]);
   useEffect(() => { s.patch({ interaction: tool ? 'add-station' : 'select' }); }, [tool]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (s.pendingStation) { add(s.pendingStation[0], s.pendingStation[1]); s.patch({ pendingStation: null }); } }, [s.pendingStation]); // eslint-disable-line react-hooks/exhaustive-deps
   const clearResults = () => { setScans(null); setRegs(null); setInits(null); setCov(null); };
@@ -68,6 +69,7 @@ export default function TabTls() {
 
   async function scanAll() {
     if (stations.length < 1) return;
+    const my = gen.current;
     setBusy('scan'); setRegs(null); setInits(null); setCov(null);
     try {
       const out: Scanned[] = [];
@@ -80,13 +82,14 @@ export default function TabTls() {
         let c: PointCloud = res.cloud;
         if (c.count > MAX_POINTS) { const stride = Math.ceil(c.count / MAX_POINTS), ids: number[] = []; for (let i = 0; i < c.count; i += stride) ids.push(i); const p = new Float32Array(ids.length * 3); ids.forEach((j, q) => p.set(c.positions.subarray(j * 3, j * 3 + 3), q * 3)); c = { ...c, count: ids.length, positions: p, colors: undefined, intensity: undefined, ranges: undefined, labels: undefined, instances: undefined, normals: undefined, times: undefined, scanIds: undefined, tags: undefined } as PointCloud; }
         const local = transformCloud(c, Tinv, `Station ${k + 1}`);
+        if (my !== gen.current) return; // the environment was changed while scanning
         out.push({ local, truth: rigidCompose(T0inv, Tk), world: Tk });
       }
       setScans(out); setView('truth');
       // how much of the scene these scans see (their true positions are known)
       const cr = await runTask('coverage', { scene, clouds: out.map((q) => { const c = transformCloud(q.local, q.world); return { positions: c.positions, count: c.count }; }), radius: 0.15 });
-      setCov((100 * cr.covered) / cr.total);
-    } catch (e) { s.notify((e as Error).message, 'error'); } finally { setBusy(null); s.patch({ busy: null }); }
+      if (my === gen.current) setCov((100 * cr.covered) / cr.total);
+    } catch (e) { s.notify((e as Error).message, 'error'); } finally { if (my === gen.current) setBusy(null); s.patch({ busy: null }); }
   }
 
   /** What the operator would know: roughly where each scanner stood. */
@@ -98,6 +101,7 @@ export default function TabTls() {
 
   async function register() {
     if (!scans) return;
+    const my = gen.current;
     setBusy('register'); setView('before');
     try {
       const init = makeInits(scans); setInits(init);
@@ -106,18 +110,20 @@ export default function TabTls() {
       for (let k = 1; k < scans.length; k++) {
         const ref = concatClouds(placed, 'ref');
         const r = await runTask('icp', { src: scans[k].local.positions, nSrc: scans[k].local.count, dst: ref.positions, nDst: ref.count, opts: { maxIterations: 60, tolerance: 1e-7, maxCorrDist: maxDist, sampleMax: 20000, init: init[k], method } });
+        if (my !== gen.current) return;
         est.push(r.T); placed.push(transformCloud(scans[k].local, r.T));
         // compare with the truth: pose difference and the average distance between where a point is and where it should be
         const d = rigidCompose(rigidInverse(scans[k].truth), r.T);
         let pe = 0; const n = 400; for (let i = 0; i < n; i++) { const j = Math.floor((i / n) * scans[k].local.count), p: [number, number, number] = [scans[k].local.positions[j * 3], scans[k].local.positions[j * 3 + 1], scans[k].local.positions[j * 3 + 2]]; const a = rigidApply(r.T, p), t = rigidApply(scans[k].truth, p); pe += Math.hypot(a[0] - t[0], a[1] - t[1], a[2] - t[2]); }
         out.push({ est: r.T, errT: Math.hypot(...d.t), errDeg: rotationAngle(d.R) * R2D, ptErr: pe / n, fitness: r.fitness, iters: r.history.length });
       }
+      if (my !== gen.current) return;
       setRegs(out); setView('after');
       const T0 = scans[0].world;
       const world = scans.map((q, k) => transformCloud(q.local, rigidCompose(T0, out[k].est)));
       const r = await runTask('coverage', { scene, clouds: world.map((c) => ({ positions: c.positions, count: c.count })), radius: 0.15 });
-      setCov((100 * r.covered) / r.total);
-    } catch (e) { s.notify((e as Error).message, 'error'); } finally { setBusy(null); }
+      if (my === gen.current) setCov((100 * r.covered) / r.total);
+    } catch (e) { s.notify((e as Error).message, 'error'); } finally { if (my === gen.current) setBusy(null); }
   }
 
   // clouds for the current view, placed in the world
