@@ -314,6 +314,7 @@ test('tab 7: TLS stations are scanned, registered and compared with the truth', 
   await page.getByRole('button', { name: 'Coarse' }).click();
   await page.getByTestId('scan-stations').click();
   await expect(page.getByTestId('stats-card')).toContainText(/\d{2,3},\d{3} points scanned/, { timeout: 120000 });
+  await expect(page.getByText(/they all pile up in one place/)).toBeVisible();
   await page.getByTestId('register-tls').click();
   await expect(page.getByText('4 · How close did it get?')).toBeVisible({ timeout: 180000 });
   await expect(page.getByTestId('stats-card')).toContainText(/Registration error\s*[\d.]+ cm/);

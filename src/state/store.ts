@@ -183,7 +183,7 @@ function initial() {
     slam: null,
     slamShow: { gt: true, est: true, corrected: true, mapEst: true, mapGt: false, mapCorr: true },
     reg: {
-      errT: [0.25, -0.15, 0.05] as [number, number, number], errYawDeg: 4, errPitchDeg: 0.5, errRollDeg: 0, offset: 0.4, A: null, B: null, applied: null, result: null, iter: 0,
+      errT: [0.9, -0.6, 0.12] as [number, number, number], errYawDeg: 10, errPitchDeg: 1.5, errRollDeg: -1, offset: 0.4, A: null, B: null, applied: null, result: null, iter: 0,
       before: null, after: null, recoveredErr: null, icp: { maxIterations: 50, maxCorrDist: 1.0, sample: 3000 },
     },
     proc: { sourceId: null, steps: [] as OpSpec[], seed: 7, result: null, selected: -1, quality: null, viewStep: -1 },

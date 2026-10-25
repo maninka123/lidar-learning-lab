@@ -74,11 +74,11 @@ export function Toggle({ label, checked, onChange, hint }: { label: string; chec
   );
 }
 
-export function Seg<T extends string | number>({ value, options, onChange, block = true, label }: { value: T; options: { value: T; label: ReactNode }[]; onChange: (v: T) => void; block?: boolean; label?: string }) {
+export function Seg<T extends string | number>({ value, options, onChange, block = true, label }: { value: T; options: { value: T; label: ReactNode; disabled?: boolean }[]; onChange: (v: T) => void; block?: boolean; label?: string }) {
   return (
     <div className={`seg ${block ? 'block' : ''}`} role="group" aria-label={label}>
       {options.map((o) => (
-        <button key={String(o.value)} aria-pressed={o.value === value} onClick={() => onChange(o.value)}>{o.label}</button>
+        <button key={String(o.value)} aria-pressed={o.value === value} disabled={o.disabled} style={o.disabled ? { opacity: 0.4, filter: 'blur(0.7px)', cursor: 'not-allowed' } : undefined} onClick={() => !o.disabled && onChange(o.value)}>{o.label}</button>
       ))}
     </div>
   );
