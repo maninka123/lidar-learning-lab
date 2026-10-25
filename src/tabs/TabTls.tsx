@@ -43,7 +43,12 @@ export default function TabTls() {
   const b = scene.bounds;
 
   // the Environment menu offers Room, Workshop and Street; this tab never uses the small street
-  useEffect(() => { if (useLab.getState().sceneId === 'C') useLab.getState().setScene('A'); return () => { useLab.getState().patch({ interaction: 'select' }); }; }, []);
+  useEffect(() => {
+    const prev = useLab.getState().sceneId;
+    if (prev === 'C') useLab.getState().setScene('A');
+    // leaving the tab: stop adding stations, and put the usual environment back if the city was picked here
+    return () => { useLab.getState().patch({ interaction: 'select' }); if (useLab.getState().sceneId === 'D') useLab.getState().setScene(prev === 'D' ? 'C' : prev === 'C' ? 'C' : prev); };
+  }, []);
   useEffect(() => { setStations([]); setScans(null); setRegs(null); setInits(null); setCov(null); }, [s.sceneId]);
   useEffect(() => { s.patch({ interaction: tool ? 'add-station' : 'select' }); }, [tool]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (s.pendingStation) { add(s.pendingStation[0], s.pendingStation[1]); s.patch({ pendingStation: null }); } }, [s.pendingStation]); // eslint-disable-line react-hooks/exhaustive-deps

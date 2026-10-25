@@ -333,3 +333,56 @@ test('tab 8: LiDAR + camera fusion - measure, match, solve and colour', async ({
   await page.getByRole('button', { name: 'Coloured', exact: true }).click();
   await expect(page.getByTestId('stats-card')).toContainText(/Colours right\s*\d+ %/);
 });
+
+test.describe('corner cases', () => {
+  test('every tab opens without page errors or console errors', async ({ page }) => {
+    const bad: string[] = [];
+    page.on('pageerror', (e) => bad.push(`pageerror: ${e.message}`));
+    page.on('console', (m) => { if (m.type() === 'error' && !/Failed to load resource|ERR_|favicon|ytimg|youtube/i.test(m.text())) bad.push(`console: ${m.text()}`); });
+    await page.goto('/');
+    for (let i = 0; i < 17; i++) { await page.getByTestId(`nav-${i}`).click(); await page.waitForTimeout(700); await expect(page.locator('canvas, [data-testid="challenges-page"]').first()).toBeVisible(); }
+    expect(bad).toEqual([]);
+  });
+
+  test('TLS tab: needs two stations, and the city is not left selected in other tabs', async ({ page }) => {
+    await page.goto('/');
+    await page.getByTestId('nav-5').click();
+    await expect(page.getByTestId('scan-stations')).toBeDisabled();
+    await page.getByTestId('environment-menu').click();
+    await page.getByTestId('env-D').click();
+    await expect.poll(() => page.evaluate(() => (window as any).__lab.getState().sceneId)).toBe('D');
+    await page.getByTestId('nav-1').click();
+    await expect.poll(() => page.evaluate(() => (window as any).__lab.getState().sceneId)).not.toBe('D');
+  });
+
+  test('fusion works in all three environments', async ({ page }) => {
+    await page.goto('/');
+    await page.getByTestId('nav-7').click();
+    for (const id of ['A', 'B', 'C']) {
+      await page.evaluate((i) => (window as any).__lab.getState().setScene(i), id);
+      await page.getByTestId('fusion-capture').click();
+      await expect(page.getByTestId('stats-card')).toContainText(/Offset error\s*[\d.]+ cm/, { timeout: 120000 });
+      await page.getByTestId('find-matches').click();
+      await expect(page.getByTestId('stats-card')).toContainText(/Match error\s*[\d.]+ px/, { timeout: 30000 });
+      await page.getByTestId('solve-calibration').click();
+      await expect(page.getByText(/Solved: the matches now agree to/)).toBeVisible();
+    }
+  });
+
+  test('plane detection with extreme settings, CAD with a slice at the ceiling, change detection without edits', async ({ page }) => {
+    await page.goto('/');
+    await page.getByTestId('nav-10').click();
+    await expect(page.getByTestId('stats-card')).toContainText(/Planes found\s*\d+/, { timeout: 90000 });
+    await page.getByRole('button', { name: 'Fixed settings' }).click();
+    await page.getByTestId('detect-planes').click();
+    await expect(page.getByTestId('stats-card')).toContainText(/Planes found\s*\d+/);
+    await page.getByTestId('nav-11').click();
+    await expect(page.getByTestId('stats-card')).toContainText(/Walls found\s*\d+/, { timeout: 90000 });
+    await page.getByTestId('nav-12').click();
+    await expect(page.getByTestId('make-scan2')).toBeEnabled({ timeout: 90000 });
+    for (const name of ['One object removed', 'One object moved', 'A new box added', 'Scanner position slightly off']) await page.getByText(name, { exact: true }).click();
+    await page.getByTestId('make-scan2').click();
+    await page.getByTestId('find-changes').click();
+    await expect(page.getByText('4 · What changed')).toBeVisible({ timeout: 120000 });
+  });
+});
