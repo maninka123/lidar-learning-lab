@@ -85,6 +85,25 @@ function GraphView({ graph, filters, selected, onSelect, showStructural, highlig
   );
 }
 
+/** Shows the exact prompt that is sent, laid out as a chat: the system message, then the user message. Long data is cut short on screen (all of it is sent). */
+function PromptView({ system, user, testId }: { system: string; user: string; testId: string }) {
+  const [open, setOpen] = useState(false);
+  const cut = (t: string) => { const lines = t.split('\n'); return lines.length > 14 ? `${lines.slice(0, 12).join('\n')}\n… (${lines.length - 12} more lines, all are sent)` : t; };
+  const box: React.CSSProperties = { margin: 0, padding: '8px 10px', borderRadius: 10, whiteSpace: 'pre-wrap', fontSize: '0.8125rem', maxHeight: 260, overflow: 'auto' };
+  return (
+    <div style={{ display: 'grid', gap: 6 }}>
+      <Btn sm onClick={() => setOpen(!open)} testId={testId}>{open ? 'Hide the prompt' : 'Show the prompt'}</Btn>
+      {open && (
+        <div className="callout" style={{ gap: 8 }} data-testid={`${testId}-text`}>
+          <b>The prompt sent to {DEEPSEEK_MODEL}</b>
+          <div><span className="caption"><b>1 · System</b> (sets the role)</span><pre className="mono" style={{ ...box, background: '#eef3ff' }}>{system}</pre></div>
+          <div><span className="caption"><b>2 · User</b> (the question and the data)</span><pre className="mono" style={{ ...box, background: '#f5f5f7' }}>{cut(user)}</pre></div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function Tab8() {
   const s = useLab();
   // the same classroom scan as the Clustering & Segmentation tab
@@ -111,11 +130,14 @@ export default function Tab8() {
   const [ai, setAi] = useState<(AiResult & { sent: number }) | null>(null);
   const [aiErr, setAiErr] = useState<string | null>(null);
   const preview = useMemo(() => (cloud ? pointCloudToText(cloud, nPts, withColour) : null), [cloud, nPts, withColour]);
+  const directPrompt = useMemo(() => ({
+    system: 'You are given raw LiDAR point cloud data as plain text. Be honest and short: say what you can and cannot tell from numbers alone.',
+    user: preview ? `Below are ${preview.count} points sampled from a LiDAR scan of one room. Each line is one point: x y z (metres)${withColour ? ' then r g b (0-255)' : ''}.\n\nWhat kind of room is this, and which objects are in it? Give each object with an approximate position. If you cannot tell, say so.\n\n${preview.text}` : '',
+  }), [preview, withColour]);
   async function sendToAi() {
     if (!preview || !cloud) return;
     setAiBusy(true); setAiErr(null);
-    const system = 'You are given raw LiDAR point cloud data as plain text. Be honest and short: say what you can and cannot tell from numbers alone.';
-    const user = `Below are ${preview.count} points sampled from a LiDAR scan of one room. Each line is one point: x y z (metres)${withColour ? ' then r g b (0-255)' : ''}.\n\nWhat kind of room is this, and which objects are in it? Give each object with an approximate position. If you cannot tell, say so.\n\n${preview.text}`;
+    const { system, user } = directPrompt;
     try { const r = await askDeepSeek(system, user, 600, ownKey); setAi({ ...r, sent: preview.count }); setNeedKey(false); }
     catch (e) { if (e instanceof NoKeyError) { setNeedKey(true); setAiErr('This site has no DeepSeek key of its own. Paste your key below (it stays in your browser) and press Send again.'); } else setAiErr((e as Error).message); }
     finally { setAiBusy(false); }
@@ -141,9 +163,14 @@ export default function Tab8() {
     graph.edges.filter((e) => ['near', 'above', 'below'].includes(e.type)).slice(0, 700).forEach((e) => L.push(`${lab(e.from)} ${REL_LABEL[e.type]} ${lab(e.to)}${e.value !== undefined ? ` (${f(e.value)} m)` : ''}`));
     return L.join('\n');
   }, [graph, g.filters]);
+  const graphPrompt = (question: string) => ({
+    system: 'You answer spatial questions about a room using ONLY the scene graph given. Quote numbers from it. If the graph does not say, say so. Be brief.',
+    user: `SCENE GRAPH\n${graphText}\n\nQUESTION: ${question}`,
+  });
   async function askGraphAi(question: string) {
     setGBusy(true); setGErr(null);
-    try { const r = await askDeepSeek('You answer spatial questions about a room using ONLY the scene graph given. Quote numbers from it. If the graph does not say, say so. Be brief.', `SCENE GRAPH\n${graphText}\n\nQUESTION: ${question}`, 400, ownKey); setGAns({ q: question, r }); setNeedKey(false); }
+    const p = graphPrompt(question);
+    try { const r = await askDeepSeek(p.system, p.user, 400, ownKey); setGAns({ q: question, r }); setNeedKey(false); }
     catch (e) { if (e instanceof NoKeyError) { setNeedKey(true); setGErr('This site has no DeepSeek key of its own. Paste your key below (it stays in your browser) and press Ask again.'); } else setGErr((e as Error).message); }
     finally { setGBusy(false); }
   }
@@ -202,7 +229,8 @@ export default function Tab8() {
           </div>
         )}
         {needKey && <label className="field"><span>Your DeepSeek key (kept only in this browser)</span><input type="password" value={ownKey} onChange={(e) => { setOwnKey(e.target.value); saveOwnKey(e.target.value); }} placeholder="sk-…" data-testid="ds-key" autoComplete="off" /></label>}
-        <Btn variant="primary" onClick={sendToAi} busy={aiBusy} disabled={!preview} testId="ds-send">Send to DeepSeek</Btn>
+        <PromptView system={directPrompt.system} user={directPrompt.user} testId="ds-prompt" />
+        <Btn variant="primary" onClick={sendToAi} busy={aiBusy} disabled={!preview} testId="ds-send">Send to DeepSeek Flash ({DEEPSEEK_MODEL})</Btn>
         {aiErr && <Callout kind="warn">{aiErr}</Callout>}
         {ai && (
           <div className="callout fade-in" style={{ gap: 8 }} data-testid="ds-answer">
@@ -244,8 +272,9 @@ export default function Tab8() {
         {graphText && <div className="callout" style={{ gap: 6 }} data-testid="gs-preview"><b>What is sent</b><pre className="mono" style={{ margin: 0, fontSize: '0.8125rem', whiteSpace: 'pre-wrap' }}>{graphText.split('\n').slice(0, 6).join('\n')}{'\n…'}</pre><span className="caption">{fmtN(graphText.split('\n').length)} lines · about {fmtN(Math.round(graphText.length / 3.5))} tokens: far fewer than the raw points, and every number is exact.</span></div>}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 8 }}>
           <input type="text" value={q} placeholder="Ask a spatial question…" onChange={(e) => setQ(e.target.value)} aria-label="Question for the AI" data-testid="gs-question" />
-          <Btn variant="primary" onClick={() => void askGraphAi(q || 'What objects are in the room?')} busy={gBusy} disabled={!graphText} testId="gs-send">Ask DeepSeek</Btn>
+          <Btn variant="primary" onClick={() => void askGraphAi(q || 'What objects are in the room?')} busy={gBusy} disabled={!graphText} testId="gs-send">Ask DeepSeek Flash</Btn>
         </div>
+        <PromptView system={graphPrompt(q || 'What objects are in the room?').system} user={graphPrompt(q || 'What objects are in the room?').user} testId="gs-prompt" />
         <div className="chip-row">{SUPPORTED_QUESTIONS.map((t) => <button key={t} className="chip" onClick={() => setQ(t)}>{t}</button>)}</div>
         {needKey && <label className="field"><span>Your DeepSeek key (kept only in this browser)</span><input type="password" value={ownKey} onChange={(e) => { setOwnKey(e.target.value); saveOwnKey(e.target.value); }} placeholder="sk-…" autoComplete="off" /></label>}
         {gErr && <Callout kind="warn">{gErr}</Callout>}

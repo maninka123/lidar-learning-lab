@@ -192,6 +192,8 @@ test.describe('LiDAR Learning Lab', () => {
     await page.route('**/api/deepseek/**', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ choices: [{ message: { content: 'It looks like a classroom per the graph: z near 0 is the floor, and some tables.' } }], usage: { prompt_tokens: 9876, completion_tokens: 21 } }) }));
     await go(page, 11);
     await expect(page.getByTestId('ds-preview')).toContainText('points');
+    await page.getByTestId('ds-prompt').click();
+    await expect(page.getByTestId('ds-prompt-text')).toContainText('System');
     await page.getByTestId('ds-send').click();
     await expect(page.getByTestId('ds-answer')).toContainText('classroom');
     await expect(page.getByText('Why this is not real point cloud inference')).toBeVisible();
