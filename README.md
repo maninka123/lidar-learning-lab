@@ -37,8 +37,8 @@ Go through the tabs in order, one idea at a time, about five minutes each. Each 
 | 12 | **Scene Graphs & 3D AI** | Objects and relations, offline question answering, link to [local-llm-fit](https://maninka123.github.io/local-llm-fit/). |
 | 13 | **Moving Scene & Temporal Graph** | A vehicle drives through a street and scans every 0.8 s (a point cloud series). Each frame is segmented fast (ground out, cluster, name by size), objects are tracked from frame to frame, and the result is a **temporal scene graph** with events (approaching, crossing, passing). A language model answers questions from it. |
 | 14 | **Scan to CAD** | Slice a classroom, find wall lines, square the corners, export a **DXF** floor plan. |
-| 15 | **Change Detection** | Two scans of a room, align, measure distances, threshold, group: what was removed, moved or added? |
-| 16 | **Image to 3D** | Scene and input images, three reconstruction methods, meshing, alignment with scale, error map. |
+| 15 | **Change Detection** | Five ready-made visits to the classroom with editable timestamps; a distance heatmap shows how much changed between any two. |
+| 16 | **Image to 3D** | Pick a scene (chair, crate, study desk, living corner, garden), three reconstruction methods, meshing, alignment with scale, error map. |
 
 Viewport: left-drag rotates, right-drag or the **Pan** button moves the cloud, wheel zooms.
 
