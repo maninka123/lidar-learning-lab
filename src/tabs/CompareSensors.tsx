@@ -53,8 +53,8 @@ export function CompareSensors({ panels, onChange }: { panels: CmpPanel[]; onCha
             <Viewport id={`cmp-${p.key}`} group="cmp" primary={i === 0} hideAxes hideGrid bgOverride="#ffffff" home={scene.cameraHome} target={scene.cameraTarget}>
               {cloud && <CloudLayer cloud={cloud} mode={cfg.pattern === 'panoramic' && cloud.colors ? 'rgb' : 'flat'} colorOpts={{ flat: [230, 30, 40] }} size={2.5} budget={500000} pickable={false} />}
             </Viewport>
-            <div className="overlay glass card" style={{ left: 10, top: 10, display: 'flex', gap: 6, alignItems: 'center', padding: '0.3rem 0.4rem' }}>
-              <select value={p.preset} onChange={(e) => onChange(panels.map((q) => (q.key === p.key ? { ...q, preset: e.target.value } : q)))} aria-label={`Sensor for view ${i + 1}`} data-testid={`cmp-select-${i}`} style={{ width: 'auto', minWidth: 190, minHeight: '2rem' }}>
+            <div className="overlay glass card" style={{ left: 10, top: 10, right: 10, display: 'flex', gap: 6, alignItems: 'center', padding: '0.3rem 0.4rem' }}>
+              <select value={p.preset} onChange={(e) => onChange(panels.map((q) => (q.key === p.key ? { ...q, preset: e.target.value } : q)))} aria-label={`Sensor for view ${i + 1}`} data-testid={`cmp-select-${i}`} style={{ width: 'auto', flex: 1, minWidth: 0, maxWidth: '100%', minHeight: '2rem', textOverflow: 'ellipsis' }}>
                 {FAMILY_GROUPS.map((g) => (
                   <optgroup key={g.label} label={g.label}>
                     {g.ids.flatMap((id) => FAMILIES.find((f) => f.id === id)!.models.map((m) => <option key={m} value={m}>{`${getPreset(m).name} · ${familyLabel(id).replace('Mechanical · ', '')}`}</option>))}

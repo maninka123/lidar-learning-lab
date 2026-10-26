@@ -1,4 +1,4 @@
-import { Suspense, lazy, ReactNode } from 'react';
+import { Suspense, lazy, useState, ReactNode } from 'react';
 import { Layers, PanelLeft, Radar, Info, Boxes, Route, GitMerge, Filter, Network, Camera, Share2, Ruler, Eye, Wand, Crosshair } from './ui/icons';
 import { useLab } from './state/store';
 import { Toast } from './ui/shared';
@@ -43,6 +43,8 @@ export default function App() {
   const tab = useLab((s) => s.tab);
   const setTab = useLab((s) => s.setTab);
   const navOpen = useLab((s) => s.navOpen);
+  const [phone] = useState(() => typeof window !== 'undefined' && window.innerWidth < 760);
+  const [hideNote, setHideNote] = useState(false);
   return (
     <div className={`app ${navOpen ? '' : 'nav-collapsed'}`}>
       <nav className="sidebar glass" aria-label="Lecture sections">
@@ -57,10 +59,15 @@ export default function App() {
             <span className="nav-label">{t.label}</span>
           </button>
         ))}
+        <div className="side-foot nav-label">
+          <a href="https://github.com/maninka123/lidar-learning-lab" target="_blank" rel="noreferrer noopener">GitHub</a> · <a href="https://github.com/maninka123/lidar-learning-lab/blob/main/LICENSE" target="_blank" rel="noreferrer noopener">MIT licence</a>
+          <div>© 2026 Pasindu Ranasinghe</div>
+        </div>
       </nav>
       <main className="main">
         <Suspense fallback={<div style={{ padding: 24 }} className="hint">Loading…</div>}>{TABS[tab].el}</Suspense>
         <Toast />
+        {phone && !hideNote && <div className="glass card" role="note" style={{ position: 'fixed', left: 8, right: 8, bottom: 8, zIndex: 50, padding: '0.6rem 0.8rem', display: 'flex', gap: 10, alignItems: 'center', fontSize: '0.875rem' }}><span style={{ flex: 1 }}>This lab has 3D views and many controls: it works best on a laptop or tablet.</span><button className="btn sm" onClick={() => setHideNote(true)}>OK</button></div>}
       </main>
     </div>
   );

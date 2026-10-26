@@ -199,10 +199,10 @@ test.describe('LiDAR Learning Lab', () => {
     await expect(page.getByTestId('ds-answer').locator('li')).toHaveCount(2);
     await expect(page.getByTestId('ds-answer').getByText('Room:', { exact: true })).toBeVisible();
     await expect(page.getByText('Why this is not real point cloud inference')).toBeVisible();
-    await page.getByRole('button', { name: '2 · Scene graph' }).click();
+    await page.getByRole('button', { name: '2 Scene graph', exact: true }).click();
     await expect(page.getByTestId('graph-view')).toBeVisible({ timeout: 60000 });
     await page.getByTestId('node-table-1').click();
-    await page.getByRole('button', { name: '3 · Graph → AI' }).click();
+    await page.getByRole('button', { name: '3 Graph → AI', exact: true }).click();
     await expect(page.getByTestId('node-details')).toContainText('table-1');
     await expect(page.getByTestId('gs-preview')).toContainText('tokens');
     await page.getByTestId('gs-send').click();
@@ -367,7 +367,7 @@ test('segmentation: label clusters by hand and use them in the scene graph', asy
   await page.getByTestId('label-1').selectOption('Table');
   await expect(page.getByText(/trained on labelled point clouds|semantic segmentation model/)).toBeVisible();
   await page.getByTestId('nav-11').click();
-  await page.getByRole('button', { name: '2 · Scene graph' }).click();
+  await page.getByRole('button', { name: '2 Scene graph', exact: true }).click();
   await page.getByRole('button', { name: 'My labelled clusters' }).click();
   await expect(page.getByTestId('graph-view')).toContainText('Chair 1');
   await expect(page.getByTestId('graph-view')).toContainText('Table 1');

@@ -73,12 +73,12 @@ function GraphView({ graph, filters, selected, onSelect, showStructural, highlig
           if (id === 'corridor') return <g key={id}><rect x={p.x - 26} y={p.y - 14} width={52} height={28} rx={8} fill="rgba(48,209,88,.25)" stroke="#30d158" /><text x={p.x} y={p.y + 5} fontSize="12.5" textAnchor="middle" fill="#30d158">corridor</text></g>;
           const n = nodes.find((q) => q.id === id)!;
           const c = classColor(n.classId);
-          const sel = selected === id, hl = highlight.includes(id);
+          const sel = selected === id, hl = highlight.includes(id), crowded = ids.length > 18 && Math.min(w, h) < 560, small = ids.length > 18;
           const estimated = n.source !== 'ground-truth annotation';
           return (
             <g key={id} transform={`translate(${p.x},${p.y})`} style={{ cursor: 'pointer' }} onClick={(ev) => { ev.stopPropagation(); onSelect(id); }} onMouseEnter={() => setHover(id)} onMouseLeave={() => setHover(null)} data-testid={`node-${id}`}>
-              <circle r={sel ? 20 : 16} fill={`rgb(${c.join(',')})`} fillOpacity={0.9} stroke={sel ? '#fff' : hl ? '#ffd60a' : 'rgba(0,0,0,.4)'} strokeWidth={sel || hl ? 3 : 1.5} strokeDasharray={estimated ? '4 3' : undefined} />
-              <text y={31} fontSize="13.5" fontWeight={600} textAnchor="middle" fill="var(--text)" style={{ paintOrder: 'stroke', stroke: 'var(--bg)', strokeWidth: 3.5 }}>{n.label.length > 16 ? n.label.slice(0, 15) + '…' : n.label}</text>
+              <circle r={sel ? (small ? 15 : 20) : (small ? 11 : 16)} fill={`rgb(${c.join(',')})`} fillOpacity={0.9} stroke={sel ? '#fff' : hl ? '#ffd60a' : 'rgba(0,0,0,.4)'} strokeWidth={sel || hl ? 3 : 1.5} strokeDasharray={estimated ? '4 3' : undefined} />
+              {(!crowded || sel || focus === id) && <text y={small ? 26 : 31} fontSize="13.5" fontWeight={600} textAnchor="middle" fill="var(--text)" style={{ paintOrder: 'stroke', stroke: 'var(--bg)', strokeWidth: 3.5 }}>{n.label.length > 16 ? n.label.slice(0, 15) + '…' : n.label}</text>}
             </g>
           );
         })}
@@ -198,7 +198,7 @@ export default function Tab8() {
 
   const controls = (
     <>
-      <Seg value={pane} onChange={setPane} options={[{ value: 'direct', label: '1 · Direct AI' }, { value: 'graph', label: '2 · Scene graph' }, { value: 'ai', label: '3 · Graph → AI' }]} label="Section" />
+      <Seg value={pane} onChange={setPane} options={[{ value: 'direct', label: '1 Direct AI' }, { value: 'graph', label: '2 Scene graph' }, { value: 'ai', label: '3 Graph → AI' }]} label="Section" />
       {pane === 'direct' && (<>
       <Section title="Direct inference: give the point cloud to an AI">
         <p className="hint">Skip the pipeline: send the raw points, as text, straight to <b>DeepSeek Flash</b> (<span className="mono">{DEEPSEEK_MODEL}</span>).</p>
@@ -322,6 +322,6 @@ export default function Tab8() {
     </>
   );
 
-  return <TabFrame title="Scene Graph" tab={11} viewport={viewport} controls={controls} learn={null} noPanelTabs statsRow stats={stats} hideViewControls />;
+  return <TabFrame title="Scene Graphs & 3D AI" tab={11} noEnv viewport={viewport} controls={controls} learn={null} noPanelTabs statsRow stats={stats} hideViewControls />;
   void Badge; void fmtN; void ({} as GraphNode);
 }

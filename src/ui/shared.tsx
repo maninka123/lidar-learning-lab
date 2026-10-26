@@ -111,7 +111,7 @@ export function ViewControls({ simple, extra }: { simple?: boolean; extra?: Reac
   const setView = useLab((s) => s.setView);
   const interaction = useLab((s) => s.interaction);
   return (
-    <div className="overlay glass card" style={{ top: 12, right: 12, display: 'flex', gap: 6, padding: '0.35rem', alignItems: 'center' }} role="toolbar" aria-label="View controls">
+    <div className="overlay glass card" style={{ top: 12, right: 12, maxWidth: 'calc(100% - 24px)', display: 'flex', gap: 6, padding: '0.35rem', alignItems: 'center' }} role="toolbar" aria-label="View controls">
       {extra}
       <Btn sm icon={<Home size={15} />} onClick={() => viewBus.emit('home')} testId="view-home">Home</Btn>
       <Btn sm variant={v.panMode ? 'primary' : ''} icon={<Move size={15} />} onClick={() => setView({ panMode: !v.panMode })} title={v.panMode ? 'Pan is on: drag to move the view, right-drag to rotate' : 'Pan: drag to move the point cloud (or right-drag / Shift + drag)'} testId="view-pan">Pan</Btn>
@@ -142,7 +142,7 @@ export function StatsCard({ items, title = 'Live statistics', row }: { items: { 
 
 export function KindLegend({ items }: { items: { color: string; label: string; style?: 'dot' | 'wire' | 'dash' }[] }) {
   return (
-    <div className="overlay glass card legend" style={{ left: 12, top: 12, padding: '0.55rem 0.8rem' }} aria-label="Legend">
+    <div className="overlay glass card legend" style={{ left: 12, top: 66, padding: '0.45rem 0.8rem' }} aria-label="Legend">
       {items.map((it) => (
         <span key={it.label}><i style={{ background: it.style === 'wire' ? 'transparent' : it.color, border: it.style ? `2px ${it.style === 'dash' ? 'dashed' : 'solid'} ${it.color}` : undefined, borderRadius: it.style ? 4 : 99 }} />{it.label}</span>
       ))}

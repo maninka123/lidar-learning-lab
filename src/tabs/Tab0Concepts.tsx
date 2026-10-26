@@ -473,7 +473,7 @@ export default function Tab0() {
               <div className="glass card" style={{ minWidth: 170, padding: '0.45rem 0.8rem' }}><div className="caption">Time of flight</div><div style={{ fontSize: '1.15rem', fontWeight: 650 }}>{focus?.hit ? `${dtNs.toFixed(1)} ns` : '—'}</div><div className="caption">{focus?.hit ? `range ${focus.r.toFixed(2)} m` : 'no return'}</div></div>
               <div className="glass card" style={{ minWidth: 170, padding: '0.45rem 0.8rem' }}><div className="caption">Coverage</div><div style={{ fontSize: '1.3rem', fontWeight: 650 }}>{(2 * D * Math.tan(hFov * D2R / 2)).toFixed(1)} × {(2 * D * Math.tan(vFov * D2R / 2)).toFixed(1)} m</div><div className="caption">{hFov}° × {vFov}° FOV</div></div>
             </div>
-            <div style={{ display: 'flex', gap: 8 }}>
+            <div className="stat-row2" style={{ display: 'flex', gap: 8 }}>
               <div className="glass card" style={{ minWidth: 170, padding: '0.45rem 0.8rem' }}><div className="caption">Max range on this wall</div><div style={{ fontSize: '1.3rem', fontWeight: 650 }}>{effRange(maxRange, rho).toFixed(1)} m</div><div className="caption">sensor max {maxRange} m · wall at {D} m</div></div>
               <div className="glass card" style={{ minWidth: 170, padding: '0.45rem 0.8rem' }}><div className="caption">Number of points</div><div style={{ fontSize: '1.3rem', fontWeight: 650 }}>{hits.length}</div><div className="caption">of {beams.length} beams got a return</div></div>
             </div>
@@ -526,9 +526,9 @@ function FrontInsets({ beams, scene, hFov, vFov, D, zs }: { beams: Beam[]; scene
       <div className="glass card" style={{ padding: 9 }}>
         <div style={{ fontWeight: 650, fontSize: '0.95rem' }}>Points on the person</div>
         <div className="caption" style={{ marginBottom: 6 }}>{pts.length} points = the person's point cloud</div>
-        <canvas ref={ref} style={{ width: 150, height: 170, borderRadius: 10, display: 'block' }} aria-label="Points that landed on the person" />
+        <canvas ref={ref} className="pp-person" style={{ width: 150, height: 170, borderRadius: 10, display: 'block' }} aria-label="Points that landed on the person" />
               </div>
-      <div className="glass card" style={{ padding: 9 }}>
+      <div className="glass card pp-wall" style={{ padding: 9 }}>
         <div style={{ fontWeight: 650, fontSize: '0.95rem' }}>Points on the wall</div>
         <div className="caption" style={{ marginBottom: 6 }}>{wpts.length} points · gap = person's shadow</div>
         <canvas ref={ref2} style={{ width: 150, height: 110, borderRadius: 10, display: 'block' }} aria-label="Points that landed on the wall" />
