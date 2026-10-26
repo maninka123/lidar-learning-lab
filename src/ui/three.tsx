@@ -147,6 +147,7 @@ export interface CloudLayerProps {
   opacity?: number;
   clip?: { on: boolean; min: number; max: number };
   pickable?: boolean;
+  onPick?: (index: number) => void; // click on a point: the index in the original cloud
   dim?: boolean;
   visible?: boolean;
 }
@@ -162,7 +163,7 @@ export function useRenderSubset(cloud: PointCloud, budget: number) {
   }, [cloud, budget]);
 }
 
-export function CloudLayer({ cloud, mode, size, budget, colorOpts, opacity = 1, clip, pickable = true, visible = true }: CloudLayerProps) {
+export function CloudLayer({ cloud, mode, size, budget, colorOpts, opacity = 1, clip, pickable = true, onPick, visible = true }: CloudLayerProps) {
   const subset = useRenderSubset(cloud, budget);
   const geom = useMemo(() => {
     const colors = colorize(cloud, mode, colorOpts);
@@ -191,7 +192,7 @@ export function CloudLayer({ cloud, mode, size, budget, colorOpts, opacity = 1, 
     <points
       geometry={geom}
       frustumCulled={false}
-      onClick={pickable ? (e) => {
+      onClick={onPick ? (e) => { if (e.index === undefined) return; e.stopPropagation(); onPick(subset ? subset[e.index] : e.index); } : pickable ? (e) => {
         const s = useLab.getState();
         if (s.interaction !== 'pick-points' || e.index === undefined) return;
         e.stopPropagation();

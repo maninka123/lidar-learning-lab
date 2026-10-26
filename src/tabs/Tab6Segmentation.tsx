@@ -10,6 +10,7 @@ import { FileText } from '../ui/icons';
 import { MiniChart } from './common';
 import { Credit } from '../ui/VideoCard';
 import { CloudLayer, BoxOutline } from '../ui/three';
+import { selectPoints } from '../core/pointcloud';
 import { Play, RotateCcw, Plus } from '../ui/icons';
 import { runTask } from '../engine/client';
 import { SegParams, SegResult } from '../segmentation/segment';
@@ -19,6 +20,31 @@ import { Vec3 } from '../core/math';
 
 type Show = 'result' | 'instances' | 'semantic' | 'rgb';
 
+function PickedCard({ p, id, index, name, onName, onClose }: { p: { cl?: SegResult['clusters'][number]; pl?: SegResult['planes'][number]; pts: PointCloud; mn: number[]; mx: number[]; classes: [string, number][]; n: number }; id: number; index: number; name: string; onName: (v: string) => void; onClose: () => void }) {
+  const size = p.mx.map((v, i) => v - p.mn[i]), ext = Math.max(0.5, ...size), c = p.mn.map((v, i) => (v + p.mx[i]) / 2);
+  return (
+    <div className="overlay glass card fade-in" style={{ left: 12, top: 66, width: 300, padding: 10, display: 'grid', gap: 8 }} data-testid="picked-card">
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <b style={{ flex: 1 }}>{p.cl ? `Cluster #${index + 1}` : `Plane: ${p.pl?.kind ?? ''}`}</b>
+        <button className="btn sm icon" onClick={onClose} aria-label="Close" data-testid="picked-close">×</button>
+      </div>
+      <div style={{ position: 'relative', height: 190, borderRadius: 10, overflow: 'hidden', background: '#fff', border: '1px solid #e1e1e6' }}>
+        <Viewport id="picked" hideGrid hideAxes bgOverride="#ffffff" home={[c[0] + ext * 1.3, c[1] - ext * 1.5, c[2] + ext * 0.9]} target={[c[0], c[1], c[2]]} threshold={0.02}>
+          <CloudLayer cloud={p.pts} mode={p.pts.colors ? 'rgb' : 'height'} size={3} budget={60000} pickable={false} />
+        </Viewport>
+      </div>
+      <table className="table"><tbody>
+        <tr><td>Points</td><td className="mono">{fmtN(p.n)}</td></tr>
+        <tr><td>Size</td><td className="mono">{size.map((v) => v.toFixed(2)).join(' × ')} m</td></tr>
+        <tr><td>Centre</td><td className="mono">{c.map((v) => v.toFixed(1)).join(', ')}</td></tr>
+        <tr><td>In the scan file</td><td>{p.classes.slice(0, 3).map(([n, k]) => `${n} ${Math.round((100 * k) / p.n)}%`).join(', ') || '—'}</td></tr>
+      </tbody></table>
+      {p.cl && <label className="field"><span>Your label</span><select value={name} onChange={(e) => onName(e.target.value)} data-testid="picked-label"><option value="">Unlabelled</option><option>Chair</option><option>Table</option><option>Cabinet</option><option>Other</option></select></label>}
+      <span className="caption">Drag to turn it around. This is the cluster {id >= 0 ? 'on its own' : ''}, in the scan's real colours.</span>
+    </div>
+  );
+}
+
 export default function Tab6() {
   const s = useLab();
   const seg = s.seg;
@@ -26,6 +52,7 @@ export default function Tab6() {
   const [busy, setBusy] = useState(false);
   const [show, setShow] = useState<Show>('result');
   const [boxes, setBoxes] = useState(true);
+  const [sel, setSel] = useState<number | null>(null); // the cluster or plane that was clicked (its id in the result)
   const [hideCeiling, setHideCeiling] = useState(true);
   const [pane, setPane] = useState<'setup' | 'results'>('setup');
   const [rawOpen, setRawOpen] = useState(false);
@@ -107,16 +134,31 @@ export default function Tab6() {
   const stale = res && cloud && seg.cloudId !== cloud.id;
 
   const viewport = (
-    <Viewport home={[8, -10, 6.5]} target={[0, 0, 1.2]} hideGrid hideAxes bgOverride="#ffffff">
+    <Viewport home={[8, -10, 6.5]} target={[0, 0, 1.2]} hideGrid hideAxes bgOverride="#ffffff" threshold={0.09}>
       {cloud && (show === 'result' && resultLabels && !stale
-        ? <CloudLayer cloud={cloud} mode="cluster" colorOpts={{ clusterLabels: resultLabels }} size={s.view.pointSize} budget={Math.max(s.view.renderBudget, 150000)} pickable={false} clip={{ on: hideCeiling, min: -1, max: 2.28 }} />
+        ? <CloudLayer cloud={cloud} mode="cluster" colorOpts={{ clusterLabels: resultLabels }} size={s.view.pointSize} budget={Math.max(s.view.renderBudget, 150000)} pickable={false} onPick={(i) => { const id = resultLabels[i]; setSel(id >= 0 ? id : null); }} clip={{ on: hideCeiling, min: -1, max: 2.28 }} />
         : show === 'instances' && instLabels
           ? <CloudLayer cloud={cloud} mode="cluster" colorOpts={{ clusterLabels: instLabels }} size={s.view.pointSize} budget={s.view.renderBudget} pickable={false} clip={{ on: hideCeiling, min: -1, max: 2.28 }} />
           : <CloudLayer cloud={show === 'semantic' && classCloud ? classCloud : cloud} mode={show === 'semantic' || show === 'rgb' ? 'rgb' : 'height'} size={s.view.pointSize} budget={Math.max(s.view.renderBudget, 150000)} pickable={false} clip={{ on: hideCeiling, min: -1, max: 2.28 }} />)}
-      {boxes && res && !stale && res.clusters.map((c) => <BoxOutline key={c.id} bbox={{ min: c.min, max: c.max }} color={`rgb(${distinctColor(c.id).map(Math.round).join(',')})`} dashed />)}
+      {boxes && res && !stale && res.clusters.map((c) => <BoxOutline key={c.id} bbox={{ min: c.min, max: c.max }} color={sel === c.id ? '#ffd60a' : `rgb(${distinctColor(c.id).map(Math.round).join(',')})`} dashed={sel !== c.id} />)}
     </Viewport>
   );
 
+  // the clicked cluster: its own points in the scan's real colours, so you can see what it is
+  const picked = useMemo(() => {
+    if (sel === null || !res || !cloud || stale) return null;
+    const cl = res.clusters.find((c) => c.id === sel);
+    const pl = res.planes[sel];
+    const ids = cl ? cl.indices : (() => { const a: number[] = []; res.display.forEach((d, i) => { if (d === sel) a.push(i); }); return Int32Array.from(a); })();
+    if (!ids.length) return null;
+    const pts = selectPoints(cloud, ids, 'picked');
+    const mn = [Infinity, Infinity, Infinity], mx = [-Infinity, -Infinity, -Infinity];
+    for (let i = 0; i < pts.count; i++) for (let a = 0; a < 3; a++) { const v = pts.positions[i * 3 + a]; if (v < mn[a]) mn[a] = v; if (v > mx[a]) mx[a] = v; }
+    const classes = new Map<string, number>();
+    if (cloud.labels) for (const i of ids) { const n = CLASSROOM_CLASSES[cloud.labels[i]]?.name ?? 'Other'; classes.set(n, (classes.get(n) ?? 0) + 1); }
+    return { cl, pl, pts, mn, mx, classes: [...classes.entries()].sort((a, b) => b[1] - a[1]), n: ids.length };
+  }, [sel, res, cloud, stale]);
+  useEffect(() => { setSel(null); }, [res]);
   const stats = [
     { k: 'Clusters', v: res ? `${res.clusters.length}` : '—', s: res ? `${res.planes.length} planes removed · ${fmtN(res.noise)} unassigned` : 'press Segment' },
     { k: 'Objects found', v: gt ? `${gt.recovered.length} / ${gt.gtObjects}` : '—', s: gt ? `${gt.overSegmented} split · ${gt.underSegmented} merged` : hasGT ? 'press Segment' : 'needs labelled data' },
@@ -167,7 +209,7 @@ export default function Tab6() {
           <p className="hint"><b>Label the clusters.</b> The clusters only say “these points belong together”; they do not know what they are. Name each one yourself (look at its colour and size). The names you give are used as the objects of the scene graph in the next tab.</p>
           <table className="table" data-testid="label-table"><thead><tr><th>Cluster</th><th>Pts</th><th>Size (m)</th><th>Label</th></tr></thead><tbody>
             {res.clusters.map((c, i) => (
-              <tr key={c.id}><td><span style={{ color: `rgb(${distinctColor(c.id).map(Math.round).join(',')})` }}>●</span> #{i + 1}</td><td>{fmtN(c.count)}</td><td className="mono">{(c.max[0] - c.min[0]).toFixed(1)}×{(c.max[1] - c.min[1]).toFixed(1)}×{(c.max[2] - c.min[2]).toFixed(1)}</td>
+              <tr key={c.id} onClick={() => setSel(c.id)} style={{ cursor: 'pointer', background: sel === c.id ? '#fff6d6' : undefined }} data-testid={`cluster-row-${i}`}><td><span style={{ color: `rgb(${distinctColor(c.id).map(Math.round).join(',')})` }}>●</span> #{i + 1}</td><td>{fmtN(c.count)}</td><td className="mono">{(c.max[0] - c.min[0]).toFixed(1)}×{(c.max[1] - c.min[1]).toFixed(1)}×{(c.max[2] - c.min[2]).toFixed(1)}</td>
                 <td><select value={seg.names[c.id] ?? ''} aria-label={`Label for cluster ${i + 1}`} onChange={(e) => useLab.setState({ seg: { ...useLab.getState().seg, names: { ...useLab.getState().seg.names, [c.id]: e.target.value } } })} data-testid={`label-${i}`} style={{ minHeight: '1.9rem' }}>
                   <option value="">Unlabelled</option><option>Chair</option><option>Table</option><option>Cabinet</option><option>Other</option>
                 </select></td></tr>
@@ -207,6 +249,6 @@ export default function Tab6() {
   return (
     <TabFrame title="Clustering & Segmentation" tab={10} noEnv viewport={viewport} controls={controls} learn={null} noPanelTabs statsRow stats={stats}
       viewExtras={<><Btn sm variant="primary" icon={<Play size={15} />} onClick={runMain} busy={busy} disabled={!cloud} testId="run-seg">Segment</Btn><Btn sm icon={<FileText size={15} />} variant={rawOpen ? 'primary' : ''} onClick={() => setRawOpen(!rawOpen)} disabled={!cloud} testId="raw-toggle">Raw</Btn></>}
-      overlays={rawOpen && cloud ? <RawViewer text={rawText} filename="segmented.pcd" onClose={() => setRawOpen(false)} /> : null} />
+      overlays={picked ? <PickedCard p={picked} id={sel!} index={res!.clusters.findIndex((c) => c.id === sel)} name={seg.names[sel!] ?? ''} onName={(v) => useLab.setState({ seg: { ...useLab.getState().seg, names: { ...useLab.getState().seg.names, [sel!]: v } } })} onClose={() => setSel(null)} /> : rawOpen && cloud ? <RawViewer text={rawText} filename="segmented.pcd" onClose={() => setRawOpen(false)} /> : null} />
   );
 }

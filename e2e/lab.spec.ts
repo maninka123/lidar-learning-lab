@@ -207,7 +207,8 @@ test.describe('LiDAR Learning Lab', () => {
     await expect(page.getByTestId('gs-preview')).toContainText('tokens');
     await page.getByTestId('gs-send').click();
     await expect(page.getByTestId('gs-answer')).toContainText('graph');
-    await page.getByText('Which object is closest to the scanner?').first().click();
+    await page.getByText('How many chairs are there?').last().click();
+    await expect(page.getByTestId('answer')).toContainText(/\d+/);
     await expect(page.getByTestId('llm-fit-link')).toHaveAttribute('href', 'https://maninka123.github.io/local-llm-fit/');
   });
   test('environment menu switches scenes compactly', async ({ page }) => {
@@ -363,6 +364,12 @@ test('segmentation: label clusters by hand and use them in the scene graph', asy
   await expect.poll(() => page.evaluate(() => (window as any).__lab.getState().seg.result?.clusters?.length ?? 0), { timeout: 90000 }).toBeGreaterThan(5);
   await page.getByRole('button', { name: 'Results', exact: true }).click();
   await expect(page.getByTestId('label-table')).toBeVisible({ timeout: 90000 });
+  await page.getByTestId('cluster-row-2').locator('td').first().click();
+  await expect(page.getByTestId('picked-card')).toContainText('Points');
+  await page.getByTestId('picked-label').selectOption('Chair');
+  await expect.poll(() => page.evaluate(() => Object.values((window as any).__lab.getState().seg.names).includes('Chair'))).toBe(true);
+  await page.getByTestId('picked-close').click();
+  await expect(page.getByTestId('picked-card')).toHaveCount(0);
   await page.getByTestId('label-0').selectOption('Chair');
   await page.getByTestId('label-1').selectOption('Table');
   await expect(page.getByText(/trained on labelled point clouds|semantic segmentation model/)).toBeVisible();
@@ -385,16 +392,22 @@ test('segmentation: planes first, then clusters, as two separate stages', async 
   await expect.poll(() => page.evaluate(() => (window as any).__lab.getState().seg.result?.clusters?.length ?? 0), { timeout: 90000 }).toBeGreaterThan(5);
 });
 
-test('tab 13: moving vehicle series, segmentation, tracking, temporal graph and AI question (mocked)', async ({ page }) => {
+test('tab 13: drive, point clouds, scene graph per frame, temporal graph, results and AI question (mocked)', async ({ page }) => {
   await page.route('**/api/deepseek/**', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ choices: [{ message: { content: '## Moving\n\n- **person**: crosses ahead' } }], usage: { prompt_tokens: 2000, completion_tokens: 12 } }) }));
   await page.goto('/');
   await page.getByTestId('nav-12').click();
-  await expect(page.getByTestId('seg-stats')).toContainText('ms', { timeout: 180000 });
+  await page.getByTestId('mv-play').click();
+  await page.getByTestId('mv-play').click();
+  await page.getByRole('button', { name: '2 Clouds', exact: true }).click();
+  await expect(page.getByText(/k points in this frame/)).toBeVisible({ timeout: 180000 });
+  await page.getByRole('button', { name: '3 Graphs', exact: true }).click();
+  await expect(page.getByTestId('seg-stats')).toContainText('ms');
+  await expect(page.getByTestId('frame-graph')).toBeVisible();
+  await page.getByRole('button', { name: '4 Over time', exact: true }).click();
   await expect(page.getByTestId('track-count')).toContainText(/\d+ tracked objects/);
   await expect(page.getByTestId('timeline')).toBeVisible();
+  await page.getByRole('button', { name: '5 Results', exact: true }).click();
   await expect(page.getByTestId('events')).toContainText('f');
-  await page.getByTestId('mv-play').click();
-  await page.getByTestId('mv-play').click();
   await page.getByTestId('mv-prompt').click();
   await expect(page.getByTestId('mv-prompt-text')).toContainText('TEMPORAL SCENE GRAPH');
   await page.getByTestId('mv-ask').click();
