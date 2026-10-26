@@ -175,7 +175,13 @@ export default function Tab8() {
   const selectNode = (id: string | null) => setG({ selectedNode: id });
   const hlIds = [...new Set([...(sel ? [sel.id] : []), ...highlight])];
 
-  const viewport = (
+  // step 1 (direct AI) works on the raw point cloud only: no graph, no boxes
+  const rawView = (
+    <Viewport id="sg-raw" home={[8, -10, 6.5]} target={[0, 0, 1.2]} hideGrid hideAxes bgOverride="#ffffff" label="The raw point cloud: this is what the AI is given" labelPos="tl" labelTop={12}>
+      {classCloud && <CloudLayer cloud={classCloud} mode="rgb" size={Math.max(2, s.view.pointSize - 1)} budget={Math.max(s.view.renderBudget, 150000)} pickable={false} clip={{ on: true, min: -1, max: 2.28 }} />}
+    </Viewport>
+  );
+  const graphViewport = (
     <div style={{ position: 'absolute', inset: 0, display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 2 }}>
       <div style={{ position: 'relative' }}>
         <Viewport id="sg3d" home={[8, -10, 6.5]} target={[0, 0, 1.2]} hideGrid hideAxes bgOverride="#ffffff">
@@ -191,6 +197,7 @@ export default function Tab8() {
     </div>
   );
 
+  const viewport = pane === 'direct' ? rawView : graphViewport;
   const stats = [
     { k: 'Objects', v: objs.length, s: `${graph ? graph.edges.length : 0} relations` },
     { k: 'Closest to scanner', v: closest ? closest.label : '—', s: closest && graph ? `${scannerGap(graph.scanner.pos, closest).toFixed(2)} m away` : undefined },
@@ -322,6 +329,6 @@ export default function Tab8() {
     </>
   );
 
-  return <TabFrame title="Scene Graphs & 3D AI" tab={11} noEnv viewport={viewport} controls={controls} learn={null} noPanelTabs statsRow stats={stats} hideViewControls />;
+  return <TabFrame title="Scene Graphs & 3D AI" tab={11} noEnv viewport={viewport} controls={controls} learn={null} noPanelTabs statsRow stats={pane === 'direct' ? undefined : stats} hideViewControls />;
   void Badge; void fmtN; void ({} as GraphNode);
 }
