@@ -1,8 +1,8 @@
 import { PointCloud, makeId, concatClouds } from '../core/pointcloud';
 import { makeRng } from '../core/rng';
 import { KDTree } from '../core/kdtree';
-import { SceneDef, RayScene, newHit, box, cyl, finalize, SceneObject } from '../scenes/geometry';
-import { chair, crate } from '../scenes/rooms';
+import { SceneDef, RayScene, newHit, box, cyl, sph, finalize, SceneObject, Primitive } from '../scenes/geometry';
+import { chair, crate, table } from '../scenes/rooms';
 import { simulateScan, staticPose } from '../sensor/simulate';
 import { PRESETS, presetToConfig } from '../sensor/presets';
 import { voxelDownsample } from '../processing/ops';
@@ -10,25 +10,62 @@ import { icp, applySim } from '../registration/icp';
 import { Rigid, Vec3, rigidFromEuler, D2R, norm, cross, sub } from '../core/math';
 import { sampleSurfaces } from '../scenes/surface';
 
-export type ReconObjectId = 'chair' | 'crate';
+export type ReconObjectId = 'chair' | 'crate' | 'desk' | 'living' | 'garden';
 export type ReconMethod = 'photogrammetry' | 'rgbd' | 'monocular';
 
+type RGB = [number, number, number];
+type Obj = ReturnType<typeof chair> & { pattern?: 'checker' | 'stripes' };
+const mat = (color: RGB, reflectivity = 0.45) => ({ mat: { color, reflectivity } });
+const part = (id: string, name: string, classId: number, color: RGB, parts: Primitive[], pattern?: 'checker' | 'stripes'): Obj => ({ id, name, classId, parts, color, reflectivity: 0.45, ...(pattern ? { pattern } : {}) });
+
+/** What each simulated scene looks like and how far the cameras and the LiDAR stand from it. */
+export interface ReconSceneInfo { label: string; blurb: string; floor: number; floorColor: RGB; radius: number; centerZ: number; elev: number; lidarR: number; lidarZ: number; build: () => Obj[] }
+
+export const RECON_SCENES: Record<ReconObjectId, ReconSceneInfo> = {
+  chair: { label: 'Chair', blurb: 'One small object: the simplest case.', floor: 3.2, floorColor: [200, 200, 195], radius: 2.2, centerZ: 0.4, elev: 30, lidarR: 1.9, lidarZ: 1.0,
+    build: () => [{ ...chair('chair', 0, 0, 0.35, [175, 105, 60]), name: 'Chair', pattern: 'stripes' }] },
+  crate: { label: 'Wooden crate', blurb: 'Flat faces and sharp corners.', floor: 3.2, floorColor: [200, 200, 195], radius: 2.2, centerZ: 0.4, elev: 30, lidarR: 1.9, lidarZ: 1.0,
+    build: () => {
+      const c = crate('crate', 0, 0, 0.6, 0.5, 0.4, 0.4, [190, 140, 80], 6);
+      const lid = box([0, 0, 0.43], [0.66, 0.56, 0.06], 0.4, { mat: { color: [150, 100, 60], reflectivity: 0.5 } });
+      const feet = [[-0.25, -0.2], [0.25, -0.2], [-0.25, 0.2], [0.25, 0.2]].map(([x, y]) => cyl([x * Math.cos(0.4) - y * Math.sin(0.4), x * Math.sin(0.4) + y * Math.cos(0.4), 0.02], 0.04, 0.04, 'z'));
+      return [{ ...c, name: 'Wooden crate', pattern: 'stripes', parts: [...c.parts, lid, ...feet] }];
+    } },
+  desk: { label: 'Study desk', blurb: 'A desk with a chair, monitor, lamp, books and a plant.', floor: 5, floorColor: [196, 190, 180], radius: 3.1, centerZ: 0.6, elev: 26, lidarR: 2.6, lidarZ: 1.2,
+    build: () => [
+      { ...table('desk', 0, 0, 1.3, 0.65), pattern: 'stripes' as const },
+      chair('chair', 0, -0.8, 0, [66, 120, 200]),
+      part('monitor', 'Monitor', 6, [30, 32, 38], [box([0, 0.15, 0.78], [0.1, 0.06, 0.06], 0, mat([60, 60, 66])), box([0, 0.15, 1.08], [0.6, 0.035, 0.36], 0, mat([24, 26, 32], 0.2)), box([0, -0.12, 0.76], [0.42, 0.14, 0.022], 0, mat([200, 200, 205]))]),
+      part('lamp', 'Desk lamp', 6, [235, 200, 70], [cyl([-0.5, 0.2, 0.755], 0.07, 0.02), cyl([-0.5, 0.2, 0.95], 0.012, 0.4, 'z'), cyl([-0.5, 0.2, 1.17], 0.1, 0.1, 'z', mat([235, 200, 70], 0.55))]),
+      part('books', 'Books', 6, [170, 60, 60], [box([0.5, 0.18, 0.77], [0.22, 0.28, 0.04], 0.2, mat([170, 60, 60])), box([0.5, 0.18, 0.81], [0.2, 0.26, 0.04], -0.1, mat([60, 100, 170])), box([0.5, 0.18, 0.85], [0.18, 0.24, 0.04], 0.3, mat([90, 150, 80]))]),
+      part('mug', 'Mug', 6, [240, 240, 240], [cyl([0.28, -0.12, 0.8], 0.04, 0.1, 'z')]),
+      part('plant', 'Plant', 3, [60, 140, 70], [cyl([1.0, 0.15, 0.13], 0.13, 0.26, 'z', mat([180, 100, 70])), sph([1.0, 0.15, 0.5], 0.24, mat([60, 140, 70], 0.4)), sph([0.9, 0.05, 0.72], 0.15, mat([70, 155, 80], 0.4))]),
+    ] },
+  living: { label: 'Living corner', blurb: 'Sofa, shelf, coffee table, floor lamp and a plant.', floor: 6, floorColor: [190, 178, 160], radius: 3.8, centerZ: 0.5, elev: 24, lidarR: 3.2, lidarZ: 1.3,
+    build: () => [
+      part('sofa', 'Sofa', 5, [95, 120, 150], [box([0, 0.1, 0.22], [1.9, 0.85, 0.3], 0, mat([95, 120, 150])), box([0, 0.45, 0.62], [1.9, 0.18, 0.5], 0, mat([85, 108, 138])), box([-0.97, 0.1, 0.42], [0.16, 0.85, 0.2], 0, mat([85, 108, 138])), box([0.97, 0.1, 0.42], [0.16, 0.85, 0.2], 0, mat([85, 108, 138])), box([-0.45, 0.02, 0.43], [0.8, 0.6, 0.14], 0, mat([110, 136, 166])), box([0.45, 0.02, 0.43], [0.8, 0.6, 0.14], 0, mat([110, 136, 166]))]),
+      { ...table('coffee', 0, -1.0, 0.9, 0.5), pattern: 'stripes' as const, parts: table('coffee', 0, -1.0, 0.9, 0.5).parts.map((q) => ({ ...q, c: [q.c[0], q.c[1], q.c[2] * 0.58] as Vec3, size: q.size ? ([q.size[0], q.size[1], q.size[2] * 0.58] as Vec3) : q.size })) },
+      part('lamp', 'Floor lamp', 6, [230, 220, 190], [cyl([1.7, 0.4, 0.015], 0.14, 0.03), cyl([1.7, 0.4, 0.75], 0.015, 1.5, 'z', mat([60, 60, 66])), cyl([1.7, 0.4, 1.58], 0.18, 0.3, 'z', mat([230, 220, 190], 0.6))]),
+      part('plant', 'Plant', 3, [60, 140, 70], [cyl([-1.6, 0.5, 0.17], 0.17, 0.34, 'z', mat([185, 105, 70])), sph([-1.6, 0.5, 0.7], 0.34, mat([60, 140, 70], 0.4)), sph([-1.5, 0.4, 1.0], 0.22, mat([70, 155, 80], 0.4))]),
+      part('shelf', 'Shelf', 4, [150, 105, 65], [box([0, 1.0, 0.5], [1.4, 0.3, 1.0], 0, mat([150, 105, 65])), box([0, 0.84, 0.25], [1.2, 0.02, 0.4], 0, mat([60, 50, 40]))]),
+    ] },
+  garden: { label: 'Garden bench', blurb: 'A bench next to a tree, with a bush and a stone.', floor: 8, floorColor: [120, 160, 90], radius: 4.6, centerZ: 1.0, elev: 20, lidarR: 4.0, lidarZ: 1.4,
+    build: () => [
+      part('bench', 'Bench', 4, [150, 100, 60], [0, 1, 2].map((i) => box([0, -0.78 + i * 0.12, 0.45], [1.5, 0.1, 0.04], 0, mat([160, 108, 64]))).concat([0, 1, 2].map((i) => box([0, -0.62 + 0.0, 0.62 + i * 0.1], [1.5, 0.03, 0.08], 0, mat([160, 108, 64]))), [-0.65, 0.65].flatMap((x) => [box([x, -0.78, 0.22], [0.06, 0.4, 0.44], 0, mat([100, 70, 45])), box([x, -0.62, 0.55], [0.06, 0.05, 0.6], 0, mat([100, 70, 45]))])), 'stripes'),
+      part('trunk', 'Tree trunk', 3, [110, 80, 55], [cyl([1.2, 0.9, 1.1], 0.14, 2.2, 'z', mat([110, 80, 55], 0.35))]),
+      part('canopy', 'Tree canopy', 3, [70, 140, 70], [sph([1.2, 0.9, 2.7], 1.0, { ...mat([70, 140, 70], 0.4), porous: 0.2 }), sph([0.6, 0.6, 2.3], 0.6, { ...mat([80, 150, 75], 0.4), porous: 0.2 }), sph([1.8, 1.2, 2.4], 0.6, { ...mat([65, 130, 65], 0.4), porous: 0.2 })]),
+      part('bush', 'Bush', 3, [50, 120, 60], [sph([-1.7, 0.8, 0.35], 0.45, mat([50, 120, 60], 0.4)), sph([-1.35, 0.95, 0.3], 0.35, mat([60, 130, 65], 0.4))]),
+      part('stone', 'Stone', 1, [140, 140, 145], [sph([-1.0, -0.1, 0.06], 0.26, mat([140, 140, 145], 0.5))]),
+    ] },
+};
+
 export function reconScene(id: ReconObjectId): SceneDef {
-  const floor = { id: 'floor', name: 'Ground plane', classId: 1, structural: true, color: [200, 200, 195] as [number, number, number], reflectivity: 0.4, pattern: 'checker' as const, parts: [box([0, 0, -0.025], [3.2, 3.2, 0.05])] };
-  let objs: unknown[];
-  if (id === 'chair') {
-    const c = chair('chair', 0, 0, 0.35, [175, 105, 60]);
-    objs = [floor, { ...c, name: 'Chair', pattern: 'stripes' }];
-  } else {
-    const c = crate('crate', 0, 0, 0.6, 0.5, 0.4, 0.4, [190, 140, 80], 6);
-    const lid = box([0, 0, 0.43], [0.66, 0.56, 0.06], 0.4, { mat: { color: [150, 100, 60], reflectivity: 0.5 } });
-    const feet = [[-0.25, -0.2], [0.25, -0.2], [-0.25, 0.2], [0.25, 0.2]].map(([x, y]) => cyl([x * Math.cos(0.4) - y * Math.sin(0.4), x * Math.sin(0.4) + y * Math.cos(0.4), 0.02], 0.04, 0.04, 'z'));
-    objs = [floor, { ...c, name: 'Wooden crate', pattern: 'stripes', parts: [...c.parts, lid, ...feet] }];
-  }
+  const info = RECON_SCENES[id], f = info.floor;
+  const floor = { id: 'floor', name: 'Ground plane', classId: 1, structural: true, color: info.floorColor, reflectivity: 0.4, pattern: 'checker' as const, parts: [box([0, 0, -0.025], [f, f, 0.05])] };
   return {
-    id: `R-${id}`, name: id === 'chair' ? 'Chair' : 'Wooden crate', description: 'Small object used for the image-to-3D comparison.',
-    objects: finalize(objs as never) as SceneObject[], bounds: { min: [-1.6, -1.6, 0], max: [1.6, 1.6, 2] },
-    defaultPose: { x: 0, y: 0, z: 0, yaw: 0 }, cameraHome: [2.2, -2.2, 1.6], cameraTarget: [0, 0, 0.4],
+    id: `R-${id}`, name: info.label, description: info.blurb,
+    objects: finalize([floor, ...info.build()] as never) as SceneObject[], bounds: { min: [-f / 2, -f / 2, 0], max: [f / 2, f / 2, 3.2] },
+    defaultPose: { x: 0, y: 0, z: 0, yaw: 0 }, cameraHome: [info.radius, -info.radius, info.radius * 0.7], cameraTarget: [0, 0, info.centerZ],
   };
 }
 
@@ -176,15 +213,17 @@ export function surfaceMesh(c: PointCloud, o: { method: 'voxel' | 'smooth'; voxe
 export function reconstruct(p: ReconParams): ReconOutput {
   const scene = reconScene(p.object);
   const rng = makeRng(p.seed);
-  const center: Vec3 = [0, 0, 0.4];
-  const W = 160, H = 120;
+  const info = RECON_SCENES[p.object];
+  const center: Vec3 = [0, 0, info.centerZ];
+  const W = 200, H = 150;
   const notes: string[] = [];
-  const photoCam: Camera = { pos: [1.8, -1.6, 1.1], target: center, fovDeg: 50 };
+  const k = info.radius / 2.2;
+  const photoCam: Camera = { pos: [1.8 * k, -1.6 * k, info.centerZ + 0.7 * k], target: center, fovDeg: 50 };
   const PW = 400, PH = 300;
   const photoView = renderView(scene, photoCam, PW, PH);
   const photo = { w: PW, h: PH, rgb: photoView.rgb };
   const photos: ReconOutput['photos'] = [
-    { label: 'Scene overview (wide shot)', w: PW, h: PH, rgb: renderView(scene, { pos: [4.2, -3.8, 2.6], target: [0, 0, 0.5], fovDeg: 62 }, PW, PH).rgb },
+    { label: 'Scene overview (wide shot)', w: PW, h: PH, rgb: renderView(scene, { pos: [4.2 * k, -3.8 * k, 2.6 * k], target: [0, 0, info.centerZ + 0.1], fovDeg: 62 }, PW, PH).rgb },
     { label: 'Main photo', ...photo },
   ];
 
@@ -195,10 +234,10 @@ export function reconstruct(p: ReconParams): ReconOutput {
     const v = renderView(scene, photoCam, W, H);
     // Error model of a monocular depth estimator: unknown scale + shift, smooth low-frequency distortion, blur, no back side.
     const a = 1.12, b = -0.12, phase = rng.range(0, 6.28);
-    backProject(v, (i, j, z) => a * z + b + 0.05 * Math.sin(i / 17 + phase) * Math.cos(j / 23 - phase) + 0.004 * rng.gauss(), 1, col, pos);
+    backProject(v, (i, j, z) => a * z + b * k + 0.05 * k * Math.sin(i / 17 + phase) * Math.cos(j / 23 - phase) + 0.004 * rng.gauss(), 1, col, pos);
     notes.push('Error model of a single-image depth estimator (scale/shift ambiguity + smooth distortion). Not a neural network output.');
   } else {
-    cams = orbitCameras(Math.max(2, p.views), 2.2, p.method === 'rgbd' ? 28 : 32, center, rng.range(0, 60));
+    cams = orbitCameras(Math.max(2, p.views), info.radius, p.method === 'rgbd' ? info.elev - 3 : info.elev + 3, center, rng.range(0, 60));
     const pc: PointCloud[] = [];
     cams.forEach((cam, ci) => {
       if (ci < 6) photos.push({ label: `${p.method === 'rgbd' ? 'RGB-D frame' : 'Photo'} ${ci + 1} of ${cams.length}`, w: PW, h: PH, rgb: renderView(scene, cam, PW, PH).rgb });
@@ -215,7 +254,7 @@ export function reconstruct(p: ReconParams): ReconOutput {
         // photogrammetry: matching fails on textureless pixels, depth error grows with z²
         const g = i + 1 < W && j + 1 < H ? Math.abs(gray(i + 1, j) - gray(i, j)) + Math.abs(gray(i, j + 1) - gray(i, j)) : 0;
         if (g < 2.2 && rng.next() < 0.8) return null;
-        return z + 0.007 * z * z * rng.gauss();
+        return z + 0.007 * (z * 2.2 / info.radius) ** 2 * rng.gauss(); // depth error relative to the working distance
       }, 1, lc, lp);
       const c: PointCloud = { id: makeId(), name: 'view', count: lp.length / 3, positions: Float32Array.from(lp), colors: Uint8Array.from(lc), meta: { kind: 'reconstructed', source: 'depth fusion', units: 'm' } };
       pc.push(c);
@@ -259,12 +298,12 @@ export function scanObject(object: ReconObjectId, seed: number, stations = 2): P
   const parts: PointCloud[] = [];
   const angles = [-0.7, 1.3, 3.4, 5.0];
   for (let s = 0; s < stations; s++) {
-    const a = angles[s % 4], R = 1.9;
+    const a = angles[s % 4], R = RECON_SCENES[object].lidarR;
     const x = R * Math.cos(a), y = R * Math.sin(a);
     const yaw = Math.atan2(-y, -x);
-    const r = simulateScan({ scene, sensor: cfg, trajectory: staticPose(x, y, 1.0, yaw), sweeps: 1, seed: seed + s, maxRays: 120000, distortion: false, scanId: s });
+    const r = simulateScan({ scene, sensor: cfg, trajectory: staticPose(x, y, RECON_SCENES[object].lidarZ, yaw), sweeps: 1, seed: seed + s, maxRays: 120000, distortion: false, scanId: s });
     const keep: number[] = [];
-    for (let i = 0; i < r.cloud.count; i++) if (r.cloud.instances![i] === 2) keep.push(i); // object only (drop the ground plane)
+    for (let i = 0; i < r.cloud.count; i++) if (r.cloud.instances![i] >= 2) keep.push(i); // everything but the ground plane (drop the ground plane)
     const sel = new Float32Array(keep.length * 3);
     keep.forEach((k, i) => sel.set(r.cloud.positions.subarray(k * 3, k * 3 + 3), i * 3));
     const c = { ...r.cloud };
@@ -302,7 +341,7 @@ export function alignToLidar(recon: PointCloud, lidar: PointCloud): AlignResult 
   }
   if (recon.colors) out.colors = recon.colors.slice();
   out.name = 'Reconstruction (aligned)';
-  return { aligned: out, scale: res.scale, T: res.T, rmse: res.finalRmse, fitness: res.fitness, valid: res.fitness > 0.5 && res.finalRmse < 0.08 };
+  return { aligned: out, scale: res.scale, T: res.T, rmse: res.finalRmse, fitness: res.fitness, valid: res.fitness > 0.5 && res.finalRmse < Math.max(0.08, 0.04 * ext(lidar)) }; // bigger scenes are allowed a proportionally larger residual
 }
 
 export interface DistanceStats { n: number; mean: number; rmse: number; median: number; p95: number; within2: number; within5: number; max: number }
@@ -328,7 +367,7 @@ export function compareReconstruction(object: ReconObjectId, recon: PointCloud, 
   const gt = sampleSurfaces(reconScene(object), 20000);
   // keep ground-truth samples that belong to the object (instance 2), above the ground plane
   const keep: number[] = [];
-  for (let i = 0; i < gt.count; i++) if (gt.obj[i] === 1) keep.push(i);
+  for (let i = 0; i < gt.count; i++) if (gt.obj[i] >= 1) keep.push(i);
   const gtPos = new Float32Array(keep.length * 3);
   keep.forEach((k, i) => gtPos.set(gt.pos.subarray(k * 3, k * 3 + 3), i * 3));
   const gtCloud = { positions: gtPos, count: keep.length };

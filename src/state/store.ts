@@ -107,7 +107,7 @@ export interface LabState {
     object: ReconObjectId; method: ReconMethod; views: number; seed: number;
     out: ReconOutput | null; lidar: PointCloud | null; ai: PointCloud | null;
     align: AlignResult | null; cmp: any | null; errMax: number;
-    layer: 'photo' | 'lidar' | 'recon' | 'mesh' | 'overlay' | 'error';
+    layer: 'scene' | 'photo' | 'lidar' | 'recon' | 'mesh' | 'overlay' | 'error';
     layout: 'single' | 'split';
     observations: Record<string, boolean>;
   };
@@ -188,7 +188,7 @@ function initial() {
     },
     proc: { sourceId: null, steps: [] as OpSpec[], seed: 7, result: null, selected: -1, quality: null, viewStep: -1 },
     seg: { params: { ...DEFAULT_SEG }, result: null, gt: null, cloudId: null, names: {} },
-    recon: { object: 'chair' as ReconObjectId, method: 'photogrammetry' as ReconMethod, views: 8, seed: 5, out: null, lidar: null, ai: null, align: null, cmp: null, errMax: 0.05, layer: 'overlay' as const, layout: 'single' as const, observations: { occlusion: false, missing: false, texture: false, geometry: false } },
+    recon: { object: 'desk' as ReconObjectId, method: 'photogrammetry' as ReconMethod, views: 8, seed: 5, out: null, lidar: null, ai: null, align: null, cmp: null, errMax: 0.05, layer: 'scene' as const, layout: 'single' as const, observations: { occlusion: false, missing: false, texture: false, geometry: false } },
     graph: { source: 'ground-truth' as const, nearThreshold: 0.5, graph: null, selectedNode: null, filters: { near: true, above: false, below: false, inside: false, left_of: false, right_of: false, intersects: true, blocks_path: true }, answers: [], quizAnswer: '', queried: false },
   };
 }

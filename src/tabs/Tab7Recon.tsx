@@ -6,7 +6,7 @@ import { Btn, Callout, Section, Select, Seg, Slider, Toggle, NumberField, Badge,
 import { CloudLayer, SceneLayer, MeshLayer } from '../ui/three';
 import { Play, Upload } from '../ui/icons';
 import { runTask } from '../engine/client';
-import { reconScene, surfaceMesh, ReconMethod, ReconObjectId } from '../recon/recon';
+import { reconScene, surfaceMesh, renderView, RECON_SCENES, ReconMethod, ReconObjectId } from '../recon/recon';
 import { PointCloud } from '../core/pointcloud';
 import { applySim } from '../registration/icp';
 import { turbo } from '../core/colorize';
@@ -37,9 +37,16 @@ export default function Tab7() {
   const [busy, setBusy] = useState<string | null>(null);
   const [method, setMethod] = useState<ReconMethod | 'external'>(r.method);
   const [showGt, setShowGt] = useState(false);
-  const [pane, setPane] = useState<'setup' | 'compare'>('setup');
+  const [pane, setPane] = useState<'scene' | 'build' | 'compare'>('scene');
   const [rgbColour, setRgbColour] = useState(true);
   const scene = useMemo(() => reconScene(r.object), [r.object]);
+  const info = RECON_SCENES[r.object];
+  // a small photo of every scene for the picker
+  const thumbs = useMemo(() => (Object.keys(RECON_SCENES) as ReconObjectId[]).map((id) => {
+    const k = RECON_SCENES[id].radius / 2.2;
+    const v = renderView(reconScene(id), { pos: [3.6 * k, -3.3 * k, RECON_SCENES[id].centerZ + 1.7 * k], target: [0, 0, RECON_SCENES[id].centerZ], fovDeg: 55 }, 160, 110);
+    return { id, photo: { w: v.w, h: v.h, rgb: v.rgb } };
+  }), []);
   const fileRef = useRef<HTMLInputElement>(null);
   const [meshOpts, setMeshOpts] = useState<{ method: 'voxel' | 'smooth'; voxel: number }>({ method: 'smooth', voxel: 0.03 });
   const [userMesh, setUserMesh] = useState<{ positions: Float32Array; indices: Uint32Array } | null>(null);
@@ -77,7 +84,7 @@ export default function Tab7() {
   async function genRecon() {
     if (method === 'external') { fileRef.current?.click(); return; }
     setBusy('Reconstructing from images…');
-    try { const o = await runTask('recon', { params: { object: r.object, method, views: r.views, seed: r.seed } }); setR({ out: o, method, align: null, cmp: null }); } catch (e) { s.notify((e as Error).message, 'error'); } finally { setBusy(null); }
+    try { const o = await runTask('recon', { params: { object: r.object, method, views: r.views, seed: r.seed } }); setR({ out: o, method, align: null, cmp: null, layer: 'recon', layout: 'single' }); } catch (e) { s.notify((e as Error).message, 'error'); } finally { setBusy(null); }
   }
   async function align() {
     if (!r.lidar || !recon) return;
@@ -88,15 +95,16 @@ export default function Tab7() {
       if (!res.align.valid) s.notify('Alignment did not converge to a valid fit — error statistics are not reported.', 'warn');
     } finally { setBusy(null); }
   }
-  useEffect(() => { if (!r.lidar && !busy) void genLidar(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (!r.lidar && !busy) void genLidar(); }, [r.object]); // eslint-disable-line react-hooks/exhaustive-deps
+  const pickScene = (o: ReconObjectId) => { setR({ object: o, out: null, lidar: null, align: null, cmp: null, ai: null, layer: 'scene', layout: 'single' }); };
 
   const lidarProps = (c: PointCloud) => ({ cloud: c, mode: (rgbColour ? 'rgb' : 'flat') as 'rgb' | 'flat', colorOpts: { flat: [230, 30, 40] as [number, number, number] }, size: Math.max(2, s.view.pointSize - 1), budget: s.view.renderBudget, pickable: false });
   const reconProps = (c: PointCloud, flat = false) => ({ cloud: c, mode: (rgbColour && !flat ? 'rgb' : 'flat') as 'rgb' | 'flat', colorOpts: { flat: [191, 90, 242] as [number, number, number] }, size: Math.max(2, s.view.pointSize - 1), budget: s.view.renderBudget, pickable: false });
-  const home: [number, number, number] = [2.4, -2.4, 1.7], target: [number, number, number] = [0, 0, 0.45];
+  const home: [number, number, number] = [info.radius * 1.1, -info.radius * 1.1, info.radius * 0.8], target: [number, number, number] = [0, 0, info.centerZ * 0.9];
 
   const content = (which: 'single' | 'lidar' | 'recon') => (
     <>
-      {showGt && <SceneLayer scene={scene} opacity={0.18} showCeiling interactive={false} />}
+      {(showGt || r.layer === 'scene') && <SceneLayer scene={scene} opacity={r.layer === 'scene' ? 1 : 0.18} showCeiling interactive={false} />}
       {(which === 'lidar' || (which === 'single' && (r.layer === 'lidar' || r.layer === 'overlay'))) && r.lidar && <CloudLayer {...lidarProps(r.lidar)} {...(r.layer === 'overlay' ? { mode: 'flat' as const } : {})} />}
       {(which === 'recon' || (which === 'single' && (r.layer === 'recon' || r.layer === 'overlay'))) && reconShown && r.layer !== 'mesh' && r.layer !== 'error' && <CloudLayer {...reconProps(reconShown, r.layer === 'overlay')} />}
       {(which === 'recon' || which === 'single') && r.layer === 'mesh' && meshShown && <MeshLayer mesh={meshShown} />}
@@ -126,7 +134,7 @@ export default function Tab7() {
       {out && <p className="caption" style={{ marginTop: 10 }}>Synthetic images rendered by the ray-caster (Lambert shading + a procedural wood texture): one wide shot of the scene, then the photographs or RGB-D frames that the chosen method turns into 3D.</p>}
     </div>
   ) : (
-    <Viewport home={home} target={target} threshold={0.01} gridSize={0.25} hideGrid hideAxes bgOverride="#ffffff">{content('single')}</Viewport>
+    <Viewport key={r.object} home={home} target={target} threshold={0.01} gridSize={0.25} hideGrid hideAxes bgOverride="#ffffff">{content('single')}</Viewport>
   );
 
   const st = r.cmp?.stats;
@@ -150,19 +158,35 @@ export default function Tab7() {
 
   const controls = (
     <>
-      <Seg value={pane} onChange={setPane} options={[{ value: 'setup', label: 'Setup' }, { value: 'compare', label: 'Compare' }]} label="Section" />
-      {pane === 'setup' && (<>
-      <Section title="Object & method">
-        <p className="caption">Everything here is simulated in your browser (no real NeRF, Gaussian-splatting or AI model is run). Upload your own result to test it.</p>
-        <Select label="Object" value={r.object} options={[{ value: 'chair', label: 'Chair' }, { value: 'crate', label: 'Wooden crate' }]} onChange={(o) => setR({ object: o as ReconObjectId, out: null, lidar: null, align: null, cmp: null })} />
+      <Seg value={pane} onChange={setPane} options={[{ value: 'scene', label: '1 · Scene' }, { value: 'build', label: '2 · Build' }, { value: 'compare', label: '3 · Compare' }]} label="Step" />
+      {pane === 'scene' && (<>
+      <Callout kind="edu" title="From photos to 3D, checked against LiDAR">
+        Photographs of a scene are turned into 3D, then compared with a LiDAR scan of the <b>same scene</b>. LiDAR measures distance directly, so it is the reference that shows where the image-based result is off. All of this is simulated in your browser.
+      </Callout>
+      <Section title="Choose a scene">
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }} data-testid="scene-picker">
+          {thumbs.map(({ id, photo }) => (
+            <button key={id} onClick={() => pickScene(id)} aria-pressed={r.object === id} data-testid={`scene-${id}`}
+              style={{ textAlign: 'left', padding: 5, borderRadius: 12, border: r.object === id ? '2px solid #0a84ff' : '2px solid transparent', background: '#fff', boxShadow: '0 1px 5px rgba(0,0,0,.1)', cursor: 'pointer' }}>
+              <PhotoCanvas photo={photo} width="100%" />
+              <div style={{ fontSize: 12.5, fontWeight: 600, padding: '4px 3px 0' }}>{RECON_SCENES[id].label}</div>
+            </button>
+          ))}
+        </div>
+        <p className="hint">{info.blurb}</p>
+      </Section>
+      <Section title="Photos or depth frames">
         <Select label="Image-based method" value={method} options={METHODS} onChange={(m) => { setMethod(m); setR({ align: null, cmp: null }); }} />
         {method === 'photogrammetry' && <p className="hint">Several photos → matching → depth fusion. Textureless faces fail, scale is unknown, poses carry small errors.</p>}
         {method === 'rgbd' && <p className="hint">Depth camera with known poses: metric scale and low noise, but limited to what the cameras saw.</p>}
-        {method === 'monocular' && <p className="hint">One photo only: depth has unknown scale/shift and smooth distortion, and nothing behind the object exists.</p>}
+        {method === 'monocular' && <p className="hint">One photo only: depth has unknown scale/shift and smooth distortion, and nothing behind the objects exists.</p>}
         {method === 'external' && <p className="hint">Upload a PLY/PCD you produced with NeRF, 3D Gaussian Splatting or an image-to-3D model (export the point cloud / mesh vertices).</p>}
         {(method === 'photogrammetry' || method === 'rgbd') && <Slider label="Number of views" value={r.views} min={2} max={16} step={1} onChange={(views) => setR({ views })} />}
-                <input ref={fileRef} type="file" accept=".ply,.pcd,.las" hidden onChange={async (e) => { const f = e.target.files?.[0]; if (f) { try { const c = await loadFile(f); c.meta.kind = 'reconstructed'; setR({ ai: c, align: null, cmp: null }); } catch (err) { s.notify((err as Error).message, 'error'); } } e.target.value = ''; }} />
+        <input ref={fileRef} type="file" accept=".ply,.pcd,.las" hidden onChange={async (e) => { const f = e.target.files?.[0]; if (f) { try { const c = await loadFile(f); c.meta.kind = 'reconstructed'; setR({ ai: c, align: null, cmp: null }); } catch (err) { s.notify((err as Error).message, 'error'); } } e.target.value = ''; }} />
+        <Btn variant="primary" icon={method === 'external' ? <Upload size={15} /> : <Play size={15} />} onClick={genRecon} busy={busy?.startsWith('Reconstructing') ?? false}>{method === 'external' ? 'Upload result' : 'Reconstruct in 3D'}</Btn>
       </Section>
+      </>)}
+      {pane === 'build' && (<>
       <Section title="Surface reconstruction (meshing)">
         <p className="hint">Turns the reconstructed points into a surface of triangles.</p>
         <Seg value={meshOpts.method} onChange={(m) => setMeshOpts({ ...meshOpts, method: m })} label="Meshing method" options={[{ value: 'voxel', label: 'Voxel surface' }, { value: 'smooth', label: 'Smoothed surface' }]} />
@@ -178,7 +202,7 @@ export default function Tab7() {
         {aligned && <Slider label="Error colour range" value={r.errMax} min={0.01} max={0.2} step={0.005} unit=" m" format={(v) => v.toFixed(3)} onChange={(errMax) => setR({ errMax })} />}
       </Section>
       <Section title="View">
-        <Seg value={r.layer} onChange={(layer) => setR({ layer })} options={[{ value: 'photo', label: 'Photo' }, { value: 'lidar', label: 'LiDAR' }, { value: 'recon', label: 'Recon' }]} />
+        <Seg value={r.layer} onChange={(layer) => setR({ layer })} options={[{ value: 'scene', label: 'Scene' }, { value: 'photo', label: 'Photo' }, { value: 'lidar', label: 'LiDAR' }, { value: 'recon', label: 'Recon' }]} />
         <Seg value={r.layer} onChange={(layer) => setR({ layer })} options={[{ value: 'mesh', label: 'Mesh' }, { value: 'overlay', label: 'Overlay' }, { value: 'error', label: 'Error map' }]} />
         <Seg value={r.layout} onChange={(layout) => setR({ layout })} options={[{ value: 'single', label: 'Single view' }, { value: 'split', label: 'Split · synced orbit' }]} />
         <Toggle label="Show the true model" checked={showGt} onChange={setShowGt} />
@@ -210,6 +234,7 @@ export default function Tab7() {
       controls={controls}
       learn={null}
       noPanelTabs
+      noEnv
       statsRow
       stats={stats}
       viewExtras={<>

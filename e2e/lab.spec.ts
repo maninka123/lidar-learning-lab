@@ -177,12 +177,15 @@ test.describe('LiDAR Learning Lab', () => {
   test('tab 7: LiDAR vs reconstruction needs valid alignment before reporting errors', async ({ page }) => {
     await go(page, 15);
     await expect(page.getByRole('button', { name: 'Exercise' })).toHaveCount(0);
+    await expect(page.getByTestId('scene-picker')).toBeVisible();
+    await page.getByTestId('scene-living').click();
+    await expect.poll(() => state(page, (s) => s.recon.object)).toBe('living');
     await expect.poll(() => state(page, (s) => !!s.recon.lidar), { timeout: 60000 }).toBe(true);
     await page.getByTestId('reconstruct').click();
     await expect.poll(() => state(page, (s) => !!s.recon.out), { timeout: 60000 }).toBe(true);
     await page.getByTestId('mesh-toolbar').click();
     await expect.poll(() => page.getByTestId('photo-strip').count()).toBe(1);
-    await page.getByRole('button', { name: 'Compare', exact: true }).click();
+    await page.getByRole('button', { name: '3 · Compare', exact: true }).click();
     await expect(page.getByTestId('recon-stats')).toHaveCount(0); // no statistics before alignment
     await page.getByTestId('align-recon').click();
     await expect(page.getByTestId('recon-stats')).toBeVisible({ timeout: 90000 });
@@ -271,8 +274,7 @@ test.describe('classroom applications', () => {
   test('tab 10: scan to CAD finds walls and exports a DXF', async ({ page }) => {
     await go2(page, 13);
     await expect(page.getByTestId('stats-card')).toContainText(/Walls found\s*\d+/, { timeout: 90000 });
-    const t = await page.getByTestId('stats-card').innerText();
-    expect(parseInt(t.match(/Walls found\s*(\d+)/)![1])).toBeGreaterThanOrEqual(4);
+    await expect.poll(async () => parseInt(((await page.getByTestId('stats-card').innerText()).match(/Walls found\s*(\d+)/) ?? [])[1] ?? '0'), { timeout: 90000 }).toBeGreaterThanOrEqual(4);
     const [dl] = await Promise.all([page.waitForEvent('download'), page.getByTestId('export-dxf').click()]);
     expect(dl.suggestedFilename()).toBe('classroom_walls.dxf');
   });
@@ -467,7 +469,7 @@ test.describe('corner cases', () => {
   test('CAD with a slice at the ceiling, change detection with the same visit twice', async ({ page }) => {
     await page.goto('/');
     await page.getByTestId('nav-13').click();
-    await expect(page.getByTestId('stats-card')).toContainText(/Walls found\s*\d+/, { timeout: 90000 });
+    await expect(page.getByTestId('stats-card')).toContainText(/Walls found\s*[1-9]/, { timeout: 90000 });
     await page.getByTestId('nav-14').click();
     await expect(page.getByTestId('stamp-0')).toBeVisible({ timeout: 90000 });
     await expect(page.getByTestId('change-chart')).toContainText(/\d+\.\d%/, { timeout: 120000 });

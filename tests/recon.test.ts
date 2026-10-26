@@ -28,3 +28,14 @@ describe('images and meshing', () => {
     }
   });
 });
+
+import { RECON_SCENES, ReconObjectId } from '../src/recon/recon';
+describe('scenes', () => {
+  for (const id of Object.keys(RECON_SCENES) as ReconObjectId[]) {
+    it(`${id}: LiDAR and RGB-D reconstruction both see the scene and align`, () => {
+      const lidar = scanObject(id, 5, 2), out = reconstruct({ object: id, method: 'rgbd', views: 8, seed: 5 });
+      expect(lidar.count).toBeGreaterThan(1500); expect(out.cloud.count).toBeGreaterThan(3000);
+      expect(alignToLidar(out.cloud, lidar).valid).toBe(true);
+    }, 120000);
+  }
+});
