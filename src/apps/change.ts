@@ -1,73 +1,79 @@
-import { PointCloud, cloneCloud, newCloud } from '../core/pointcloud';
+import { PointCloud, newCloud } from '../core/pointcloud';
 import { KDTree } from '../core/kdtree';
 import { euclideanClustering } from '../segmentation/clustering';
-import { rigidFromEuler, applyR, D2R, Vec3, Rigid } from '../core/math';
+import { Vec3 } from '../core/math';
 import { makeRng } from '../core/rng';
 import { CLASSROOM_CLASSES } from './classroom';
 
-export type ChangeKind = 'moved' | 'removed' | 'added';
 export interface TruthEvent { kind: 'removed' | 'added'; label: string; center: Vec3 }
-export interface Epoch2 { cloud: PointCloud; truth: TruthEvent[]; misreg: Rigid | null }
-export interface ChangeSpec { move: boolean; remove: boolean; add: boolean; misregister: boolean }
+export interface Epoch { name: string; note: string; cloud: PointCloud; /** what was done to the room since the previous epoch */ truth: TruthEvent[] }
 
 const centroid = (c: PointCloud, ids: number[]): Vec3 => { let x = 0, y = 0, z = 0; for (const i of ids) { x += c.positions[i * 3]; y += c.positions[i * 3 + 1]; z += c.positions[i * 3 + 2]; } const m = ids.length || 1; return [x / m, y / m, z / m]; };
 
-/** Scan 2 = scan 1 after a few edits: one object removed, one moved, one new box, plus optional registration error and a little noise. */
-export function makeEpoch2(c1: PointCloud, spec: ChangeSpec, seed: number): Epoch2 {
-  const rng = makeRng(seed);
-  const lab = c1.labels!;
-  // find the furniture objects (labels 3-6) by clustering
+/**
+ * Five visits to the same classroom. Visit 1 is the scan itself; every later visit is the room after one more
+ * everyday change (furniture moved, taken away, a box left behind). All visits share one frame, as scans taken from a
+ * fixed scanner position would.
+ */
+export function makeSeries(c1: PointCloud, seed = 11): Epoch[] {
+  const rng = makeRng(seed), lab = c1.labels!;
   const furn: number[] = []; for (let i = 0; i < c1.count; i++) if (lab[i] >= 3) furn.push(i);
   const fp = new Float32Array(furn.length * 3); furn.forEach((j, k) => fp.set(c1.positions.subarray(j * 3, j * 3 + 3), k * 3));
   const cl = euclideanClustering(fp, furn.length, 0.06, 150);
   const groups: number[][] = Array.from({ length: cl.clusters }, () => []);
   cl.labels.forEach((g, k) => { if (g >= 0) groups[g].push(furn[k]); });
   groups.sort((a, b) => b.length - a.length);
-  const objs = groups.slice(0, 6);
-  const drop = new Set<number>(), shift = new Map<number, Vec3>(), truth: TruthEvent[] = [];
-  const name = (g: number[]) => CLASSROOM_CLASSES[lab[g[0]]]?.name ?? 'Object';
-  if (spec.remove && objs[0]) { for (const i of objs[0]) drop.add(i); truth.push({ kind: 'removed', label: name(objs[0]), center: centroid(c1, objs[0]) }); }
-  if (spec.move && objs[2]) {
-    const d: Vec3 = [0.9, 0.5, 0];
-    for (const i of objs[2]) shift.set(i, d);
-    const c0 = centroid(c1, objs[2]);
-    truth.push({ kind: 'removed', label: `${name(objs[2])} (old place)`, center: c0 }, { kind: 'added', label: `${name(objs[2])} (new place)`, center: [c0[0] + d[0], c0[1] + d[1], c0[2]] });
+  const objs = groups.slice(0, 6), name = (g: number[]) => CLASSROOM_CLASSES[lab[g[0]]]?.name ?? 'Object';
+
+  // box position: the free floor spot farthest from everything else
+  const solid: number[] = []; for (let i = 0; i < c1.count; i += 7) if (lab[i] >= 2) solid.push(i);
+  const sp = new Float32Array(solid.length * 3); solid.forEach((j, k) => sp.set(c1.positions.subarray(j * 3, j * 3 + 3), k * 3));
+  const tree = new KDTree(sp, solid.length);
+  let boxP: Vec3 = [0, 0, 0], bestD = -1;
+  for (let t = 0; t < 400; t++) {
+    const i = rng.int(c1.count); if (lab[i] !== 1) continue;
+    const x = c1.positions[i * 3], y = c1.positions[i * 3 + 1], r = tree.nearest(x, y, 0.4, Infinity);
+    if (r.index >= 0 && r.dist2 > bestD) { bestD = r.dist2; boxP = [x, y, 0]; }
   }
-  const pos: number[] = [], col: number[] = [], labs: number[] = [];
-  for (let i = 0; i < c1.count; i++) {
-    if (drop.has(i)) continue;
-    const s = shift.get(i);
-    pos.push(c1.positions[i * 3] + (s?.[0] ?? 0), c1.positions[i * 3 + 1] + (s?.[1] ?? 0), c1.positions[i * 3 + 2] + (s?.[2] ?? 0));
-    col.push(c1.colors![i * 3], c1.colors![i * 3 + 1], c1.colors![i * 3 + 2]); labs.push(lab[i]);
-  }
-  if (spec.add) {
-    // a new box on the free floor spot farthest from everything else
-    const solid: number[] = []; for (let i = 0; i < c1.count; i += 7) if (lab[i] >= 2 && !drop.has(i)) solid.push(i);
-    const sp = new Float32Array(solid.length * 3); solid.forEach((j, k) => sp.set(c1.positions.subarray(j * 3, j * 3 + 3), k * 3));
-    const tree = new KDTree(sp, solid.length);
-    let bestP: Vec3 = [0, 0, 0], bestD = -1;
-    for (let t = 0; t < 300; t++) {
-      const i = rng.int(c1.count); if (lab[i] !== 1) continue;
-      const x = c1.positions[i * 3], y = c1.positions[i * 3 + 1]; const r = tree.nearest(x, y, 0.4, Infinity);
-      if (r.index >= 0 && r.dist2 > bestD) { bestD = r.dist2; bestP = [x, y, 0]; }
+  const box: number[][] = [], bs = 0.5, bh = 0.6, step = 0.025;
+  const face = (f: (u: number, v: number) => Vec3, ru: number, rv: number) => { for (let u = 0; u <= ru; u += step) for (let v = 0; v <= rv; v += step) box.push(f(u, v)); };
+  face((u, v) => [u - bs / 2, v - bs / 2, bh], bs, bs);
+  face((u, v) => [u - bs / 2, -bs / 2, v], bs, bh); face((u, v) => [u - bs / 2, bs / 2, v], bs, bh);
+  face((u, v) => [-bs / 2, u - bs / 2, v], bs, bh); face((u, v) => [bs / 2, u - bs / 2, v], bs, bh);
+
+  const gone = new Set<number>(), shift = new Map<number, Vec3>();
+  let boxOn = false;
+  const moveObj = (g: number[], d: Vec3) => { for (const i of g) shift.set(i, d); };
+  const steps: { name: string; note: string; apply: () => TruthEvent[] }[] = [
+    { name: 'Visit 1', note: 'The room as first scanned.', apply: () => [] },
+    { name: 'Visit 2', note: 'A piece of furniture is pushed aside.', apply: () => {
+      const g = objs[2], c0 = centroid(c1, g), d: Vec3 = [0.9, 0.5, 0]; moveObj(g, d);
+      return [{ kind: 'removed', label: `${name(g)} (old place)`, center: c0 }, { kind: 'added', label: `${name(g)} (new place)`, center: [c0[0] + d[0], c0[1] + d[1], c0[2]] }];
+    } },
+    { name: 'Visit 3', note: 'The biggest piece of furniture is taken away.', apply: () => { const g = objs[0]; for (const i of g) gone.add(i); return [{ kind: 'removed', label: name(g), center: centroid(c1, g) }]; } },
+    { name: 'Visit 4', note: 'A box is left on the floor.', apply: () => { boxOn = true; return [{ kind: 'added', label: 'New box', center: [boxP[0], boxP[1], bh / 2] }]; } },
+    { name: 'Visit 5', note: 'Another piece moves and a small one goes.', apply: () => {
+      const g = objs[3], c0 = centroid(c1, g), d: Vec3 = [-0.6, 0.7, 0]; moveObj(g, d);
+      const h = objs[4]; for (const i of h) gone.add(i);
+      return [{ kind: 'removed', label: `${name(g)} (old place)`, center: c0 }, { kind: 'added', label: `${name(g)} (new place)`, center: [c0[0] + d[0], c0[1] + d[1], c0[2]] }, { kind: 'removed', label: name(h), center: centroid(c1, h) }];
+    } },
+  ];
+  return steps.map((st, k) => {
+    const truth = st.apply();
+    const pos: number[] = [], col: number[] = [], labs: number[] = [];
+    for (let i = 0; i < c1.count; i++) {
+      if (gone.has(i)) continue;
+      const d = shift.get(i);
+      pos.push(c1.positions[i * 3] + (d?.[0] ?? 0), c1.positions[i * 3 + 1] + (d?.[1] ?? 0), c1.positions[i * 3 + 2] + (d?.[2] ?? 0));
+      col.push(c1.colors![i * 3], c1.colors![i * 3 + 1], c1.colors![i * 3 + 2]); labs.push(lab[i]);
     }
-    const s = 0.5, h = 0.6, step = 0.02;
-    const face = (f: (u: number, v: number) => Vec3, ru: number, rv: number) => { for (let u = 0; u <= ru; u += step) for (let v = 0; v <= rv; v += step) { const p = f(u, v); pos.push(bestP[0] + p[0], bestP[1] + p[1], p[2]); col.push(220, 60, 60); labs.push(6); } };
-    face((u, v) => [u - s / 2, v - s / 2, h], s, s);
-    face((u, v) => [u - s / 2, -s / 2, v], s, h); face((u, v) => [u - s / 2, s / 2, v], s, h);
-    face((u, v) => [-s / 2, u - s / 2, v], s, h); face((u, v) => [s / 2, u - s / 2, v], s, h);
-    truth.push({ kind: 'added', label: 'New box', center: [bestP[0], bestP[1], h / 2] });
-  }
-  const out = newCloud(pos.length / 3, 'Scan 2 (later)', { kind: 'measured', source: 'classroom scan with simulated changes' });
-  out.positions = Float32Array.from(pos); out.colors = Uint8Array.from(col); out.labels = Int32Array.from(labs);
-  const noise = 0.004;
-  for (let i = 0; i < out.positions.length; i++) out.positions[i] += noise * rng.gauss();
-  let misreg: Rigid | null = null;
-  if (spec.misregister) {
-    misreg = rigidFromEuler(0.12, -0.08, 0.02, 2 * D2R, 0.3 * D2R, 0);
-    for (let i = 0; i < out.count; i++) { const q = applyR(misreg.R, [out.positions[i * 3], out.positions[i * 3 + 1], out.positions[i * 3 + 2]]); out.positions[i * 3] = q[0] + misreg.t[0]; out.positions[i * 3 + 1] = q[1] + misreg.t[1]; out.positions[i * 3 + 2] = q[2] + misreg.t[2]; }
-  }
-  return { cloud: out, truth, misreg };
+    if (boxOn) for (const p of box) { pos.push(boxP[0] + p[0], boxP[1] + p[1], p[2]); col.push(200, 120, 60); labs.push(6); }
+    const out = newCloud(pos.length / 3, st.name, { kind: 'measured', source: 'classroom scan, later visit' });
+    out.positions = Float32Array.from(pos); out.colors = Uint8Array.from(col); out.labels = Int32Array.from(labs);
+    const r = makeRng(seed + 100 + k);
+    for (let i = 0; i < out.positions.length; i++) out.positions[i] += 0.004 * r.gauss();
+    return { name: st.name, note: st.note, cloud: out, truth };
+  });
 }
 
 /** Distance from every point of `a` to the nearest point of `b`. */
@@ -109,4 +115,3 @@ export function detectChanges(c1: PointCloud, c2: PointCloud, thr: number, minPt
   return { dOld, dNew, removed, added, regions: regions.sort((a, b) => b.points - a.points), recall: truth.length ? hit / truth.length : 1, falseRegions: regions.filter((r) => !r.matched).length };
 }
 
-export { cloneCloud };

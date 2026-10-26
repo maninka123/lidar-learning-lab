@@ -276,15 +276,13 @@ test.describe('classroom applications', () => {
     const [dl] = await Promise.all([page.waitForEvent('download'), page.getByTestId('export-dxf').click()]);
     expect(dl.suggestedFilename()).toBe('classroom_walls.dxf');
   });
-  test('tab 11: change detection finds the edits', async ({ page }) => {
+  test('tab 11: change detection shows five visits and a heatmap', async ({ page }) => {
     await go2(page, 14);
-    await expect(page.getByTestId('make-scan2')).toBeEnabled({ timeout: 90000 });
-    await page.getByTestId('make-scan2').click();
-    await expect(page.getByTestId('align-scans')).toBeEnabled({ timeout: 90000 });
-    await page.getByTestId('align-scans').click();
-    await expect(page.getByText(/after alignment/)).toBeVisible({ timeout: 120000 });
-    await page.getByTestId('find-changes').click();
-    await expect(page.getByText('4 · What changed')).toBeVisible({ timeout: 120000 });
+    await expect(page.getByTestId('stamp-4')).toBeVisible({ timeout: 90000 });
+    await expect(page.getByTestId('change-chart')).toContainText(/\d+\.\d%/, { timeout: 120000 });
+    await expect(page.getByText('What changed', { exact: true })).toBeVisible({ timeout: 120000 });
+    await page.getByTestId('stamp-4').fill('2026-05-01T09:00');
+    await expect(page.getByTestId('stats-card')).toContainText(/Time between\s*\d+/);
   });
   test('tab 12: meshing builds a surface', async ({ page }) => {
     await go2(page, 9);
@@ -466,15 +464,12 @@ test.describe('corner cases', () => {
     await expect.poll(() => page.evaluate(() => (window as any).__lab.getState().sceneId)).not.toBe('D');
   });
 
-  test('CAD with a slice at the ceiling, change detection without edits', async ({ page }) => {
+  test('CAD with a slice at the ceiling, change detection with the same visit twice', async ({ page }) => {
     await page.goto('/');
     await page.getByTestId('nav-13').click();
     await expect(page.getByTestId('stats-card')).toContainText(/Walls found\s*\d+/, { timeout: 90000 });
     await page.getByTestId('nav-14').click();
-    await expect(page.getByTestId('make-scan2')).toBeEnabled({ timeout: 90000 });
-    for (const name of ['One object removed', 'One object moved', 'A new box added', 'Scanner position slightly off']) await page.getByText(name, { exact: true }).click();
-    await page.getByTestId('make-scan2').click();
-    await page.getByTestId('find-changes').click();
-    await expect(page.getByText('4 · What changed')).toBeVisible({ timeout: 120000 });
+    await expect(page.getByTestId('stamp-0')).toBeVisible({ timeout: 90000 });
+    await expect(page.getByTestId('change-chart')).toContainText(/\d+\.\d%/, { timeout: 120000 });
   });
 });

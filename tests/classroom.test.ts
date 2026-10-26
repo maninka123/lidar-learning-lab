@@ -5,7 +5,7 @@ import { voxelDownsample } from '../src/processing/ops';
 import { cloudBounds, PointCloud } from '../src/core/pointcloud';
 import { detectPlanes } from '../src/apps/planes';
 import { slicePoints, extractWalls, extractPlan, extractPlanBands, straighten, toDXF, segLen } from '../src/apps/cad';
-import { makeEpoch2, detectChanges } from '../src/apps/change';
+import { makeSeries, detectChanges } from '../src/apps/change';
 import { heightMapMesh, meshStats } from '../src/apps/mesh';
 import { surfaceMesh } from '../src/recon/recon';
 import { icp } from '../src/registration/icp';
@@ -52,17 +52,17 @@ describe('classroom scan shipped with the app', () => {
     }
     expect(toDXF([]).trim().endsWith('EOF')).toBe(true);
   });
-  it('change detection: finds every edit after alignment, and copes with no edits', () => {
-    const none = makeEpoch2(room, { move: false, remove: false, add: false, misregister: false }, 11);
-    expect(none.truth.length).toBe(0);
-    const all = makeEpoch2(room, { move: true, remove: true, add: true, misregister: true }, 11);
-    expect(all.truth.length).toBe(4);
-    const r = icp(all.cloud.positions, all.cloud.count, room.positions, room.count, { maxIterations: 60, tolerance: 1e-7, maxCorrDist: 0.6, sampleMax: 30000, method: 'plane' });
-    const res = detectChanges(room, transformCloud(all.cloud, r.T), 0.06, 80, all.truth);
-    expect(res.recall).toBe(1); expect(res.falseRegions).toBeLessThanOrEqual(3);
-    const same = detectChanges(room, none.cloud, 0.06, 80, none.truth);
-    expect(same.regions.length).toBeLessThanOrEqual(2);
-  }, 60000);
+  it('change detection: five visits, every edit between neighbouring visits is found', () => {
+    const series = makeSeries(room);
+    expect(series.length).toBe(5);
+    expect(series.map((e) => e.truth.length)).toEqual([0, 2, 1, 1, 3]);
+    for (let k = 1; k < 5; k++) {
+      const res = detectChanges(series[k - 1].cloud, series[k].cloud, 0.06, 80, series[k].truth);
+      expect(res.recall).toBe(1); expect(res.falseRegions).toBeLessThanOrEqual(2);
+    }
+    const same = detectChanges(series[0].cloud, series[0].cloud, 0.06, 80, []);
+    expect(same.regions.length).toBe(0);
+  }, 90000);
   it('meshing: every method returns a surface, and in a sensible time', () => {
     const t0 = performance.now();
     const chairLike = voxelDownsample(room, 0.06);
