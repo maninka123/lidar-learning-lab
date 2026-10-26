@@ -29,8 +29,12 @@ export class NoKeyError extends Error { constructor() { super('No DeepSeek key i
  * Ask the model. The request first goes to /api/deepseek on the dev / preview server, which adds the key itself (the key is never in the page).
  * A static site has no such server, so then the key you paste in (kept only in this browser) is used, if there is one.
  */
-export async function askDeepSeek(system: string, user: string, maxTokens = 700, ownKey = ''): Promise<AiResult> {
-  const body = JSON.stringify({ model: DEEPSEEK_MODEL, messages: [{ role: 'system', content: system }, { role: 'user', content: user }], max_tokens: maxTokens, temperature: 0.2, thinking: { type: 'disabled' } });
+export interface ChatMsg { role: 'system' | 'user' | 'assistant'; content: string }
+export const askDeepSeek = (system: string, user: string, maxTokens = 700, ownKey = '') => chatDeepSeek([{ role: 'system', content: system }, { role: 'user', content: user }], maxTokens, ownKey);
+
+/** A whole conversation: the system message, then the turns so far, ending with the new user question. */
+export async function chatDeepSeek(messages: ChatMsg[], maxTokens = 700, ownKey = ''): Promise<AiResult> {
+  const body = JSON.stringify({ model: DEEPSEEK_MODEL, messages, max_tokens: maxTokens, temperature: 0.2, thinking: { type: 'disabled' } });
   const t0 = performance.now();
   const call = async (url: string, headers: Record<string, string>) => {
     const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json', ...headers }, body });

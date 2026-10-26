@@ -8,34 +8,38 @@ import { Vec3 } from '../core/math';
 
 // ------------------------------------------------------------------ the drive: a vehicle with a LiDAR on the roof, driving through the city
 export const N_FRAMES = 10, DT = 0.8; // one scan every 0.8 s
-export const EGO = (t: number) => ({ x: -20 + 4 * t, y: -0.6, z: 1.8, yaw: 0 }); // 4 m/s along the road
+export const EGO = (t: number) => ({ x: -20 + 4 * t, y: -2.0, z: 1.8, yaw: 0 }); // 4 m/s along the road
 
 interface Actor { id: string; kind: 'person' | 'car'; pos: (t: number) => { x: number; y: number; yaw: number } }
 /** What moves in the street (the truth, used to make the scans): a pedestrian who crosses the road in front of the vehicle, one walking along the pavement, one standing, a slow car ahead and an oncoming car. */
 export const ACTORS: Actor[] = [
-  { id: 'crossing pedestrian', kind: 'person', pos: (t) => ({ x: 1, y: Math.max(-3.9, 4.3 - 1.4 * Math.max(0, t - 0.5)), yaw: 0 }) },
-  { id: 'pavement pedestrian', kind: 'person', pos: (t) => ({ x: -12 + 1.2 * t, y: 4.8, yaw: 0 }) },
-  { id: 'standing pedestrian', kind: 'person', pos: () => ({ x: -3, y: 4.7, yaw: 0 }) },
-  { id: 'slow car ahead', kind: 'car', pos: (t) => ({ x: -8 + 3.2 * t, y: -0.6, yaw: 0 }) },
-  { id: 'oncoming car', kind: 'car', pos: (t) => ({ x: 14 - 7 * t, y: 0.5, yaw: Math.PI }) },
+  { id: 'crossing pedestrian', kind: 'person', pos: (t) => ({ x: 3, y: Math.max(-5.8, 6.2 - 1.6 * t), yaw: 0 }) },
+  { id: 'pavement pedestrian', kind: 'person', pos: (t) => ({ x: -12 + 1.2 * t, y: 6.6, yaw: 0 }) },
+  { id: 'standing pedestrian', kind: 'person', pos: () => ({ x: -3, y: 6.9, yaw: 0 }) },
+  { id: 'slow car ahead', kind: 'car', pos: (t) => ({ x: -8 + 3.2 * t, y: -2.0, yaw: 0 }) },
+  { id: 'oncoming car', kind: 'car', pos: (t) => ({ x: 14 - 7 * t, y: 2.0, yaw: Math.PI }) },
 ];
 
-/** A clean street: a road, two rows of buildings, parked cars, trees and poles, plus the moving actors at time t. */
-export function sceneAt(t: number): SceneDef {
+/** A clean street: road with lane markings, two pavements, buildings, parked cars, trees and poles, plus the moving actors at time t. `withEgo` adds the vehicle itself (for drawing only: the LiDAR must not scan its own car). */
+export function sceneAt(t: number, withEgo = false): SceneDef {
   const O: Omit<SceneObject, 'instanceId' | 'scannable'>[] = [];
   const add = (o: Omit<SceneObject, 'instanceId' | 'scannable'>) => O.push(o);
-  add({ id: 'road', name: 'Road', classId: 13, structural: true, color: [112, 116, 122], reflectivity: 0.15, parts: [box([0, 0, -0.1], [90, 40, 0.2])] });
-  add({ id: 'buildings-north', name: 'Buildings north', classId: 17, color: [226, 190, 140], reflectivity: 0.55, parts: [box([0, 15, 4], [90, 4, 8])] });
-  add({ id: 'buildings-south', name: 'Buildings south', classId: 17, color: [196, 108, 94], reflectivity: 0.55, parts: [box([0, -15, 4], [90, 4, 8])] });
-  [[-6, -3.4, 0], [5, -3.4, 0], [-11, 3.4, Math.PI]].forEach(([x, y, yaw], i) => add({ id: `parked-car-${i + 1}`, name: `Parked car ${i + 1}`, classId: 15, color: [60, 90, 190], reflectivity: 0.5, parts: car(x, y, yaw) }));
-  [[-3, 6.4], [8, 6.8]].forEach(([x, y], i) => add({ id: `tree-${i + 1}`, name: `Tree ${i + 1}`, classId: 16, color: [70, 150, 70], reflectivity: 0.5, parts: [cyl([x, y, 1.5], 0.15, 3, 'z'), sph([x, y, 3.8], 1.4)] }));
-  [[-8, -6.2], [10, -6.2]].forEach(([x, y], i) => add({ id: `pole-${i + 1}`, name: `Pole ${i + 1}`, classId: 18, color: [90, 90, 96], reflectivity: 0.4, parts: [cyl([x, y, 3], 0.1, 6, 'z')] }));
+  add({ id: 'road', name: 'Road', classId: 13, structural: true, color: [74, 78, 86], reflectivity: 0.15, parts: [box([0, 0, -0.1], [90, 10.4, 0.2])] });
+  add({ id: 'pavements', name: 'Pavements', classId: 14, structural: true, color: [196, 194, 188], reflectivity: 0.4, parts: [box([0, 7.4, 0.05], [90, 4.4, 0.3]), box([0, -7.4, 0.05], [90, 4.4, 0.3])] });
+  const marks = []; for (let x = -42; x < 44; x += 5) marks.push(box([x, 0, 0.011], [2.4, 0.16, 0.02]));
+  add({ id: 'markings', name: 'Lane markings', classId: 13, structural: true, color: [250, 250, 250], reflectivity: 0.85, parts: [...marks, box([0, 5.0, 0.011], [90, 0.12, 0.02]), box([0, -5.0, 0.011], [90, 0.12, 0.02])] });
+  const bcol: [number, number, number][] = [[226, 190, 140], [196, 108, 94], [150, 190, 214], [232, 212, 120], [176, 200, 160]];
+  for (let i = 0; i < 6; i++) { const x = -42 + i * 15; add({ id: `building-n${i}`, name: `Building N${i}`, classId: 17, color: bcol[i % 5], reflectivity: 0.55, parts: [box([x + 6.5, 14, 4 + (i % 3) * 2], [13, 5, 8 + (i % 3) * 4])] }); add({ id: `building-s${i}`, name: `Building S${i}`, classId: 17, color: bcol[(i + 2) % 5], reflectivity: 0.55, parts: [box([x + 6.5, -14, 4 + ((i + 1) % 3) * 2], [13, 5, 8 + ((i + 1) % 3) * 4])] }); }
+  [[-6, -4.1, 0], [8, -4.1, 0], [-11, 4.1, Math.PI]].forEach(([x, y, yaw], i) => add({ id: `parked-car-${i + 1}`, name: `Parked car ${i + 1}`, classId: 15, color: [60, 90, 190], reflectivity: 0.5, parts: car(x, y, yaw) }));
+  [[-3, 8.4], [9, 8.6], [-14, -8.6]].forEach(([x, y], i) => add({ id: `tree-${i + 1}`, name: `Tree ${i + 1}`, classId: 16, color: [70, 150, 70], reflectivity: 0.5, parts: [cyl([x, y, 1.65], 0.15, 3, 'z'), sph([x, y, 3.9], 1.4)] }));
+  [[-8, 5.7], [11, -5.7]].forEach(([x, y], i) => add({ id: `pole-${i + 1}`, name: `Pole ${i + 1}`, classId: 18, color: [90, 90, 96], reflectivity: 0.4, parts: [cyl([x, y, 3.15], 0.1, 6, 'z')] }));
   ACTORS.forEach((a) => {
     const p = a.pos(t);
-    if (a.kind === 'person') add({ id: a.id, name: a.id, classId: 21, color: [255, 140, 60], reflectivity: 0.6, parts: person(p.x, p.y, 0) });
-    else add({ id: a.id, name: a.id, classId: 15, color: [230, 60, 60], reflectivity: 0.6, parts: car(p.x, p.y, p.yaw) });
+    if (a.kind === 'person') add({ id: a.id, name: a.id, classId: 21, color: [255, 140, 60], reflectivity: 0.6, parts: person(p.x, p.y, Math.abs(p.y) >= 5.2 ? 0.2 : 0) });
+    else add({ id: a.id, name: a.id, classId: 15, color: a.id === 'oncoming car' ? [250, 200, 40] : [230, 60, 60], reflectivity: 0.6, parts: car(p.x, p.y, p.yaw) });
   });
-  return { id: 'M', name: 'Moving street', description: 'A street with moving pedestrians and cars.', objects: finalize(O as never), bounds: { min: [-45, -20, 0], max: [45, 20, 8] }, defaultPose: { x: -20, y: -0.6, z: 1.8, yaw: 0 }, cameraHome: [0, -30, 18], cameraTarget: [0, 0, 1] };
+  if (withEgo) { const e = EGO(t); add({ id: 'ego', name: 'Our vehicle', classId: 15, color: [20, 150, 90], reflectivity: 0.5, parts: car(e.x, e.y, 0) }); }
+  return { id: 'M', name: 'Moving street', description: 'A street with moving pedestrians and cars.', objects: finalize(O as never), bounds: { min: [-45, -20, 0], max: [45, 20, 12] }, defaultPose: { x: -20, y: -2, z: 1.8, yaw: 0 }, cameraHome: [0, -30, 18], cameraTarget: [0, 0, 1] };
 }
 
 // ------------------------------------------------------------------ fast segmentation of one frame
@@ -47,8 +51,8 @@ export interface SegOpts { voxel: number; radius: number; minPts: number; range:
 export function classify(size: Vec3): Seg['cls'] {
   const [a, b, h] = size, foot = Math.max(a, b), small = Math.min(a, b);
   if (foot > 9 || (h > 6 && foot > 3)) return 'building / structure';
-  if (h >= 0.9 && h <= 2.2 && foot <= 1.1) return 'person';
-  if (foot >= 1.5 && foot <= 5.8 && h >= 1.0 && h <= 2.2 && Math.max(small, foot) >= 1.5 && foot > 1.1) return 'car'; // seen from one side, a car may show only its width
+  if (h >= 0.7 && h <= 2.2 && foot <= 1.1) return 'person';
+  if (foot >= 1.2 && foot <= 5.8 && h >= 0.6 && h <= 2.2 && foot > 1.1) return 'car'; // seen from one side, a car may show only its width
   if (foot > 5.8 && foot <= 12) return 'large vehicle';
   if (h > 2.2 && foot < 2.6) return 'pole / tree';
   return 'object';
@@ -59,7 +63,7 @@ export function segmentFrame(cloud: PointCloud, o: SegOpts): FrameSeg {
   const t0 = performance.now();
   // only what is near the vehicle and below roof height: far away the rings of a spinning LiDAR are too far apart to cluster
   const near: number[] = [];
-  for (let i = 0; i < cloud.count; i++) { const x = cloud.positions[i * 3] - o.origin[0], y = cloud.positions[i * 3 + 1] - o.origin[1], z = cloud.positions[i * 3 + 2]; if (x * x + y * y < o.range * o.range && z < 4.2) near.push(i); }
+  for (let i = 0; i < cloud.count; i++) { const x = cloud.positions[i * 3] - o.origin[0], y = cloud.positions[i * 3 + 1] - o.origin[1], z = cloud.positions[i * 3 + 2]; if (x * x + y * y < o.range * o.range && z > 0.3 && z < 4.2) near.push(i); }
   const thin = voxelDownsample(selectPoints(cloud, near, 'near'), o.voxel);
   const fit = ransacPlane(thin.positions, thin.count, { threshold: 0.15, iterations: 80, seed: 5, maxTiltDeg: 12 });
   const isGround = new Uint8Array(thin.count);

@@ -4,7 +4,7 @@ import { parsePointCloud } from '../src/io/load';
 import { voxelDownsample } from '../src/processing/ops';
 import { cloudBounds, PointCloud } from '../src/core/pointcloud';
 import { detectPlanes } from '../src/apps/planes';
-import { slicePoints, extractWalls, straighten, toDXF, segLen } from '../src/apps/cad';
+import { slicePoints, extractWalls, extractPlan, extractPlanBands, straighten, toDXF, segLen } from '../src/apps/cad';
 import { makeEpoch2, detectChanges } from '../src/apps/change';
 import { heightMapMesh, meshStats } from '../src/apps/mesh';
 import { surfaceMesh } from '../src/recon/recon';
@@ -79,4 +79,13 @@ describe('classroom scan shipped with the app', () => {
     const none = segment(small, { planeConfidence: 0.99, planeMinPct: 2, planeMax: 0, algo: 'euclidean', eps: 0.15, minPts: 8, radius: 0.15, minCluster: 30, seed: 11 });
     expect(none.planes.length).toBe(0);
   }, 120000);
+  it('floor plan: four right-angle walls of a 10.6 × 5.3 m room, whatever the slice', () => {
+    const fine = voxelDownsample(room, 0.02);
+    const p = extractPlanBands(fine.positions, fine.count, 0.6, 2.2, { tol: 0.08, minLen: 1, gap: 2.5 });
+    expect(p.walls.length).toBeGreaterThanOrEqual(4);
+    expect(p.walls.every((w) => w.x1 === w.x2 || w.y1 === w.y2)).toBe(true);
+    const lens = p.walls.map(segLen).sort((a, b) => b - a);
+    expect(lens[0]).toBeGreaterThan(10); expect(lens[0]).toBeLessThan(11);
+    for (const [a, b] of [[0, 0.02], [2.6, 2.7], [10, 11]]) expect(Array.isArray(extractPlan(slicePoints(fine.positions, fine.count, a, b), { tol: 0.08, minLen: 1, gap: 2.5 }).walls)).toBe(true);
+  });
 });

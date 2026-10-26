@@ -101,3 +101,79 @@ export function toDXF(segs: Seg2[], layer = 'WALLS'): string {
   L.push('0', 'ENDSEC', '0', 'EOF');
   return L.join('\n') + '\n';
 }
+
+/** Direction (radians) of the longest straight wall in the slice: used to turn the plan so walls run along x and y. */
+export function dominantAngle(xy: Float32Array, seed = 4): number {
+  const w = extractWalls(xy, { tol: 0.05, minLen: 1, minPts: 40, maxLines: 3, gap: 3, seed });
+  return w.length ? Math.atan2(w[0].y2 - w[0].y1, w[0].x2 - w[0].x1) : 0;
+}
+
+export interface Plan { angle: number; walls: Seg2[]; /** the same walls back in the scan's own frame */ world: Seg2[] }
+
+/**
+ * Walls of a room whose walls meet at right angles (most buildings): turn the slice so the walls are along x and y,
+ * find where the points pile up along each axis (those piles are the walls), then draw each wall from its first to its
+ * last point. Doors and windows leave gaps; gaps shorter than `gap` are drawn across.
+ */
+export function extractPlan(xy: Float32Array, o: { tol: number; minLen: number; gap: number; seed?: number; angle?: number }): Plan {
+  const n = xy.length / 2;
+  if (n < 50) return { angle: o.angle ?? 0, walls: [], world: [] };
+  const angle = o.angle ?? dominantAngle(xy, o.seed ?? 4), c = Math.cos(-angle), s = Math.sin(-angle);
+  const R = new Float32Array(xy.length);
+  for (let i = 0; i < n; i++) { R[i * 2] = xy[i * 2] * c - xy[i * 2 + 1] * s; R[i * 2 + 1] = xy[i * 2] * s + xy[i * 2 + 1] * c; }
+  const walls: Seg2[] = [];
+  for (const axis of [0, 1] as const) {
+    const other = 1 - axis, bin = 0.04;
+    let lo = Infinity, hi = -Infinity;
+    for (let i = 0; i < n; i++) { const v = R[i * 2 + axis]; if (v < lo) lo = v; if (v > hi) hi = v; }
+    const nb = Math.max(1, Math.ceil((hi - lo) / bin) + 1), hist = new Float64Array(nb);
+    for (let i = 0; i < n; i++) hist[Math.floor((R[i * 2 + axis] - lo) / bin)]++;
+    const half = Math.max(1, Math.round(o.tol / bin));
+    const score = Float64Array.from(hist, (_, b) => { let t = 0; for (let k = -half; k <= half; k++) t += hist[b + k] ?? 0; return t; });
+    // a wall is a pile that is also a local maximum within 0.4 m
+    const order = Array.from(score.keys()).sort((a, b) => score[b] - score[a]), taken: number[] = [];
+    const need = Math.max(40, o.minLen * 12);
+    for (const b of order) {
+      if (score[b] < need) break;
+      if (taken.some((t) => Math.abs(t - b) * bin < 0.4)) continue;
+      taken.push(b);
+      const pos = lo + b * bin + bin / 2;
+      const along: number[] = [];
+      for (let i = 0; i < n; i++) if (Math.abs(R[i * 2 + axis] - pos) <= o.tol) along.push(R[i * 2 + other]);
+      along.sort((p, q) => p - q);
+      let start = 0;
+      for (let k = 1; k <= along.length; k++) {
+        if (k === along.length || along[k] - along[k - 1] > o.gap) {
+          const a0 = along[start], a1 = along[k - 1], cnt = k - start;
+          start = k;
+          if (a1 - a0 < o.minLen || cnt < 20) continue;
+          walls.push(axis === 0 ? { x1: pos, y1: a0, x2: pos, y2: a1 } : { x1: a0, y1: pos, x2: a1, y2: pos });
+        }
+      }
+    }
+  }
+  walls.sort((p, q) => segLen(q) - segLen(p));
+  const ci = Math.cos(angle), si = Math.sin(angle);
+  const back = (x: number, y: number): [number, number] => [x * ci - y * si, x * si + y * ci];
+  const world = walls.map((w) => { const [x1, y1] = back(w.x1, w.y1), [x2, y2] = back(w.x2, w.y2); return { x1, y1, x2, y2 }; });
+  return { angle, walls, world };
+}
+
+/**
+ * Furniture hides a wall low down and windows hide it higher up, so one slice can miss a wall. Look at the lower half,
+ * the upper half and the whole band with the same wall direction, and keep each wall once (the longer one wins).
+ */
+export function extractPlanBands(pos: Float32Array, n: number, z0: number, z1: number, o: { tol: number; minLen: number; gap: number; seed?: number }): Plan {
+  const whole = extractPlan(slicePoints(pos, n, z0, z1), o), mid = (z0 + z1) / 2;
+  const runs = [whole, extractPlan(slicePoints(pos, n, z0, mid), { ...o, angle: whole.angle }), extractPlan(slicePoints(pos, n, mid, z1), { ...o, angle: whole.angle })];
+  const walls: Seg2[] = [];
+  for (const w of runs.flatMap((r) => r.walls).sort((p, q) => segLen(q) - segLen(p))) {
+    const vert = w.x1 === w.x2, at = vert ? w.x1 : w.y1;
+    const dup = walls.some((k) => (k.x1 === k.x2) === vert && Math.abs((vert ? k.x1 : k.y1) - at) < 0.3);
+    if (!dup) walls.push(w);
+  }
+  const ci = Math.cos(whole.angle), si = Math.sin(whole.angle);
+  const back = (x: number, y: number): [number, number] => [x * ci - y * si, x * si + y * ci];
+  const world = walls.map((w) => { const [x1, y1] = back(w.x1, w.y1), [x2, y2] = back(w.x2, w.y2); return { x1, y1, x2, y2 }; });
+  return { angle: whole.angle, walls, world };
+}

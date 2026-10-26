@@ -408,10 +408,16 @@ test('tab 13: drive, point clouds, scene graph per frame, temporal graph, result
   await expect(page.getByTestId('timeline')).toBeVisible();
   await page.getByRole('button', { name: '5 Results', exact: true }).click();
   await expect(page.getByTestId('events')).toContainText('f');
+  await page.getByRole('button', { name: '6 Ask AI', exact: true }).click();
   await page.getByTestId('mv-prompt').click();
   await expect(page.getByTestId('mv-prompt-text')).toContainText('TEMPORAL SCENE GRAPH');
+  await page.getByTestId('mv-question').fill('What is moving?');
   await page.getByTestId('mv-ask').click();
   await expect(page.getByTestId('mv-answer')).toContainText('crosses ahead');
+  await page.getByTestId('mv-question').fill('And who is closest?');
+  await page.getByTestId('mv-ask').click();
+  await expect(page.getByTestId('mv-chat').getByText('And who is closest?')).toBeVisible();
+  await expect(page.getByTestId('mv-chat').locator('.callout')).toHaveCount(2);
 });
 
 test.describe('corner cases', () => {

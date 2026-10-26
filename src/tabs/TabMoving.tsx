@@ -12,7 +12,7 @@ import { PRESETS, presetToConfig } from '../sensor/presets';
 import { runTask } from '../engine/client';
 import { staticPose } from '../sensor/simulate';
 import { PointCloud } from '../core/pointcloud';
-import { askDeepSeek, AiResult, DEEPSEEK_MODEL, loadOwnKey, NoKeyError, saveOwnKey } from '../apps/deepseek';
+import { chatDeepSeek, ChatMsg, DEEPSEEK_MODEL, loadOwnKey, NoKeyError, saveOwnKey } from '../apps/deepseek';
 import { DT, EGO, FrameSeg, N_FRAMES, Seg as SegT, Track, buildTemporal, sceneAt, segmentFrame, temporalText, trackName, trackObjects } from '../apps/moving';
 
 const CLS_COLOR: Record<string, string> = { person: '#ff9f0a', car: '#e5484d', 'large vehicle': '#8e4ec6', 'pole / tree': '#30a46c', 'building / structure': '#8d8d95', object: '#8d8d95' };
@@ -26,15 +26,16 @@ export default function TabMoving() {
   const [radius, setRadius] = useState(0.6), [range, setRange] = useState(24);
   const [frame, setFrame] = useState(0), [playing, setPlaying] = useState(false);
   const [trails, setTrails] = useState(true);
-  const [step, setStep] = useState<'drive' | 'clouds' | 'graphs' | 'temporal' | 'results'>('drive');
-  const scenes = useMemo(() => Array.from({ length: N_FRAMES }, (_, k) => sceneAt(k * DT)), []);
+  const [step, setStep] = useState<'drive' | 'clouds' | 'graphs' | 'temporal' | 'results' | 'ask'>('drive');
+  const scenes = useMemo(() => Array.from({ length: N_FRAMES }, (_, k) => sceneAt(k * DT, true)), []);
   // asking the AI
   const [q, setQ] = useState(QUESTIONS[0]);
   const [ownKey, setOwnKey] = useState(() => loadOwnKey()), [needKey, setNeedKey] = useState(false);
-  const [aiBusy, setAiBusy] = useState(false), [aiErr, setAiErr] = useState<string | null>(null), [ai, setAi] = useState<{ q: string; r: AiResult } | null>(null);
+  const [aiBusy, setAiBusy] = useState(false), [aiErr, setAiErr] = useState<string | null>(null);
+  const [chat, setChat] = useState<{ q: string; text: string; tokens: number; ms: number }[]>([]);
 
   async function drive() {
-    setClouds(null); setPlaying(false); setFrame(0); setAi(null);
+    setClouds(null); setPlaying(false); setFrame(0); setChat([]);
     try {
       const out: PointCloud[] = [];
       for (let k = 0; k < N_FRAMES; k++) {
@@ -63,21 +64,29 @@ export default function TabMoving() {
 
   const cur = segs?.[frame] ?? null, ego = EGO(frame * DT);
   const avgMs = segs ? segs.reduce((a, f) => a + f.ms, 0) / segs.length : 0;
-  const prompt = useMemo(() => ({
-    system: 'You answer questions about what happened during a drive, using ONLY the temporal scene graph given (tracked objects with their positions per frame, and events). Quote numbers and frame numbers from it. Be brief.',
-    user: `TEMPORAL SCENE GRAPH\n${text}\n\nQUESTION: ${q}`,
-  }), [text, q]);
-  async function askAi() {
+  const system = useMemo(() => `You answer questions about what happened during a drive, using ONLY the temporal scene graph below (tracked objects with their positions per frame, and events). Quote numbers and frame numbers from it. Be brief. If the graph does not say, say so.\n\nTEMPORAL SCENE GRAPH\n${text}`, [text]);
+  const history = useMemo<ChatMsg[]>(() => chat.flatMap((c) => [{ role: 'user' as const, content: c.q }, { role: 'assistant' as const, content: c.text }]), [chat]);
+  async function askAi(question = q) {
+    if (!question.trim() || aiBusy) return;
     setAiBusy(true); setAiErr(null);
-    try { const r = await askDeepSeek(prompt.system, prompt.user, 1500, ownKey); setAi({ q, r }); setNeedKey(false); }
-    catch (e) { if (e instanceof NoKeyError) { setNeedKey(true); setAiErr('This site has no DeepSeek key of its own. Paste your key below (it stays in your browser) and press Ask again.'); } else setAiErr((e as Error).message); }
+    try {
+      const r = await chatDeepSeek([{ role: 'system', content: system }, ...history, { role: 'user', content: question }], 1500, ownKey);
+      setChat((c) => [...c, { q: question, text: r.text, tokens: r.promptTokens, ms: r.ms }]); setQ(''); setNeedKey(false);
+    } catch (e) { if (e instanceof NoKeyError) { setNeedKey(true); setAiErr('This site has no DeepSeek key of its own. Paste your key below (it stays in your browser) and press Ask again.'); } else setAiErr((e as Error).message); }
     finally { setAiBusy(false); }
   }
 
   const egoLine = <PolyLine pts={Array.from({ length: N_FRAMES }, (_, k) => [EGO(k * DT).x, EGO(k * DT).y, 0.05] as [number, number, number])} color="#0a84ff" width={2} dashed />;
-  const egoMark = <SensorMarker x={ego.x} y={ego.y} z={ego.z} yaw={0} sensor={sensor} color="#0a84ff" showFov={false} scale={2} />;
+  // a blue ring on the ground under our vehicle, so it is easy to find
+  const egoMark = (
+    <>
+      <PolyLine pts={Array.from({ length: 49 }, (_, i) => [ego.x + 2.6 * Math.cos((i / 48) * Math.PI * 2), ego.y + 2.6 * Math.sin((i / 48) * Math.PI * 2), 0.06] as [number, number, number])} color="#0a84ff" width={4} />
+      <mesh position={[ego.x, ego.y, 0.04]} raycast={() => null}><circleGeometry args={[2.6, 48]} /><meshBasicMaterial color="#0a84ff" transparent opacity={0.22} depthWrite={false} /></mesh>
+      <SensorMarker x={ego.x} y={ego.y} z={ego.z} yaw={0} sensor={sensor} color="#0a84ff" showFov={false} scale={2} />
+    </>
+  );
   const frameLabel = `Frame ${frame + 1} of ${N_FRAMES} · t ${(frame * DT).toFixed(1)} s`;
-  const HOME: [number, number, number] = [-6, -34, 22], TARGET: [number, number, number] = [-6, 0, 0];
+  const HOME: [number, number, number] = [-6, -12, 36], TARGET: [number, number, number] = [-6, 1, 0];
   const objectsView = (labelText: string) => (
     <Viewport id="mv-3d" bgOverride="#ffffff" label={labelText} labelPos="tl" labelTop={12} home={HOME} target={TARGET} gridSize={5}>
       {cur && <CloudLayer cloud={cur.points} mode="cluster" colorOpts={{ clusterLabels: cur.labels }} size={Math.max(2, s.view.pointSize)} budget={200000} pickable={false} />}
@@ -112,7 +121,7 @@ export default function TabMoving() {
   );
   const viewport = step === 'drive' ? (
     <Viewport id="mv-drive" bgOverride="#ffffff" label={`The drive · t ${(frame * DT).toFixed(1)} s`} labelPos="tl" labelTop={12} home={HOME} target={TARGET} gridSize={5}>
-      <SceneLayer scene={scenes[frame]} opacity={0.95} showCeiling={false} interactive={false} hide={['buildings-north', 'buildings-south']} />
+      <SceneLayer scene={scenes[frame]} opacity={0.95} showCeiling={false} interactive={false} />
       {egoLine}{egoMark}
     </Viewport>
   ) : step === 'clouds' ? (
@@ -122,7 +131,8 @@ export default function TabMoving() {
     </Viewport>
   ) : step === 'graphs' ? half(objectsView(`Segmented ${frameLabel}`), <FrameGraph segs={cur?.segs ?? []} ego={ego} frame={frame} tracks={shown} />)
   : step === 'temporal' ? half(objectsView(frameLabel), <Timeline tracks={shown} frame={frame} onFrame={setFrame} />)
-  : half(objectsView(frameLabel), eventsList);
+  : step === 'results' ? half(objectsView(frameLabel), eventsList)
+  : half(objectsView(frameLabel), <Timeline tracks={shown} frame={frame} onFrame={setFrame} />);
 
   const timeSection = (
     <Section title="Time">
@@ -132,8 +142,12 @@ export default function TabMoving() {
   );
   const controls = (
     <>
-      <Seg value={step} onChange={(v) => { setStep(v); }} label="Steps" options={[{ value: 'drive', label: '1 Drive' }, { value: 'clouds', label: '2 Clouds' }, { value: 'graphs', label: '3 Graphs' }, { value: 'temporal', label: '4 Over time' }, { value: 'results', label: '5 Results' }]} />
-      {step !== 'results' && timeSection}
+      <div role="group" aria-label="Steps" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6, padding: '4px 0 2px' }}>
+        {([['drive', '1 Drive'], ['clouds', '2 Clouds'], ['graphs', '3 Graphs'], ['temporal', '4 Over time'], ['results', '5 Results'], ['ask', '6 Ask AI']] as const).map(([v, label]) => (
+          <button key={v} aria-pressed={step === v} onClick={() => setStep(v)} className="btn" style={{ whiteSpace: 'nowrap', padding: '0.45rem 0.3rem', fontSize: '0.875rem', background: step === v ? 'var(--accent)' : undefined, color: step === v ? '#fff' : undefined }}>{label}</button>
+        ))}
+      </div>
+      {step !== 'results' && step !== 'ask' && timeSection}
       {step === 'drive' && (
         <Section title="1 · The drive">
           <p className="hint">A vehicle with a roof LiDAR drives along a street at 4 m/s. A pedestrian crosses the road in front of it, one walks along the pavement, one stands, a slower car is ahead and one comes the other way. Press Play to watch.</p>
@@ -172,18 +186,30 @@ export default function TabMoving() {
           <p className="hint">The events are on the right. Click one to jump to that frame.</p>
         </Section>
         {timeSection}
-        <Section title="Ask a language model">
-          <p className="hint">The temporal graph is written as text and sent to DeepSeek Flash (<span className="mono">{DEEPSEEK_MODEL}</span>). It reads exact numbers, not raw points, so it can answer about motion.</p>
-          <div className="chip-row">{QUESTIONS.map((t) => <button key={t} className="chip" onClick={() => setQ(t)}>{t}</button>)}</div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 8 }}>
-            <input type="text" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Question" data-testid="mv-question" />
-            <Btn variant="primary" onClick={askAi} busy={aiBusy} disabled={!segs} testId="mv-ask">Ask DeepSeek Flash</Btn>
-          </div>
-          <PromptView system={prompt.system} user={prompt.user} testId="mv-prompt" />
-          {needKey && <label className="field"><span>Your DeepSeek key (kept only in this browser)</span><input type="password" value={ownKey} onChange={(e) => { setOwnKey(e.target.value); saveOwnKey(e.target.value); }} placeholder="sk-…" autoComplete="off" /></label>}
-          {aiErr && <Callout kind="warn">{aiErr}</Callout>}
-          {ai && <div className="callout good fade-in" style={{ gap: 6 }} data-testid="mv-answer"><b>DeepSeek's answer</b><Markdown text={ai.r.text} /><span className="caption">{ai.r.promptTokens.toLocaleString()} tokens read · {ai.r.completionTokens.toLocaleString()} written · {(ai.r.ms / 1000).toFixed(1)} s</span></div>}
+      </>)}
+      {step === 'ask' && (<>
+        <Section title="6 · Ask the scene">
+          <p className="hint">The temporal graph is given to DeepSeek Flash (<span className="mono">{DEEPSEEK_MODEL}</span>) as text. Keep asking: it remembers the conversation.</p>
+          <PromptView system={system} user={q || '(your next question)'} testId="mv-prompt" />
         </Section>
+        <div style={{ display: 'grid', gap: 8 }} data-testid="mv-chat">
+          {chat.map((c, i) => (
+            <div key={i} style={{ display: 'grid', gap: 6 }}>
+              <div style={{ justifySelf: 'end', maxWidth: '92%', background: '#0a84ff', color: '#fff', borderRadius: '14px 14px 4px 14px', padding: '6px 10px', fontSize: '0.9rem' }}>{c.q}</div>
+              <div className="callout good" style={{ gap: 4 }} data-testid={i === chat.length - 1 ? 'mv-answer' : undefined}><Markdown text={c.text} /><span className="caption">{c.tokens.toLocaleString()} tokens read · {(c.ms / 1000).toFixed(1)} s</span></div>
+            </div>
+          ))}
+          {aiBusy && <span className="caption">DeepSeek is thinking…</span>}
+          {!chat.length && <div className="chip-row">{QUESTIONS.map((t) => <button key={t} className="chip" onClick={() => void askAi(t)} disabled={!segs}>{t}</button>)}</div>}
+          {chat.length > 0 && <div className="chip-row">{QUESTIONS.filter((t) => !chat.some((c) => c.q === t)).map((t) => <button key={t} className="chip" onClick={() => void askAi(t)} disabled={aiBusy}>{t}</button>)}</div>}
+        </div>
+        {aiErr && <Callout kind="warn">{aiErr}</Callout>}
+        {needKey && <label className="field"><span>Your DeepSeek key (kept only in this browser)</span><input type="password" value={ownKey} onChange={(e) => { setOwnKey(e.target.value); saveOwnKey(e.target.value); }} placeholder="sk-…" autoComplete="off" /></label>}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 8, position: 'sticky', bottom: 0, background: 'var(--bg)', padding: '8px 0' }}>
+          <input type="text" value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && void askAi()} placeholder="Ask about this drive…" aria-label="Question" data-testid="mv-question" />
+          <Btn variant="primary" onClick={() => void askAi()} busy={aiBusy} disabled={!segs || !q.trim()} testId="mv-ask">Ask</Btn>
+        </div>
+        {chat.length > 0 && <Btn sm onClick={() => setChat([])}>Clear the conversation</Btn>}
       </>)}
     </>
   );
