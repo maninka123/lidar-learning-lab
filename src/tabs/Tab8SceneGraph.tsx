@@ -9,9 +9,9 @@ import { className, classColor } from '../scenes/classes';
 import { Viewport } from '../ui/Viewport';
 import { TabFrame } from '../ui/TabFrame';
 import { Btn, Callout, Section, Select, Seg, Slider, Toggle, Badge, fmtN } from '../ui/controls';
-import { CloudLayer, BoxOutline, SensorMarker } from '../ui/three';
+import { CloudLayer, BoxOutline } from '../ui/three';
 import { ExternalLink, Cpu, Play } from '../ui/icons';
-import { buildGraph, nodesFromLabelledClusters, REL_LABEL, RelType, SceneGraph, GraphNode, scannerGap } from '../graph/sceneGraph';
+import { buildGraph, nodesFromLabelledClusters, REL_LABEL, RelType, SceneGraph, GraphNode } from '../graph/sceneGraph';
 import { answerQuery, QueryAnswer, SUPPORTED_QUESTIONS, LLM_TOOL_SCHEMA } from '../graph/query';
 import { circularLayout } from '../graph/layout';
 import { Vec3 } from '../core/math';
@@ -94,8 +94,7 @@ export default function Tab8() {
   useEffect(() => { void loadClassroomForSegmentation().then(setCloud).catch((e) => s.notify((e as Error).message, 'error')); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const classCloud = useMemo(() => (cloud ? paintClasses(cloud) : null), [cloud]);
   const truthNodes = useMemo(() => (cloud ? nodesFromClassroom(cloud) : []), [cloud]);
-  const [vp, setVp] = useState({ x: 0, y: 0 }); // where the "scanner" stands in the room
-  const scannerPos: Vec3 = [vp.x, vp.y, 1.2];
+  const scannerPos: Vec3 = [0, 0, 1.2]; // the graph code wants a viewpoint for left / right; the room centre is used and never shown
   const g = s.graph;
   const setG = (patch: Partial<typeof g>) => useLab.setState({ graph: { ...useLab.getState().graph, ...patch } });
   const [q, setQ] = useState('');
@@ -132,7 +131,7 @@ export default function Tab8() {
     const nodes = g.source === 'segmentation' && seg ? nodesFromLabelledClusters(seg, s.seg.names) : truthNodes;
     const gr = buildGraph(nodes, { pos: scannerPos, yaw: 0 }, undefined, g.nearThreshold);
     setG({ graph: gr });
-  }, [g.source, g.nearThreshold, truthNodes, vp.x, vp.y, seg, s.seg.names]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [g.source, g.nearThreshold, truthNodes, seg, s.seg.names]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // step 3: the scene graph as text
   const [gBusy, setGBusy] = useState(false), [gErr, setGErr] = useState<string | null>(null), [gAns, setGAns] = useState<{ q: string; r: AiResult } | null>(null);
@@ -140,8 +139,8 @@ export default function Tab8() {
     if (!graph) return '';
     const f = (v: number) => v.toFixed(2), lab = (id: string) => graph.nodes.find((n) => n.id === id)?.label ?? id;
     const objs = graph.nodes.filter((n) => !n.structural);
-    const L = [`Scanner at (${f(graph.scanner.pos[0])}, ${f(graph.scanner.pos[1])}, ${f(graph.scanner.pos[2])}) m. Units are metres; z is up.`, 'OBJECTS (name: centre x y z; size x y z; distance from the scanner to its surface):'];
-    objs.forEach((n) => L.push(`${n.label}: ${n.position.map(f).join(' ')}; ${n.dimensions.map(f).join(' ')}; ${f(scannerGap(graph.scanner.pos, n))} m from the scanner`));
+    const L = ['Units are metres; z is up.', 'OBJECTS (name: centre x y z; size x y z):'];
+    objs.forEach((n) => L.push(`${n.label}: ${n.position.map(f).join(' ')}; ${n.dimensions.map(f).join(' ')}`));
     L.push('RELATIONS:');
     graph.edges.filter((e) => ['near', 'above', 'below'].includes(e.type)).slice(0, 700).forEach((e) => L.push(`${lab(e.from)} ${REL_LABEL[e.type]} ${lab(e.to)}${e.value !== undefined ? ` (${f(e.value)} m)` : ''}`));
     return L.join('\n');
@@ -170,7 +169,6 @@ export default function Tab8() {
     setQ(text);
     setG({ answers: [{ q: text, a: a.answer }, ...g.answers].slice(0, 8), queried: true });
   };
-  const closest = graph ? [...objs].sort((a, b) => scannerGap(graph.scanner.pos, a) - scannerGap(graph.scanner.pos, b))[0] : null;
 
   const selectNode = (id: string | null) => setG({ selectedNode: id });
   const hlIds = [...new Set([...(sel ? [sel.id] : []), ...highlight])];
@@ -187,7 +185,6 @@ export default function Tab8() {
         <Viewport id="sg3d" home={[8, -10, 6.5]} target={[0, 0, 1.2]} hideGrid hideAxes bgOverride="#ffffff">
           {classCloud && <CloudLayer cloud={classCloud} mode="rgb" size={Math.max(2, s.view.pointSize - 1)} budget={Math.max(s.view.renderBudget, 150000)} pickable={false} clip={{ on: true, min: -1, max: 2.28 }} />}
           {graph && nodes.filter((n) => !n.structural).map((n) => <BoxOutline key={n.id} bbox={n.bbox} color={hlIds.includes(n.id) ? '#ffd60a' : g.source === 'segmentation' ? '#ff375f' : '#0a84ff'} dashed={g.source === 'segmentation'} />)}
-          <SensorMarker x={scannerPos[0]} y={scannerPos[1]} z={scannerPos[2]} yaw={0} sensor={s.sensor} label="Scanner" showFov={false} scale={1.4} />
         </Viewport>
       </div>
       <div style={{ position: 'relative', background: 'var(--bg)' }}>
@@ -200,7 +197,6 @@ export default function Tab8() {
   const viewport = pane === 'direct' ? rawView : graphViewport;
   const stats = [
     { k: 'Objects', v: objs.length, s: `${graph ? graph.edges.length : 0} relations` },
-    { k: 'Closest to scanner', v: closest ? closest.label : '—', s: closest && graph ? `${scannerGap(graph.scanner.pos, closest).toFixed(2)} m away` : undefined },
   ];
 
   const controls = (
@@ -246,13 +242,11 @@ export default function Tab8() {
         <Seg value={g.source} onChange={(source) => setG({ source })} options={[{ value: 'ground-truth', label: 'True objects' }, { value: 'segmentation', label: 'My labelled clusters' }]} />
         {g.source === 'segmentation' && (!seg || !Object.values(s.seg.names).some(Boolean)) && <Callout kind="warn">Run Clustering & Segmentation (tab 11) and label the clusters in its Results. The clusters you named become the objects of this graph.</Callout>}
         <Slider label="“Near” threshold" value={g.nearThreshold} min={0.1} max={2} step={0.05} unit=" m" format={(v) => v.toFixed(2)} onChange={(nearThreshold) => setG({ nearThreshold })}  />
-        <Slider label="Scanner position, left–right" value={vp.x} min={-3.5} max={3.5} step={0.1} unit=" m" format={(v) => v.toFixed(1)} onChange={(x) => setVp({ ...vp, x })} />
-        <Slider label="Scanner position, front–back" value={vp.y} min={-5.5} max={5.5} step={0.1} unit=" m" format={(v) => v.toFixed(1)} onChange={(y) => setVp({ ...vp, y })} />
         <Toggle label="Show floor / walls" checked={showStructural} onChange={setShowStructural} />
       </Section>
       <Section title="Relations shown">
         <div className="chip-row">{(Object.keys(REL_LABEL) as RelType[]).map((t) => <button key={t} className="chip" aria-pressed={!!g.filters[t]} onClick={() => setG({ filters: { ...g.filters, [t]: !g.filters[t] } })}><span style={{ color: g.filters[t] ? '#fff' : REL_COLOR[t] }}>●</span> {REL_LABEL[t]}</button>)}</div>
-        <span className="caption">Left/right are as seen from the scanner. Boxes are axis-aligned, so “intersects” is conservative.</span>
+        <span className="caption">Boxes are axis-aligned, so “intersects” is conservative.</span>
       </Section>
       </>)}
       {pane === 'ai' && (<>
@@ -302,12 +296,6 @@ export default function Tab8() {
           </div>
         </Section>
       )}
-      <Section title="Challenge question">
-        <p>Which object is closest to the scanner?</p>
-        <Select value={g.quizAnswer || ''} options={[{ value: '', label: 'Choose…' }, ...objs.map((o) => ({ value: o.id, label: o.label }))]} onChange={(quizAnswer) => setG({ quizAnswer })} />
-        {g.quizAnswer && closest && <Callout kind={g.quizAnswer === closest.id ? 'good' : 'bad'}>{g.quizAnswer === closest.id ? `Correct — ${closest.label}, ${graph ? scannerGap(graph.scanner.pos, closest).toFixed(2) : ''} m from the scanner surface.` : 'Not quite. Ask the graph: “Which object is closest to the scanner?”'}</Callout>}
-        <span className="caption">Move the scanner in the Graph section to change the answer.</span>
-      </Section>
       <Section title="Using a real LLM">
         <p className="hint">Not active in this app. A real LLM would call tools on a server that read this graph and do the geometry, so it never invents a measurement.</p>
         <Btn sm onClick={() => setShowLLM(!showLLM)}>{showLLM ? 'Hide' : 'Show'} example tool contract</Btn>
