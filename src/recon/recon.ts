@@ -120,7 +120,13 @@ export function orbitCameras(k: number, radius: number, elevDeg: number, center:
 }
 
 // ---------------------------------------------------------------- reconstruction (simulated pipelines)
-export interface ReconParams { object: ReconObjectId; method: ReconMethod; views: number; seed: number }
+export interface ReconParams { object: ReconObjectId; method: ReconMethod; views: number; seed: number; /** photos the user took; without them the cameras orbit the scene evenly */ cams?: Camera[] }
+
+/** A camera looking at the middle of a scene from a compass angle, a height angle and a distance. */
+export function captureCamera(object: ReconObjectId, azimuthDeg: number, elevDeg: number, distance: number): Camera {
+  const info = RECON_SCENES[object], a = azimuthDeg * D2R, e = elevDeg * D2R;
+  return { pos: [distance * Math.cos(e) * Math.cos(a), distance * Math.cos(e) * Math.sin(a), info.centerZ + distance * Math.sin(e)] as Vec3, target: [0, 0, info.centerZ], fovDeg: 50 };
+}
 export interface ReconOutput {
   cloud: PointCloud;
   mesh: { positions: Float32Array; indices: Uint32Array };
@@ -218,7 +224,7 @@ export function reconstruct(p: ReconParams): ReconOutput {
   const W = 200, H = 150;
   const notes: string[] = [];
   const k = info.radius / 2.2;
-  const photoCam: Camera = { pos: [1.8 * k, -1.6 * k, info.centerZ + 0.7 * k], target: center, fovDeg: 50 };
+  const photoCam: Camera = p.cams?.[0] ?? { pos: [1.8 * k, -1.6 * k, info.centerZ + 0.7 * k], target: center, fovDeg: 50 };
   const PW = 400, PH = 300;
   const photoView = renderView(scene, photoCam, PW, PH);
   const photo = { w: PW, h: PH, rgb: photoView.rgb };
@@ -237,10 +243,10 @@ export function reconstruct(p: ReconParams): ReconOutput {
     backProject(v, (i, j, z) => a * z + b * k + 0.05 * k * Math.sin(i / 17 + phase) * Math.cos(j / 23 - phase) + 0.004 * rng.gauss(), 1, col, pos);
     notes.push('Error model of a single-image depth estimator (scale/shift ambiguity + smooth distortion). Not a neural network output.');
   } else {
-    cams = orbitCameras(Math.max(2, p.views), info.radius, p.method === 'rgbd' ? info.elev - 3 : info.elev + 3, center, rng.range(0, 60));
+    cams = p.cams && p.cams.length >= 2 ? p.cams : orbitCameras(Math.max(2, p.views), info.radius, p.method === 'rgbd' ? info.elev - 3 : info.elev + 3, center, rng.range(0, 60));
     const pc: PointCloud[] = [];
     cams.forEach((cam, ci) => {
-      if (ci < 6) photos.push({ label: `${p.method === 'rgbd' ? 'RGB-D frame' : 'Photo'} ${ci + 1} of ${cams.length}`, w: PW, h: PH, rgb: renderView(scene, cam, PW, PH).rgb });
+      if (ci < 6) photos.push({ label: `${p.cams?.length ? 'Your' : ''} ${p.method === 'rgbd' ? 'RGB-D frame' : 'photo'} ${ci + 1} of ${cams.length}`.trim().replace(/^./, (c) => c.toUpperCase()), w: PW, h: PH, rgb: renderView(scene, cam, PW, PH).rgb });
       // Photogrammetry: camera poses come from SfM, so they are slightly wrong. RGB-D: tracked / known poses.
       const noisyCam: Camera = p.method === 'photogrammetry'
         ? { ...cam, pos: [cam.pos[0] + 0.012 * rng.gauss(), cam.pos[1] + 0.012 * rng.gauss(), cam.pos[2] + 0.012 * rng.gauss()] as Vec3, target: [cam.target[0] + 0.01 * rng.gauss(), cam.target[1] + 0.01 * rng.gauss(), cam.target[2] + 0.01 * rng.gauss()] as Vec3 }

@@ -6,7 +6,7 @@ import { Btn, Callout, Section, Select, Seg, Slider, Toggle, NumberField, Badge,
 import { CloudLayer, SceneLayer, MeshLayer } from '../ui/three';
 import { Play, Upload } from '../ui/icons';
 import { runTask } from '../engine/client';
-import { reconScene, surfaceMesh, renderView, RECON_SCENES, ReconMethod, ReconObjectId } from '../recon/recon';
+import { reconScene, surfaceMesh, renderView, captureCamera, RECON_SCENES, ReconMethod, ReconObjectId, Camera } from '../recon/recon';
 import { PointCloud } from '../core/pointcloud';
 import { applySim } from '../registration/icp';
 import { turbo } from '../core/colorize';
@@ -30,6 +30,33 @@ function PhotoCanvas({ photo, width }: { photo: { w: number; h: number; rgb: Uin
   return <canvas ref={ref} style={{ width, height: 'auto', aspectRatio: `${photo.w} / ${photo.h}`, borderRadius: 10, display: 'block', background: '#e5e5ea' }} aria-label="Synthetic photograph" />;
 }
 
+/** A small side view of a reconstruction, seen from the direction of the last photo. */
+function ReconTile({ cloud, azimuth, width }: { cloud: PointCloud; azimuth: number; width: number }) {
+  const ref = useRef<HTMLCanvasElement>(null);
+  const H = Math.round(width * 0.68);
+  useEffect(() => {
+    const cv = ref.current; if (!cv) return;
+    cv.width = width * 2; cv.height = H * 2;
+    const g = cv.getContext('2d')!; g.fillStyle = '#1c2028'; g.fillRect(0, 0, cv.width, cv.height);
+    const a = azimuth * Math.PI / 180, ca = Math.cos(a), sa = Math.sin(a), step = Math.max(1, Math.floor(cloud.count / 25000));
+    const pts: number[][] = []; let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+    for (let i = 0; i < cloud.count; i += step) {
+      const x = cloud.positions[i * 3], y = cloud.positions[i * 3 + 1], z = cloud.positions[i * 3 + 2];
+      const u = -sa * x + ca * y, d = ca * x + sa * y;
+      pts.push([u, z, d, i]); x0 = Math.min(x0, u); x1 = Math.max(x1, u); y0 = Math.min(y0, z); y1 = Math.max(y1, z);
+    }
+    const sc = 0.88 * Math.min(cv.width / ((x1 - x0) || 1), cv.height / ((y1 - y0) || 1));
+    pts.sort((p, q) => p[2] - q[2]);
+    for (const [u, z, , i] of pts) {
+      g.fillStyle = cloud.colors ? `rgb(${cloud.colors[i * 3]},${cloud.colors[i * 3 + 1]},${cloud.colors[i * 3 + 2]})` : '#bf5af2';
+      g.fillRect(cv.width / 2 + (u - (x0 + x1) / 2) * sc, cv.height * 0.94 - (z - y0) * sc, 3, 3);
+    }
+  }, [cloud, azimuth, width, H]);
+  return <canvas ref={ref} data-testid="recon-tile" style={{ width, height: H, borderRadius: 10, display: 'block' }} aria-label="Reconstruction preview" />;
+}
+
+type Capture = { cam: Camera; az: number; photo: { w: number; h: number; rgb: Uint8ClampedArray } };
+
 export default function Tab7() {
   const s = useLab();
   const r = s.recon;
@@ -41,6 +68,18 @@ export default function Tab7() {
   const [rgbColour, setRgbColour] = useState(true);
   const scene = useMemo(() => reconScene(r.object), [r.object]);
   const info = RECON_SCENES[r.object];
+  // photos the user takes with a virtual camera
+  const [az, setAz] = useState(35), [el, setEl] = useState(info.elev), [dist, setDist] = useState(info.radius);
+  const [caps, setCaps] = useState<Capture[]>([]);
+  useEffect(() => { setCaps([]); setEl(RECON_SCENES[r.object].elev); setDist(RECON_SCENES[r.object].radius); }, [r.object]);
+  const liveCam = useMemo(() => captureCamera(r.object, az, el, dist), [r.object, az, el, dist]);
+  const live = useMemo(() => { const v = renderView(reconScene(r.object), liveCam, 240, 180); return { w: 240, h: 180, rgb: v.rgb }; }, [r.object, liveCam]);
+  const capture = () => setCaps((c) => (c.length >= 16 ? c : [...c, { cam: liveCam, az, photo: live }]));
+  const gapDeg = useMemo(() => {
+    if (caps.length < 2) return 360;
+    const a = caps.map((c) => ((c.az % 360) + 360) % 360).sort((x, y) => x - y);
+    return Math.max(...a.map((v, i) => (i + 1 < a.length ? a[i + 1] - v : a[0] + 360 - v)));
+  }, [caps]);
   // a small photo of every scene for the picker
   const thumbs = useMemo(() => (Object.keys(RECON_SCENES) as ReconObjectId[]).map((id) => {
     const k = RECON_SCENES[id].radius / 2.2;
@@ -84,7 +123,8 @@ export default function Tab7() {
   async function genRecon() {
     if (method === 'external') { fileRef.current?.click(); return; }
     setBusy('Reconstructing from images…');
-    try { const o = await runTask('recon', { params: { object: r.object, method, views: r.views, seed: r.seed } }); setR({ out: o, method, align: null, cmp: null, layer: 'recon', layout: 'single' }); } catch (e) { s.notify((e as Error).message, 'error'); } finally { setBusy(null); }
+    try { const used = caps.length >= (method === 'monocular' ? 1 : 2) ? caps.map((c) => c.cam) : undefined;
+      const o = await runTask('recon', { params: { object: r.object, method, views: r.views, seed: r.seed, cams: used } }); setR({ out: o, method, align: null, cmp: null, layer: 'recon', layout: 'single' }); } catch (e) { s.notify((e as Error).message, 'error'); } finally { setBusy(null); }
   }
   async function align() {
     if (!r.lidar || !recon) return;
@@ -175,6 +215,27 @@ export default function Tab7() {
         </div>
         <p className="hint">{info.blurb}</p>
       </Section>
+      <Section title="Take photos">
+        <p className="hint">Move the camera, then capture. The 3D scene is built only from the photos you take, so where you stand decides what can be rebuilt.</p>
+        <PhotoCanvas photo={live} width="100%" />
+        <Slider label="Walk around" value={az} min={0} max={359} step={1} unit="°" onChange={setAz} />
+        <Slider label="Camera height" value={el} min={5} max={70} step={1} unit="°" onChange={setEl} />
+        <Slider label="Distance" value={dist} min={info.radius * 0.6} max={info.radius * 1.5} step={0.05} unit=" m" format={(v) => v.toFixed(1)} onChange={setDist} />
+        <div style={{ display: 'flex', gap: 8 }}>
+          <Btn variant="primary" onClick={capture} disabled={caps.length >= 16} testId="capture-image">Capture image</Btn>
+          <Btn onClick={() => setCaps([])} disabled={!caps.length}>Clear</Btn>
+        </div>
+        {caps.length > 0 && (
+          <>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6 }} data-testid="captured-photos">
+              {caps.map((c, i) => (
+                <button key={i} onClick={() => setCaps(caps.filter((_, j) => j !== i))} title="Remove this photo" style={{ border: 0, padding: 0, background: 'none', cursor: 'pointer' }}><PhotoCanvas photo={c.photo} width="100%" /></button>
+              ))}
+            </div>
+            <p className="hint">{caps.length} photo{caps.length === 1 ? '' : 's'}{caps.length >= 2 ? `. Largest gap between viewpoints: ${Math.round(gapDeg)}°${gapDeg > 120 ? ', so a whole side will be missing' : ''}.` : '. Take at least 2 for a multi-view result.'}</p>
+          </>
+        )}
+      </Section>
       <Section title="Photos or depth frames">
         <Select label="Image-based method" value={method} options={METHODS} onChange={(m) => { setMethod(m); setR({ align: null, cmp: null }); }} />
         {method === 'photogrammetry' && <p className="hint">Several photos → matching → depth fusion. Textureless faces fail, scale is unknown, poses carry small errors.</p>}
@@ -183,8 +244,14 @@ export default function Tab7() {
         {method === 'external' && <p className="hint">Upload a PLY/PCD you produced with NeRF, 3D Gaussian Splatting or an image-to-3D model (export the point cloud / mesh vertices).</p>}
         {(method === 'photogrammetry' || method === 'rgbd') && <Slider label="Number of views" value={r.views} min={2} max={16} step={1} onChange={(views) => setR({ views })} />}
         <input ref={fileRef} type="file" accept=".ply,.pcd,.las" hidden onChange={async (e) => { const f = e.target.files?.[0]; if (f) { try { const c = await loadFile(f); c.meta.kind = 'reconstructed'; setR({ ai: c, align: null, cmp: null }); } catch (err) { s.notify((err as Error).message, 'error'); } } e.target.value = ''; }} />
-        <Btn variant="primary" icon={method === 'external' ? <Upload size={15} /> : <Play size={15} />} onClick={genRecon} busy={busy?.startsWith('Reconstructing') ?? false}>{method === 'external' ? 'Upload result' : 'Reconstruct in 3D'}</Btn>
+        <Btn variant="primary" icon={method === 'external' ? <Upload size={15} /> : <Play size={15} />} onClick={genRecon} busy={busy?.startsWith('Reconstructing') ?? false}>{method === 'external' ? 'Upload result' : caps.length ? `Create 3D scene from ${caps.length} photo${caps.length === 1 ? '' : 's'}` : 'Create 3D scene (automatic photos)'}</Btn>
       </Section>
+      {recon && (
+        <Section title="Result">
+          <ReconTile cloud={reconShown ?? recon} azimuth={caps.length ? caps[caps.length - 1].az : 35} width={300} />
+          <span className="caption">{fmtN(recon.count)} points, seen from the direction of your last photo. Compare it with the photos above, then press Compare for the error against LiDAR.</span>
+        </Section>
+      )}
       </>)}
       {pane === 'build' && (<>
       <Section title="Surface reconstruction (meshing)">

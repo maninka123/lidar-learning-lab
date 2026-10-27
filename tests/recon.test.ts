@@ -39,3 +39,13 @@ describe('scenes', () => {
     }, 120000);
   }
 });
+
+import { captureCamera } from '../src/recon/recon';
+describe('captured photos', () => {
+  it('rebuilds only what the photos saw: a one-sided set gives fewer points than a full ring', () => {
+    const side = [20, 40, 60].map((a) => captureCamera('desk', a, 28, 3.1));
+    const ring = [0, 90, 180, 270].map((a) => captureCamera('desk', a, 28, 3.1));
+    const a = reconstruct({ object: 'desk', method: 'rgbd', views: 3, seed: 5, cams: side }), b = reconstruct({ object: 'desk', method: 'rgbd', views: 4, seed: 5, cams: ring });
+    expect(a.photos.length).toBe(2 + 3); expect(a.cloud.count).toBeGreaterThan(500); expect(b.cloud.count).toBeGreaterThan(a.cloud.count);
+  }, 60000);
+});

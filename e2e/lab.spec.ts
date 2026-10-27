@@ -180,6 +180,11 @@ test.describe('LiDAR Learning Lab', () => {
     await expect(page.getByTestId('scene-picker')).toBeVisible();
     await page.getByTestId('scene-living').click();
     await expect.poll(() => state(page, (s) => s.recon.object)).toBe('living');
+    await page.getByTestId('scene-chair').click();
+    for (const a of ['0', '120', '240']) { await page.getByLabel('Walk around').fill(a); await page.getByTestId('capture-image').click(); }
+    await expect(page.getByTestId('captured-photos').locator('canvas')).toHaveCount(3);
+    await page.getByRole('button', { name: /Create 3D scene from 3 photos/ }).click();
+    await expect(page.getByTestId('recon-tile')).toBeVisible({ timeout: 60000 });
     await expect.poll(() => state(page, (s) => !!s.recon.lidar), { timeout: 60000 }).toBe(true);
     await page.getByTestId('reconstruct').click();
     await expect.poll(() => state(page, (s) => !!s.recon.out), { timeout: 60000 }).toBe(true);
