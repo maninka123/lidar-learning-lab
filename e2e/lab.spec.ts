@@ -47,6 +47,14 @@ test.describe('LiDAR Learning Lab', () => {
     await page.getByTestId('raw-toggle').click();
     await page.getByTestId('points-only').click();
     await page.getByTestId('points-only').click();
+    await page.getByTestId('scene-only').click(); // just the room and the person
+    await expect(page.getByTestId('scene-only')).toContainText('Show beams');
+    await expect(page.getByTestId('stats-card')).toHaveCount(0);
+    await page.getByTestId('points-only').click(); // the two views exclude each other
+    await expect(page.getByTestId('scene-only')).toContainText('Scene only');
+    await expect(page.getByTestId('points-only')).toContainText('Show scene');
+    await page.getByTestId('points-only').click();
+    await expect(page.getByTestId('stats-card')).toHaveCount(1);
     await page.getByTestId('play-pause').click();
     await expect(page.getByTestId('play-pause')).toHaveAttribute('aria-label', 'Play the light pulse');
     await page.getByTestId('nav-toggle').click();

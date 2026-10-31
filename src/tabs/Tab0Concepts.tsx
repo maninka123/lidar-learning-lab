@@ -13,7 +13,7 @@ import { makeRng } from '../core/rng';
 import { viridis, turbo } from '../core/colorize';
 import { D2R } from '../core/math';
 import { useLab } from '../state/store';
-import { Play, Pause, FileText, Dots, X } from '../ui/icons';
+import { Play, Pause, FileText, Dots, Eye, X } from '../ui/icons';
 import { writePCD } from '../io/pcd';
 import { downloadBlob } from '../io/load';
 
@@ -196,6 +196,8 @@ export default function Tab0() {
   const closeCard = () => { setSel(null); setPulseOn(false); };
   const showAxes = useLab((s) => s.view.showAxes);
   const [pointsOnly, setPointsOnly] = useState(false);
+  const [sceneOnly, setSceneOnly] = useState(false); // just the room and the person: no beams, points or measurements
+  const detail = !pointsOnly && !sceneOnly;
   const [rawOpen, setRawOpen] = useState(false);
   const [pane, setPane] = useState<'notes' | 'controls'>('controls');
   const [active, setActive] = useState<string | null>(null);
@@ -317,6 +319,7 @@ export default function Tab0() {
         <mesh position={[0.17, 0, 0]} rotation={[0, 0, -Math.PI / 2]} raycast={() => null}><coneGeometry args={[0.07, 0.16, 12]} /><meshStandardMaterial color="#1d1d1f" /></mesh>
       </group>
 
+      {detail && (<>
       {/* live measurements: they light up orange when you change the matching slider */}
       <AngleArc active={active === 'h'} color="#007aff" label={`${hFov}° horizontal FOV`} labelAt={[Math.min(3.4, D * 0.5) * 1.12, 0, zs + 0.3]}
         pts={Array.from({ length: 33 }, (_, k) => { const a = (-hFov / 2 + (hFov * k) / 32) * D2R, R = Math.min(3.4, D * 0.5); return [R * Math.cos(a), R * Math.sin(a), zs] as V3; })} />
@@ -347,18 +350,19 @@ export default function Tab0() {
       )}
       {beams.length <= 520 && beams.filter((b) => b.hit).map((b) => <Footprint key={b.i} b={b} radius={spot(b.r) / 2} active={active === 'spot'} />)}
       </>)}
-      <points geometry={hitGeom} frustumCulled={false} onClick={(e) => { e.stopPropagation(); const card = e.intersections.find((it) => (it.object as THREE.Object3D).userData?.isCard); if (card) { const uv = card.uv; if (uv && uv.x > 0.82 && uv.y > 0.6) closeCard(); return; } const k = e.index; const idx = k !== undefined ? shown[k]?.i : undefined; if (idx !== undefined) setSel((cur) => (cur === idx ? null : idx)); setPulseOn(true); }}>
+      </>)}
+      {!sceneOnly && <points geometry={hitGeom} frustumCulled={false} onClick={(e) => { e.stopPropagation(); const card = e.intersections.find((it) => (it.object as THREE.Object3D).userData?.isCard); if (card) { const uv = card.uv; if (uv && uv.x > 0.82 && uv.y > 0.6) closeCard(); return; } const k = e.index; const idx = k !== undefined ? shown[k]?.i : undefined; if (idx !== undefined) setSel((cur) => (cur === idx ? null : idx)); setPulseOn(true); }}>
         <pointsMaterial vertexColors size={pointsOnly ? 7 : 6} sizeAttenuation={false} map={roundPointTexture()} alphaTest={0.5} />
-      </points>
-      {sel !== null && focus && (focus.hit
+      </points>}
+      {!sceneOnly && sel !== null && focus && (focus.hit
         ? <CardSprite position={focus.p} lines={[`Point #${focus.i + 1}`]} table={{ head: ['x (m)', 'y (m)', 'z (m)', 'intensity'], row: [focus.p[0].toFixed(2), focus.p[1].toFixed(2), focus.p[2].toFixed(2), focus.I.toFixed(3)] }} onClose={closeCard} />
         : focus.rGeo > 0
           ? <CardSprite accent="#c4163f" position={focus.p} onClose={closeCard} lines={focus.rGeo > effRange(maxRange, focus.rho)
             ? [`Point #${focus.i + 1}: no return`, `Range  ${focus.rGeo.toFixed(1)} m`, `Max range here  ${effRange(maxRange, focus.rho).toFixed(1)} m`, 'Too far for this surface']
             : [`Point #${focus.i + 1}: no return`, `Intensity  ${focus.IGeo.toFixed(3)} < ${DETECT}`, 'Too little light came back']} />
           : <CardSprite accent="#666666" position={focus.p} lines={[`Point #${focus.i + 1}: no return`, 'This beam hit nothing']} onClose={closeCard} />)}
-      {focus?.hit && <mesh position={focus.p} raycast={() => null}><ringGeometry args={[0.14, 0.2, 24]} /><meshBasicMaterial color="#ff9f0a" side={THREE.DoubleSide} depthTest={false} /></mesh>}
-      {!pointsOnly && pulseOn && focus?.hit && <Pulse from={new THREE.Vector3(0, 0, zs)} to={new THREE.Vector3(...focus.p)} slow={slow} playing={playing} onTick={setPhase} />}
+      {!sceneOnly && focus?.hit && <mesh position={focus.p} raycast={() => null}><ringGeometry args={[0.14, 0.2, 24]} /><meshBasicMaterial color="#ff9f0a" side={THREE.DoubleSide} depthTest={false} /></mesh>}
+      {detail && pulseOn && focus?.hit && <Pulse from={new THREE.Vector3(0, 0, zs)} to={new THREE.Vector3(...focus.p)} slow={slow} playing={playing} onTick={setPhase} />}
     </Viewport>
   );
 
@@ -448,8 +452,8 @@ export default function Tab0() {
       controls={controls}
       learn={null}
       simple
-      viewExtras={<><button className="btn icon primary" style={{ width: 38, height: 38, borderRadius: 19, padding: 0 }} onClick={() => setPlaying(!playing)} data-testid="play-pause" aria-label={playing ? 'Pause the light pulse' : 'Play the light pulse'} title={playing ? 'Pause' : 'Play'}>{playing ? <Pause size={18} /> : <Play size={18} />}</button><Btn sm icon={<Dots size={15} />} variant={pointsOnly ? 'primary' : ''} onClick={() => setPointsOnly(!pointsOnly)} testId="points-only">{pointsOnly ? 'Show scene' : 'Point cloud'}</Btn><Btn sm icon={<FileText size={15} />} variant={rawOpen ? 'primary' : ''} onClick={() => setRawOpen(!rawOpen)} testId="raw-toggle">Raw</Btn></>}
-      overlays={
+      viewExtras={<><button className="btn icon primary" style={{ width: 38, height: 38, borderRadius: 19, padding: 0 }} onClick={() => setPlaying(!playing)} data-testid="play-pause" aria-label={playing ? 'Pause the light pulse' : 'Play the light pulse'} title={playing ? 'Pause' : 'Play'}>{playing ? <Pause size={18} /> : <Play size={18} />}</button><Btn sm icon={<Dots size={15} />} variant={pointsOnly ? 'primary' : ''} onClick={() => { setPointsOnly(!pointsOnly); setSceneOnly(false); }} testId="points-only">{pointsOnly ? 'Show scene' : 'Point cloud'}</Btn><Btn sm icon={<Eye size={15} />} variant={sceneOnly ? 'primary' : ''} onClick={() => { setSceneOnly(!sceneOnly); setPointsOnly(false); }} testId="scene-only">{sceneOnly ? 'Show beams' : 'Scene only'}</Btn><Btn sm icon={<FileText size={15} />} variant={rawOpen ? 'primary' : ''} onClick={() => setRawOpen(!rawOpen)} testId="raw-toggle">Raw</Btn></>}
+      overlays={sceneOnly ? null :
         <>
           <KindLegend items={[{ color: '#007aff', label: 'Laser beams' }, { color: '#34c759', label: 'Beam divergence / spot' }, { color: '#ff9f0a', label: 'Selected point' }]} />
           <div className="sr-only" data-testid="concept-point-info" aria-live="polite">{focus?.hit ? `${sel !== null ? `Point ${focus.i + 1}` : 'Middle beam'}: position ${focus.p.map((v) => v.toFixed(2)).join(', ')} m, range ${focus.r.toFixed(2)} m, reflectivity ${focus.rho.toFixed(2)}, Intensity ${focus.I.toFixed(3)}` : 'No return'}</div>
