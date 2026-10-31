@@ -20,7 +20,7 @@
 <main>
   <section id="login" class="card login hidden">
     <h2>Administrator login</h2>
-    <button id="touchLogin" class="btn primary hidden">Sign in with Touch ID</button>
+    <button id="touchLogin" class="btn primary hidden">Sign in with a passkey</button>
     <form id="loginForm" class="grid">
       <label>Username<input id="user" autocomplete="username" autocapitalize="none" spellcheck="false" required></label>
       <label>Password<input id="pw" type="password" autocomplete="current-password" required></label>
@@ -31,7 +31,7 @@
 
   <div id="app" class="hidden stack">
     <div id="toast" class="msg hidden"></div>
-    <section class="card hidden" id="touchCard"><div class="row between"><span class="muted" id="touchText"></span><button id="touchSetup" class="btn sm">Set up Touch ID</button></div></section>
+    <section class="card hidden" id="touchCard"><div class="row between"><span class="muted" id="touchText"></span><button id="touchSetup" class="btn sm">Set up a passkey</button></div></section>
 
     <section class="card hero" id="workshopCard">
       <div class="card-head"><div class="status"><span class="dot" id="dot"></span><h2 id="statusText">Off</h2></div><span class="faint" id="window"></span></div>

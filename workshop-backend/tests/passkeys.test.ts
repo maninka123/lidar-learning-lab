@@ -3,7 +3,7 @@ import { createHash, createSign, generateKeyPairSync, randomBytes } from 'node:c
 import { admin, mk, setup, Ctx } from './helpers';
 import { adminHandler } from '../lib/handlers';
 
-/** A tiny software "Touch ID": enough CBOR and crypto to act as a platform authenticator (ES256, no attestation). */
+/** A tiny software passkey (like Touch ID, Face ID or Windows Hello): enough CBOR and crypto to act as a platform authenticator (ES256, no attestation). */
 const cbor = (v: unknown): Buffer => {
   const head = (major: number, n: number) => (n < 24 ? Buffer.from([(major << 5) | n]) : n < 256 ? Buffer.from([(major << 5) | 24, n]) : Buffer.from([(major << 5) | 25, n >> 8, n & 255]));
   if (typeof v === 'number') return v >= 0 ? head(0, v) : head(1, -1 - v);
@@ -48,7 +48,7 @@ const loginOpts = (ctx: Ctx, ip = '2.2.2.2') => adminHandler(ctx.deps)(mk('POST'
 let nextIp = 10; // each try comes from its own address, so the per-address limit does not interfere
 const loginWith = (ctx: Ctx, body: unknown, ip = `7.7.7.${nextIp++}`) => adminHandler(ctx.deps)(mk('POST', '/api/admin/passkey-login', { body, ip }));
 
-describe('Touch ID (passkeys)', () => {
+describe('Passkeys', () => {
   it('can be set up only when signed in, and the sign-in page then offers it', async () => {
     const ctx = setup(); const a = admin(ctx);
     expect((await a.call('POST', 'passkey-register-options', {})).status).toBe(401);
@@ -68,7 +68,7 @@ describe('Touch ID (passkeys)', () => {
     expect((await b.call('GET', 'workshop')).status).toBe(200);
   });
 
-  it('refuses a replayed challenge, a wrong origin, a missing Touch ID check, an unknown device and a forged signature', async () => {
+  it('refuses a replayed challenge, a wrong origin, a missing user-verification check, an unknown device and a forged signature', async () => {
     const ctx = setup(); const a = admin(ctx); await a.login(); const { dev } = await register(ctx, a);
     const fresh = async () => (await loginOpts(ctx)).body as { options: { challenge: string }; challengeId: string };
     let o = await fresh(); const good = dev.get(o.options.challenge);

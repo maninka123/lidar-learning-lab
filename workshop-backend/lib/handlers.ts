@@ -156,13 +156,13 @@ export const adminHandler = (deps: Deps) => async (req: Req): Promise<Res> => {
       if (!userOk || !pwOk) return err(401, 'bad_login', 'Wrong username or password.');
       return signIn();
     }
-    // Touch ID / passkey sign-in (no session yet, so the same throttle as the password)
+    // passkey sign-in (no session yet, so the same throttle as the password)
     if ((route === 'passkey-login-options' || route === 'passkey-login') && req.method === 'POST') {
       // asking for a challenge is cheap and harmless; only the answer counts like a password try
       const allowed = route === 'passkey-login-options' ? await underLimit(req, deps, 'passkey-options', 40) : await loginAllowed(req, deps);
       if (!allowed) return err(429, 'too_many_attempts', 'Too many login attempts. Wait 15 minutes.');
-      if (route === 'passkey-login-options') { const o = await P.loginOptions(req, deps); return o ? json(200, o) : err(404, 'no_passkey', 'Touch ID is not set up yet.'); }
-      return (await P.verifyLogin(req, deps, (req.body ?? {}) as never)) ? signIn() : err(401, 'bad_login', 'Touch ID sign-in failed.');
+      if (route === 'passkey-login-options') { const o = await P.loginOptions(req, deps); return o ? json(200, o) : err(404, 'no_passkey', 'No passkey is set up yet.'); }
+      return (await P.verifyLogin(req, deps, (req.body ?? {}) as never)) ? signIn() : err(401, 'bad_login', 'Passkey sign-in failed.');
     }
     const session = await getSession(req, deps);
     if (route === 'session' && req.method === 'GET') return json(200, session ? { authenticated: true, csrf: session.csrf, expiresAt: session.expiresAt, now, passkeys: await P.passkeyCount(deps) } : { authenticated: false, passkeys: (await P.passkeyCount(deps)) > 0 });
@@ -175,7 +175,7 @@ export const adminHandler = (deps: Deps) => async (req: Req): Promise<Res> => {
 
     switch (`${req.method} ${route}`) {
       case 'POST passkey-register-options': return json(200, await P.registrationOptions(req, deps));
-      case 'POST passkey-register': return (await P.registerPasskey(req, deps, body as never)) ? ok({ passkeys: await P.passkeyCount(deps) }) : err(400, 'bad_request', 'Touch ID could not be set up.');
+      case 'POST passkey-register': return (await P.registerPasskey(req, deps, body as never)) ? ok({ passkeys: await P.passkeyCount(deps) }) : err(400, 'bad_request', 'The passkey could not be set up.');
       case 'POST logout': await destroySession(deps, session); return json(200, { ok: true }, { cookies: [clearCookie()] });
       case 'GET workshop': return json(200, { config: c, ...(await W.stats(deps.store, c, now)) });
       case 'PUT config': {

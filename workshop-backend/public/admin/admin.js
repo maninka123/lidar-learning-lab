@@ -25,10 +25,10 @@ function toast(text, bad) { const t = $('toast'); t.textContent = text; t.classN
 const run = async (f) => { try { await f(); } catch (e) { toast(e.message, true); } };
 
 function showLogin() { $('login').classList.remove('hidden'); $('app').classList.add('hidden'); $('logout').classList.add('hidden'); clearInterval(timer); clearInterval(poll); }
-// ---- Touch ID (WebAuthn). Binary fields travel as base64url text.
+// ---- Passkeys (WebAuthn): Touch ID, Face ID, Windows Hello, a phone or a security key. Binary fields travel as base64url text.
 const b64 = { enc: (buf) => btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''),
   dec: (s) => Uint8Array.from(atob(s.replace(/-/g, '+').replace(/_/g, '/').padEnd(Math.ceil(s.length / 4) * 4, '=')), (c) => c.charCodeAt(0)).buffer };
-const hasTouch = async () => !!(window.PublicKeyCredential && (await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable().catch(() => false)));
+const hasTouch = async () => !!window.PublicKeyCredential; // the browser offers whatever passkeys it has
 const creds = (o) => ({ ...o, challenge: b64.dec(o.challenge), user: o.user && { ...o.user, id: b64.dec(o.user.id) }, excludeCredentials: (o.excludeCredentials || []).map((c) => ({ ...c, id: b64.dec(c.id) })), allowCredentials: (o.allowCredentials || []).map((c) => ({ ...c, id: b64.dec(c.id) })) });
 async function touchRegister() {
   const { options, challengeId } = await api('POST', 'passkey-register-options', {});
@@ -43,16 +43,16 @@ async function touchLogin() {
   const out = await api('POST', 'passkey-login', { challengeId, response: { id: c.id, rawId: b64.enc(c.rawId), type: c.type, authenticatorAttachment: c.authenticatorAttachment, clientExtensionResults: c.getClientExtensionResults(), response: { authenticatorData: b64.enc(r.authenticatorData), clientDataJSON: b64.enc(r.clientDataJSON), signature: b64.enc(r.signature), userHandle: r.userHandle ? b64.enc(r.userHandle) : undefined } } });
   csrf = out.csrf; await boot();
 }
-$('touchLogin').addEventListener('click', async () => { const m = $('loginMsg'); m.classList.add('hidden'); try { await touchLogin(); } catch (e) { m.textContent = e.name === 'NotAllowedError' ? 'Touch ID was cancelled.' : e.message; m.classList.remove('hidden'); } });
-$('touchSetup').addEventListener('click', () => run(async () => { await touchRegister(); toast('Touch ID is set up on this device'); await boot(); }));
+$('touchLogin').addEventListener('click', async () => { const m = $('loginMsg'); m.classList.add('hidden'); try { await touchLogin(); } catch (e) { m.textContent = e.name === 'NotAllowedError' ? 'The passkey prompt was cancelled.' : e.message; m.classList.remove('hidden'); } });
+$('touchSetup').addEventListener('click', () => run(async () => { await touchRegister(); toast('Passkey added: next time use Sign in with a passkey'); await boot(); }));
 
 
 async function boot() {
   const s = await fetch('/api/admin/session', { credentials: 'same-origin' }).then((r) => r.json()).catch(() => ({}));
   const touch = await hasTouch();
   if (!s.authenticated) { showLogin(); $('touchLogin').classList.toggle('hidden', !(touch && s.passkeys)); return; }
-  $('touchCard').classList.toggle('hidden', !touch || s.passkeys > 0); // offered until Touch ID has been set up
-  $('touchText').textContent = 'Use Touch ID instead of typing your password on this device.';
+  $('touchCard').classList.toggle('hidden', !touch || s.passkeys > 0); // offered until a passkey has been set up
+  $('touchText').textContent = 'Sign in faster next time with a passkey: Touch ID, Face ID, Windows Hello or a security key.';
   csrf = s.csrf; $('login').classList.add('hidden'); $('app').classList.remove('hidden'); $('logout').classList.remove('hidden');
   await refresh(); clearInterval(timer); clearInterval(poll); timer = setInterval(tick, 1000); poll = setInterval(() => run(refresh), 5000); // live: refreshed every few seconds
 }

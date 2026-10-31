@@ -4,8 +4,9 @@ import type { Deps } from './env';
 import type { Req } from './http';
 
 /**
- * Touch ID (and other passkeys) for the admin dashboard. The password still works; after signing in once you can register
- * this device, and from then on "Sign in with Touch ID" replaces typing it. Only public keys are stored.
+ * Passkeys for the admin dashboard: Touch ID or Face ID on Apple devices, Windows Hello, Android, or a security key. The password
+ * still works; after signing in once you can add a passkey, and from then on "Sign in with a passkey" replaces typing it.
+ * Only public keys are stored.
  */
 const KEY = 'admin:passkeys';
 const b64 = (u: Uint8Array) => Buffer.from(u).toString('base64url');
@@ -48,7 +49,7 @@ export async function registrationOptions(req: Req, deps: Deps) {
   const options = await generateRegistrationOptions({
     rpName: 'LiDAR Lab workshop admin', rpID, userName: deps.env.adminUser, userDisplayName: deps.env.adminUser, userID: new TextEncoder().encode('workshop-admin'),
     attestationType: 'none', excludeCredentials: Object.entries(existing).map(([id, v]) => ({ id, transports: v.transports as never })),
-    authenticatorSelection: { authenticatorAttachment: 'platform', residentKey: 'required', userVerification: 'required' },
+    authenticatorSelection: { residentKey: 'required', userVerification: 'required' }, // any passkey the browser offers: this device, a phone, or a security key
   });
   return { options, challengeId: await saveChallenge(deps, options.challenge, 'register') };
 }
