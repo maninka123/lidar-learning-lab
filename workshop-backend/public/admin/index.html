@@ -42,12 +42,14 @@
       </div>
 
       <div id="idleView" class="stack">
-        <p class="muted" id="idleText">Start a workshop for a fixed time:</p>
-        <div class="row"><button class="btn" data-start="180">3 hours</button><button class="btn" data-start="360">6 hours</button><button class="btn" data-start="1440">1 day</button><button class="btn" data-start="2880">2 days</button></div>
+        <p class="muted" id="idleText">Start a workshop:</p>
+        <div class="seg" role="group" aria-label="Duration" id="durSeg"><button data-dur="180" aria-pressed="true">3 hours</button><button data-dur="360" aria-pressed="false">6 hours</button><button data-dur="1440" aria-pressed="false">1 day</button><button data-dur="2880" aria-pressed="false">2 days</button></div>
         <details><summary>Or pick dates</summary>
           <div class="grid g2"><label>Starts<input type="datetime-local" id="startAt"></label><label>Ends<input type="datetime-local" id="endAt"></label></div>
-          <div class="row" style="margin-top:10px"><button id="schedule" class="btn primary">Schedule</button></div>
         </details>
+        <div class="grid g3"><label>Requests per user<input id="startPerUser" type="number" min="1"></label><label>Total requests<input id="startTotal" type="number" min="1"></label><label>Max users<input id="startMax" type="number" min="1" max="500"></label></div>
+        <p class="faint">You can raise any of these later while the workshop is running.</p>
+        <div class="row"><button id="startBtn" class="btn primary">Start workshop</button></div>
       </div>
     </section>
 
@@ -62,7 +64,7 @@
       <div class="row between"><p class="faint" id="privacy"></p><button id="deleteData" class="btn sm danger">Delete user records</button></div>
     </section>
 
-    <div class="grid g2">
+    <div class="grid g2" id="lowerRow">
       <section class="card">
         <div class="card-head"><h2>Access</h2>
           <div class="seg" role="group" aria-label="Access" id="accessSeg"><button data-access="open" aria-pressed="true">Open</button><button data-access="codes" aria-pressed="false">Codes</button></div></div>
@@ -73,13 +75,14 @@
             <div class="row" style="margin:8px 0"><button id="copyCodes" class="btn sm">Copy all</button><button id="csvCodes" class="btn sm">Download CSV</button></div><table><tbody id="newCodesBody"></tbody></table></div>
         </div>
       </section>
-      <section class="card">
-        <div class="card-head"><h2>Limits</h2></div>
-        <form id="limitsForm" class="grid g2">
-          <label>Requests per user<input name="maxPerStudent" type="number" min="1"></label>
-          <label>Total requests<input name="maxTotal" type="number" min="1"></label>
+      <section class="card" id="limitsCard">
+        <div class="card-head"><h2>Limits</h2><span class="faint">change any time</span></div>
+        <form id="limitsForm" class="grid g3">
+          <label>Per user<input name="maxPerStudent" type="number" min="1"></label>
+          <label>Total<input name="maxTotal" type="number" min="1"></label>
+          <label>Max users<input name="maxStudents" type="number" min="1" max="500"></label>
         </form>
-        <div class="row"><button id="saveLimits" class="btn primary">Save</button></div>
+        <div class="row"><button id="saveLimits" class="btn primary">Save</button><button class="btn sm" data-bump="maxTotal:100">Total +100</button><button class="btn sm" data-bump="maxTotal:500">Total +500</button><button class="btn sm" data-bump="maxPerStudent:10">Per user +10</button><button class="btn sm" data-bump="maxStudents:25">Users +25</button></div>
       </section>
     </div>
 

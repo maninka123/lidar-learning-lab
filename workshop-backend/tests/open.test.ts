@@ -92,4 +92,15 @@ describe('open access (no codes)', () => {
     const [c] = await makeCodes(a, 1); expect((await student(ctx)('chat', c.code)).status).toBe(200);
     expect((await a.call('PUT', 'config', { needCode: 'yes' })).status).toBe(400);
   });
+
+  it('limits can be raised while the workshop is running, and take effect at once', async () => {
+    const ctx = setup(); const a = await startWorkshop(ctx, 3, { needCode: false, maxPerStudent: 1, maxTotal: 2, maxStudents: 1, rpm: 60 }); const g = guest(ctx);
+    expect((await g('chat', cid(1))).status).toBe(200);
+    expect((await g('chat', cid(1))).body).toMatchObject({ error: 'student_quota' });
+    expect((await g('chat', cid(2))).body).toMatchObject({ error: 'workshop_full' });
+    await a.call('PUT', 'config', { maxPerStudent: 5, maxStudents: 3 }); // more per user, more users
+    expect((await g('chat', cid(1))).status).toBe(200); expect((await g('chat', cid(2))).body).toMatchObject({ error: 'total_quota' });
+    await a.call('PUT', 'config', { maxTotal: 50 });
+    expect((await g('chat', cid(2))).status).toBe(200);
+  });
 });

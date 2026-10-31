@@ -82,7 +82,9 @@ function render() {
   $('statusText').textContent = LABEL[data.status]; $('dot').className = 'dot ' + data.status;
   $('runningView').classList.toggle('hidden', !live); $('idleView').classList.toggle('hidden', live);
   $('window').textContent = live ? `${fmtSydney(c.startAt)} → ${fmtSydney(c.endAt)}` : data.status === 'expired' ? `Ended ${fmtSydney(c.endAt)}` : '';
-  $('idleText').textContent = data.status === 'expired' ? 'That workshop has ended. Start another for a fixed time:' : 'Start a workshop for a fixed time:';
+  $('idleText').textContent = data.status === 'expired' ? 'That workshop has ended. Start another:' : 'Start a workshop:';
+  $('limitsCard').classList.toggle('hidden', !live); $('lowerRow').classList.toggle('g2', live); // while idle, the limits are asked for as part of starting
+  if (!live) { if (document.activeElement !== $('startPerUser')) $('startPerUser').value = c.maxPerStudent; if (document.activeElement !== $('startTotal')) $('startTotal').value = c.maxTotal; if (document.activeElement !== $('startMax')) $('startMax').value = c.maxStudents; }
   if (live && document.activeElement !== $('endExact')) $('endExact').value = epochToSydneyInput(c.endAt);
   for (const f of $('limitsForm').elements) if (f.name && document.activeElement !== f) f.value = c[f.name];
   document.querySelectorAll('[data-access]').forEach((b) => b.setAttribute('aria-pressed', String((b.dataset.access === 'codes') === c.needCode)));
@@ -108,21 +110,26 @@ function render() {
 
 document.addEventListener('click', (e) => {
   const b = e.target.closest('button'); if (!b) return;
-  if (b.dataset.start) run(async () => { await api('POST', 'workshop-start', { durationMinutes: Number(b.dataset.start) }); toast('Workshop started'); await refresh(); });
+  if (b.dataset.dur) { dur = Number(b.dataset.dur); document.querySelectorAll('[data-dur]').forEach((x) => x.setAttribute('aria-pressed', String(x === b))); }
   if (b.dataset.extend) run(async () => { await api('POST', 'workshop-extend', { minutes: Number(b.dataset.extend) }); toast('End time updated'); await refresh(); });
+  if (b.dataset.bump) { const [f, n] = b.dataset.bump.split(':'); run(async () => { await api('PUT', 'config', { [f]: data.config[f] + Number(n) }); toast('Limit raised'); await refresh(); }); }
   if (b.dataset.access) run(async () => { await api('PUT', 'config', { needCode: b.dataset.access === 'codes' }); await refresh(); });
   if (b.dataset.revoke && confirm('Block this user? They lose access to the workshop AI.')) run(async () => { await api('POST', 'codes-revoke', { id: b.dataset.revoke }); await refresh(); });
 });
 $('disable').addEventListener('click', () => confirm('Turn the workshop off now? Users lose access immediately.') && run(async () => { await api('POST', 'workshop-disable'); toast('Workshop is off'); await refresh(); }));
 $('applyEnd').addEventListener('click', () => run(async () => { await api('POST', 'workshop-end', { endAt: sydneyToEpoch($('endExact').value) }); toast('End time updated'); await refresh(); }));
-$('schedule').addEventListener('click', () => run(async () => {
-  if (!$('startAt').value || !$('endAt').value) throw new Error('Choose a start and an end');
-  await api('POST', 'workshop-start', { startAt: sydneyToEpoch($('startAt').value), endAt: sydneyToEpoch($('endAt').value) }); toast('Workshop scheduled'); await refresh();
-}));
 $('deleteData').addEventListener('click', () => confirm('Delete every user record for this workshop (names, places, usage and any codes)? This cannot be undone.') && run(async () => { await api('POST', 'data-delete'); toast('User records deleted'); await refresh(); }));
 $('saveLimits').addEventListener('click', () => run(async () => {
   const v = {}; for (const f of $('limitsForm').elements) if (f.name) v[f.name] = Number(f.value);
   await api('PUT', 'config', v); toast('Limits saved'); await refresh();
+}));
+
+let dur = 180;
+$('startBtn').addEventListener('click', () => run(async () => {
+  // the basics first (requests per user, total requests), then switch on
+  await api('PUT', 'config', { maxPerStudent: Number($('startPerUser').value), maxTotal: Number($('startTotal').value), maxStudents: Number($('startMax').value) });
+  const dates = $('startAt').value && $('endAt').value ? { startAt: sydneyToEpoch($('startAt').value), endAt: sydneyToEpoch($('endAt').value) } : { durationMinutes: dur };
+  await api('POST', 'workshop-start', dates); toast(dates.startAt ? 'Workshop scheduled' : 'Workshop started'); await refresh();
 }));
 
 let issued = [];

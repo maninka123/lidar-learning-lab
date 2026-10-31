@@ -65,7 +65,7 @@ Go to `https://<your-project>.vercel.app/admin` and sign in with your username a
 
 **While it runs:** the dashboard refreshes every 5 seconds: time left, users joined and active now, requests, tokens and the **spend so far**, worked out per request from DeepSeek's advertised prices for the model (see below). Extend or shorten with **+1 h / +3 h / +1 day / −1 h** or an exact end time; **Turn off now** ends it at once.
 
-**Limits** (two numbers): *Requests per user* and *Total requests*. The lab chooses its own reply sizes, and a hard ceiling on tokens per request is built in. Other safeguards need no setting: a per-minute rate limit per user and per network address, a cap on how many different users one address can create (a whole classroom may share one address), and a seat limit of 100 users.
+**Limits:** starting asks for *Requests per user*, *Total requests* and *Max users* (defaults 40, 1,500 and 100). You can raise any of them at any time while it runs, with the Limits card or the quick "+100 / +500 / +10 / +25" buttons; changes apply to the next request. The lab chooses its own reply sizes, and a hard ceiling on tokens per request is built in. Other safeguards need no setting: a per-minute rate limit per user and per network address, a cap on how many different users one address can create (a whole classroom may share one address), and a cap on how many users one address can create.
 
 **Access codes (optional):** switch *Access* to **Codes** if you want personal codes (for a smaller or untrusted group). Generate them, copy or download the CSV, and hand one to each user. Codes are shown once and stored only as keyed hashes.
 
