@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useLab } from '../state/store';
+import { AiAccess } from '../ui/AiAccess';
+import { noKeyMessage } from '../apps/workshop';
 import { Viewport } from '../ui/Viewport';
 import { TabFrame } from '../ui/TabFrame';
 import { Btn, Callout, Section, Seg, Slider } from '../ui/controls';
@@ -72,7 +74,7 @@ export default function TabMoving() {
     try {
       const r = await chatDeepSeek([{ role: 'system', content: system }, ...history, { role: 'user', content: question }], 1500, ownKey);
       setChat((c) => [...c, { q: question, text: r.text, tokens: r.promptTokens, ms: r.ms }]); setQ(''); setNeedKey(false);
-    } catch (e) { if (e instanceof NoKeyError) { setNeedKey(true); setAiErr('This site has no DeepSeek key of its own. Paste your key below (it stays in your browser) and press Ask again.'); } else setAiErr((e as Error).message); }
+    } catch (e) { if (e instanceof NoKeyError) { setNeedKey(true); setAiErr(noKeyMessage('Ask')); } else setAiErr((e as Error).message); }
     finally { setAiBusy(false); }
   }
 
@@ -204,7 +206,7 @@ export default function TabMoving() {
           {chat.length > 0 && <div className="chip-row">{QUESTIONS.filter((t) => !chat.some((c) => c.q === t)).map((t) => <button key={t} className="chip" onClick={() => void askAi(t)} disabled={aiBusy}>{t}</button>)}</div>}
         </div>
         {aiErr && <Callout kind="warn">{aiErr}</Callout>}
-        {needKey && <label className="field"><span>Your DeepSeek key (kept only in this browser)</span><input type="password" value={ownKey} onChange={(e) => { setOwnKey(e.target.value); saveOwnKey(e.target.value); }} placeholder="sk-…" autoComplete="off" /></label>}
+        <AiAccess needKey={needKey} ownKey={ownKey} setOwnKey={setOwnKey} />
         <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 8, position: 'sticky', bottom: 0, background: 'var(--bg)', padding: '8px 0' }}>
           <input type="text" value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && void askAi()} placeholder="Ask about this drive…" aria-label="Question" data-testid="mv-question" />
           <Btn variant="primary" onClick={() => void askAi()} busy={aiBusy} disabled={!segs || !q.trim()} testId="mv-ask">Ask</Btn>

@@ -1,4 +1,5 @@
 import { PointCloud } from '../core/pointcloud';
+import { loadWorkshopCode, refreshWorkshopStatus, workshopChat, workshopConfigured, WorkshopError } from './workshop';
 
 /** The cheap, fast DeepSeek chat model (V4 Flash). */
 export const DEEPSEEK_MODEL = 'deepseek-v4-flash';
@@ -22,7 +23,7 @@ export function pointCloudToText(c: PointCloud, n: number, withColour: boolean, 
 /** A rough token count for numbers written as text: about 3.4 tokens per number. */
 export const estimateTokens = (points: number, withColour: boolean) => Math.round(points * (withColour ? 6 : 3) * 3.4);
 
-export interface AiResult { text: string; promptTokens: number; completionTokens: number; ms: number; via: 'server' | 'own key' }
+export interface AiResult { text: string; promptTokens: number; completionTokens: number; ms: number; via: 'server' | 'own key' | 'workshop' }
 export class NoKeyError extends Error { constructor() { super('No DeepSeek key is available on this site.'); } }
 
 /**
@@ -44,7 +45,13 @@ export async function chatDeepSeek(messages: ChatMsg[], maxTokens = 700, ownKey 
   let via: AiResult['via'] = 'server';
   let res = await call('/api/deepseek/chat/completions', {}).catch(() => null);
   if (!res || !res.json || res.r.status === 404 || res.r.status === 405) {
-    if (!ownKey) throw new NoKeyError();
+    if (!ownKey) {
+      // During a workshop a student's access code stands in for a key; the backend holds the real one.
+      const code = workshopConfigured() ? loadWorkshopCode() : '';
+      if (!code) throw new NoKeyError();
+      try { const w = await workshopChat(code, messages, maxTokens, DEEPSEEK_MODEL); return { ...w, ms: performance.now() - t0, via: 'workshop' }; }
+      catch (e) { if (e instanceof WorkshopError && (e.code === 'expired' || e.code === 'workshop_inactive')) { await refreshWorkshopStatus(); throw new NoKeyError(); } throw e; }
+    }
     via = 'own key';
     res = await call('https://api.deepseek.com/chat/completions', { Authorization: `Bearer ${ownKey}` });
   }

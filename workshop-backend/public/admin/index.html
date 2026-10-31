@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Workshop control</title>
+<link rel="stylesheet" href="/admin/admin.css">
+</head>
+<body>
+<header><div><h1>LiDAR Lab · Workshop control</h1><small>Times are shown in Australia/Sydney</small></div><button id="logout" class="hidden">Log out</button></header>
+<main>
+  <section id="login" class="card login hidden">
+    <h2>Administrator login</h2>
+    <form id="loginForm" class="grid"><label>Password<input id="pw" type="password" autocomplete="current-password" required></label><button class="primary">Log in</button><div id="loginMsg" class="msg bad hidden"></div></form>
+  </section>
+
+  <div id="app" class="hidden" style="display:grid;gap:16px">
+    <div id="toast" class="msg hidden"></div>
+    <section class="card" id="statusCard">
+      <div class="row" style="justify-content:space-between"><h2>Workshop</h2><span id="pill" class="pill">—</span></div>
+      <div class="big" id="countdown">—</div>
+      <p class="muted" id="window">—</p>
+      <div class="row">
+        <button id="disable" class="danger">Turn off now</button>
+        <button data-extend="60">+1 h</button><button data-extend="180">+3 h</button><button data-extend="1440">+1 day</button><button data-extend="-60">−1 h</button>
+      </div>
+      <div class="row" style="margin-top:10px"><label style="flex:1;min-width:220px">Set the exact end<input type="datetime-local" id="endExact"></label><button id="applyEnd" style="align-self:end">Apply</button></div>
+    </section>
+
+    <section class="card">
+      <h2>Start a workshop</h2>
+      <p class="muted">Start now for a fixed time:</p>
+      <div class="row"><button data-start="180">3 hours</button><button data-start="360">6 hours</button><button data-start="1440">1 day</button><button data-start="2880">2 days</button></div>
+      <p class="muted" style="margin-top:14px">Or choose dates (Sydney time):</p>
+      <div class="grid g2"><label>Starts<input type="datetime-local" id="startAt"></label><label>Ends<input type="datetime-local" id="endAt"></label></div>
+      <div class="row" style="margin-top:10px"><button id="schedule" class="primary">Schedule / start with these dates</button></div>
+    </section>
+
+    <section class="card">
+      <h2>Limits</h2>
+      <form id="limitsForm" class="grid g4">
+        <label>Requests per student<input name="maxPerStudent" type="number" min="1"></label>
+        <label>Total requests<input name="maxTotal" type="number" min="1"></label>
+        <label>Max output tokens<input name="maxOutputTokens" type="number" min="50" max="4000"></label>
+        <label>Requests per minute (each student)<input name="rpm" type="number" min="1" max="60"></label>
+        <label>Token budget (0 = none)<input name="tokenBudget" type="number" min="0"></label>
+        <label>Max students<input name="maxStudents" type="number" min="1" max="500"></label>
+        <label>Price in, USD per 1M tokens<input name="priceInPerM" type="number" min="0" step="0.001"></label>
+        <label>Price out, USD per 1M tokens<input name="priceOutPerM" type="number" min="0" step="0.001"></label>
+      </form>
+      <p class="muted">Enter DeepSeek's current prices from its pricing page to see an estimated spend. Leave at 0 to hide it.</p>
+      <button id="saveLimits" class="primary">Save limits</button>
+    </section>
+
+    <section class="card">
+      <h2>Student access codes</h2>
+      <div class="row"><label style="width:120px">How many<input id="codeCount" type="number" min="1" max="200" value="10"></label><label style="width:200px">Label<input id="codePrefix" value="Student"></label><button id="makeCodes" class="primary" style="align-self:end">Generate</button></div>
+      <div id="newCodes" class="hidden" style="margin-top:14px"><div class="msg good">Copy these now: they are not stored in readable form and cannot be shown again.</div>
+        <div class="row" style="margin:8px 0"><button id="copyCodes">Copy all</button><button id="csvCodes">Download CSV</button></div><table><tbody id="newCodesBody"></tbody></table></div>
+    </section>
+
+    <section class="card">
+      <h2>Usage</h2>
+      <div class="grid g4" id="tiles"></div>
+      <h2 style="margin-top:20px">Students</h2>
+      <div style="overflow:auto"><table><thead><tr><th>Label</th><th>Requests</th><th>Left</th><th>Tokens</th><th>Last used</th><th></th></tr></thead><tbody id="students"></tbody></table></div>
+      <h2 style="margin-top:20px">Recent errors</h2>
+      <div style="overflow:auto"><table><thead><tr><th>Time</th><th>Kind</th><th>Status</th><th>Student</th></tr></thead><tbody id="errors"></tbody></table></div>
+    </section>
+  </div>
+</main>
+<script type="module" src="/admin/admin.js"></script>
+</body>
+</html>

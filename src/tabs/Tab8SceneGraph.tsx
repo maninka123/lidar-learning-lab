@@ -6,6 +6,8 @@ import { PointCloud } from '../core/pointcloud';
 import { Markdown } from '../ui/Markdown';
 import { PromptView } from '../ui/PromptView';
 import { className, classColor } from '../scenes/classes';
+import { AiAccess } from '../ui/AiAccess';
+import { noKeyMessage } from '../apps/workshop';
 import { Viewport } from '../ui/Viewport';
 import { TabFrame } from '../ui/TabFrame';
 import { Btn, Callout, Section, Select, Seg, Slider, Toggle, Badge, fmtN } from '../ui/controls';
@@ -121,7 +123,7 @@ export default function Tab8() {
     setAiBusy(true); setAiErr(null);
     const { system, user } = directPrompt;
     try { const r = await askDeepSeek(system, user, 2500, ownKey); setAi({ ...r, sent: preview.count }); setNeedKey(false); }
-    catch (e) { if (e instanceof NoKeyError) { setNeedKey(true); setAiErr('This site has no DeepSeek key of its own. Paste your key below (it stays in your browser) and press Send again.'); } else setAiErr((e as Error).message); }
+    catch (e) { if (e instanceof NoKeyError) { setNeedKey(true); setAiErr(noKeyMessage('Send')); } else setAiErr((e as Error).message); }
     finally { setAiBusy(false); }
   }
 
@@ -153,7 +155,7 @@ export default function Tab8() {
     setGBusy(true); setGErr(null);
     const p = graphPrompt(question);
     try { const r = await askDeepSeek(p.system, p.user, 1200, ownKey); setGAns({ q: question, r }); setNeedKey(false); }
-    catch (e) { if (e instanceof NoKeyError) { setNeedKey(true); setGErr('This site has no DeepSeek key of its own. Paste your key below (it stays in your browser) and press Ask again.'); } else setGErr((e as Error).message); }
+    catch (e) { if (e instanceof NoKeyError) { setNeedKey(true); setGErr(noKeyMessage('Ask')); } else setGErr((e as Error).message); }
     finally { setGBusy(false); }
   }
   const nodes = graph?.nodes ?? [];
@@ -214,7 +216,7 @@ export default function Tab8() {
             <span className="caption">{fmtN(preview.count)} of {fmtN(cloud.count)} points · about {fmtN(estimateTokens(preview.count, withColour))} tokens. The whole cloud would be about {fmtN(estimateTokens(cloud.count, withColour))} tokens, far more than the model can read at once.</span>
           </div>
         )}
-        {needKey && <label className="field"><span>Your DeepSeek key (kept only in this browser)</span><input type="password" value={ownKey} onChange={(e) => { setOwnKey(e.target.value); saveOwnKey(e.target.value); }} placeholder="sk-…" data-testid="ds-key" autoComplete="off" /></label>}
+        <AiAccess needKey={needKey} ownKey={ownKey} setOwnKey={setOwnKey} testId="ds-key" />
         <PromptView system={directPrompt.system} user={directPrompt.user} testId="ds-prompt" />
         <Btn variant="primary" onClick={sendToAi} busy={aiBusy} disabled={!preview} testId="ds-send">Send to DeepSeek Flash ({DEEPSEEK_MODEL})</Btn>
         {aiErr && <Callout kind="warn">{aiErr}</Callout>}
@@ -259,7 +261,7 @@ export default function Tab8() {
         </div>
         <PromptView system={graphPrompt(q || 'What objects are in the room?').system} user={graphPrompt(q || 'What objects are in the room?').user} testId="gs-prompt" />
         <div className="chip-row">{SUPPORTED_QUESTIONS.map((t) => <button key={t} className="chip" onClick={() => setQ(t)}>{t}</button>)}</div>
-        {needKey && <label className="field"><span>Your DeepSeek key (kept only in this browser)</span><input type="password" value={ownKey} onChange={(e) => { setOwnKey(e.target.value); saveOwnKey(e.target.value); }} placeholder="sk-…" autoComplete="off" /></label>}
+        <AiAccess needKey={needKey} ownKey={ownKey} setOwnKey={setOwnKey} />
         {gErr && <Callout kind="warn">{gErr}</Callout>}
         {gAns && (<div className="callout good fade-in" style={{ gap: 6 }} data-testid="gs-answer"><b>DeepSeek's answer</b><Markdown text={gAns.r.text} /><span className="caption">{fmtN(gAns.r.promptTokens)} tokens read · {fmtN(gAns.r.completionTokens)} written · {(gAns.r.ms / 1000).toFixed(1)} s · model: DeepSeek Flash ({DEEPSEEK_MODEL})</span><b>The graph's own answer</b><div>{answerQuery(graph!, gAns.q).answer}</div><span className="caption">Computed directly from the geometry, no AI involved. Compare the two: the AI is only as good as the graph it reads, and it can still slip on numbers.</span></div>)}
       </Section>

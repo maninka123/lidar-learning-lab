@@ -21,6 +21,10 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run build
+        env:
+          # Optional: address of the Workshop Mode backend (a public URL, not a secret). Unset = feature off.
+          # Set it under Settings > Secrets and variables > Actions > Variables (WORKSHOP_API_URL).
+          VITE_WORKSHOP_API_URL: ${{ vars.WORKSHOP_API_URL }}
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist

@@ -82,16 +82,18 @@ npm run test:e2e   # browser tests (Playwright; first run: npx playwright instal
 
 Units are metres, Z-up. LAZ is not decoded in the browser (`pdal translate in.laz out.las`).
 
-## Code layout
+---
 
-```
-src/core  scenes  sensor  processing  segmentation  registration  recon  graph  io  engine (Web Workers)
-src/apps  (classroom: planes, CAD, change detection, meshing, fusion maths)
-state  ui  tabs      tests/ (Vitest)      e2e/ (Playwright)      docs/screens/
-```
+<p align="center"><b>Made with care for anyone learning how machines see in 3D.</b></p>
 
-Stack: React, TypeScript, Vite, Three.js + React Three Fiber, Zustand, Tailwind CSS. A push to `main` deploys to GitHub Pages (`.github/workflows/pages.yml`; Settings → Pages → Source: GitHub Actions).
+<p align="center">
+Questions, ideas and fixes are very welcome:<br>
+<a href="https://github.com/maninka123/lidar-learning-lab/issues">Open an issue</a> ·
+<a href="https://github.com/maninka123/lidar-learning-lab/pulls">Send a pull request</a> ·
+<a href="https://maninka123.github.io/lidar-learning-lab/">Try the lab</a>
+</p>
 
-Related: [Rotating Target Calibration Studio](https://github.com/maninka123/rotating-target-calibration-studio) · [Model Fit Explorer](https://github.com/maninka123/local-llm-fit) · Licence: MIT, see [LICENSE](LICENSE).
-
-Made with care for anyone learning how machines see in 3D. Questions, ideas and fixes are very welcome.
+<p align="center"><sub>
+Built with React, TypeScript, Vite, Three.js and Zustand · MIT licence, see <a href="LICENSE">LICENSE</a><br>
+Also see <a href="https://github.com/maninka123/rotating-target-calibration-studio">Rotating Target Calibration Studio</a> and <a href="https://github.com/maninka123/local-llm-fit">Model Fit Explorer</a>
+</sub></p>
