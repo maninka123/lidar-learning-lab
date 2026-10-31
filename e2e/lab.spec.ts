@@ -227,8 +227,17 @@ test.describe('LiDAR Learning Lab', () => {
     await page.getByRole('button', { name: '3 Graph → AI', exact: true }).click();
     await expect(page.getByTestId('node-details')).toContainText('table-1');
     await expect(page.getByTestId('gs-preview')).toContainText('tokens');
-    await page.getByTestId('gs-send').click();
+    await page.getByTestId('gs-input').fill('Which tables are in the room?');
+    await page.getByTestId('gs-input').press('Enter');
     await expect(page.getByTestId('gs-answer')).toContainText('graph');
+    await expect(page.getByTestId('gs-ask')).toHaveText('Which tables are in the room?');
+    // the conversation goes on: a second question adds a second pair of bubbles, the first stays
+    await page.getByTestId('gs-input').fill('And the chairs?');
+    await page.getByTestId('gs-send').click();
+    await expect(page.getByTestId('gs-ask')).toHaveCount(2);
+    await expect(page.getByTestId('gs-answer')).toHaveCount(2);
+    await page.getByTestId('gs-new').click();
+    await expect(page.getByTestId('gs-ask')).toHaveCount(0);
     await page.getByText('How many chairs are there?').last().click();
     await expect(page.getByTestId('answer')).toContainText(/\d+/);
     await expect(page.getByTestId('llm-fit-link')).toHaveAttribute('href', 'https://maninka123.github.io/local-llm-fit/');

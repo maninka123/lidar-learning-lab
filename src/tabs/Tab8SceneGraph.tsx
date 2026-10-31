@@ -4,6 +4,7 @@ import { loadClassroomForSegmentation, nodesFromClassroom, paintClasses } from '
 import { askDeepSeek, DEEPSEEK_MODEL, estimateTokens, loadOwnKey, NoKeyError, pointCloudToText, saveOwnKey, AiResult } from '../apps/deepseek';
 import { PointCloud } from '../core/pointcloud';
 import { Markdown } from '../ui/Markdown';
+import { Chat } from '../ui/Chat';
 import { PromptView } from '../ui/PromptView';
 import { className, classColor } from '../scenes/classes';
 import { AiAccess } from '../ui/AiAccess';
@@ -139,6 +140,7 @@ export default function Tab8() {
   }
 
   const graph = g.graph;
+  const [useGraphInChat, setUseGraphInChat] = useState(true);
   useEffect(() => {
     // the objects come from the clusters you named; the scan's own answer key is only used when asked for explicitly
     const nodes = g.source === 'ground-truth' ? truthNodes : seg && Object.values(s.seg.names).some(Boolean) ? nodesFromLabelledClusters(seg, s.seg.names) : [];
@@ -159,6 +161,7 @@ export default function Tab8() {
     graph.edges.filter((e) => ['near', 'above', 'below'].includes(e.type)).slice(0, 700).forEach((e) => L.push(`${lab(e.from)} ${REL_LABEL[e.type]} ${lab(e.to)}${e.value !== undefined ? ` (${f(e.value)} m)` : ''}`));
     return L.join('\n');
   }, [graph, g.filters]);
+  const chatSystem = useMemo(() => `You are a friendly, clear assistant inside a LiDAR teaching lab. You can answer any question the user asks, on LiDAR or anything else. Keep answers short, use Markdown, and use a table when comparing several things.${useGraphInChat && graphText ? `\n\nThe user is looking at a scene graph of a classroom. When a question is about this room, use only the graph below for names, positions, sizes and relations, and say so if the graph does not tell. If the question is about something else, ignore the graph.\n\nSCENE GRAPH\n${graphText}` : ''}`, [graphText, useGraphInChat]);
   const graphPrompt = (question: string) => ({
     system: 'You answer spatial questions about a room using ONLY the scene graph given. Quote numbers from it. If the graph does not say, say so. Be brief.',
     user: `SCENE GRAPH\n${graphText}\n\nQUESTION: ${question}`,
@@ -276,18 +279,13 @@ export default function Tab8() {
       </Section>
       </>)}
       {pane === 'ai' && (<>
-      <Section title="Give the scene graph to an AI">
-        <p className="hint">Now the AI reads the <b>scene graph</b> as text: named objects with exact positions and sizes, and relations worked out by geometry.</p>
-        {graphText && <div className="callout" style={{ gap: 6 }} data-testid="gs-preview"><b>What is sent</b><pre className="mono" style={{ margin: 0, fontSize: '0.8125rem', whiteSpace: 'pre-wrap' }}>{graphText.split('\n').slice(0, 6).join('\n')}{'\n…'}</pre><span className="caption">{fmtN(graphText.split('\n').length)} lines · about {fmtN(Math.round(graphText.length / 3.5))} tokens: far fewer than the raw points, and every number is exact.</span></div>}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 8 }}>
-          <input type="text" value={q} placeholder="Ask a spatial question…" onChange={(e) => setQ(e.target.value)} aria-label="Question for the AI" data-testid="gs-question" />
-          <Btn variant="primary" onClick={() => void askGraphAi(q || 'What objects are in the room?')} busy={gBusy} disabled={!graphText} testId="gs-send">Ask DeepSeek Flash</Btn>
-        </div>
-        <PromptView system={graphPrompt(q || 'What objects are in the room?').system} user={graphPrompt(q || 'What objects are in the room?').user} testId="gs-prompt" />
-        <div className="chip-row">{SUPPORTED_QUESTIONS.map((t) => <button key={t} className="chip" onClick={() => setQ(t)}>{t}</button>)}</div>
-        <AiAccess needKey={needKey} ownKey={ownKey} setOwnKey={setOwnKey} />
-        {gErr && <Callout kind="warn">{gErr}</Callout>}
-        {gAns && (<div className="callout good fade-in" style={{ gap: 6 }} data-testid="gs-answer"><b>DeepSeek's answer</b><Markdown text={gAns.r.text} /><span className="caption">{fmtN(gAns.r.promptTokens)} tokens read · {fmtN(gAns.r.completionTokens)} written · {(gAns.r.ms / 1000).toFixed(1)} s · model: DeepSeek Flash ({DEEPSEEK_MODEL})</span><b>The graph's own answer</b><div>{answerQuery(graph!, gAns.q).answer}</div><span className="caption">Computed directly from the geometry, no AI involved. Compare the two: the AI is only as good as the graph it reads, and it can still slip on numbers.</span></div>)}
+      <Section title="Chat with the AI">
+        <Chat id="gs" ownKey={ownKey} setOwnKey={setOwnKey} title="Ask anything" placeholder={useGraphInChat && graphText ? 'Ask about the room, or anything else…' : 'Ask anything…'}
+          system={chatSystem}
+          suggestions={useGraphInChat && graphText ? ['Describe this room in two sentences', 'Which table has the most chairs near it?', 'What is closest to the whiteboard?', 'List the furniture in a table', 'What is a scene graph?'] : ['What is LiDAR good for?', 'What is a scene graph?', 'Explain ICP like I am new to this', 'How does a point cloud differ from an image?']}
+          headerExtra={<button className={`chip ${useGraphInChat ? '' : ''}`} aria-pressed={useGraphInChat} onClick={() => setUseGraphInChat(!useGraphInChat)} title="When on, the AI is given the scene graph as text, so it can answer about the room" data-testid="gs-ground">{useGraphInChat ? 'Scene graph: on' : 'Scene graph: off'}</button>} />
+        {useGraphInChat && !graphText && <span className="caption">There are no objects in the graph yet, so the AI cannot know about the room. Choose the objects above first.</span>}
+        {graphText && <details className="caption" data-testid="gs-preview"><summary>What the AI is given (about {fmtN(Math.round(graphText.length / 3.5))} tokens)</summary><pre className="mono" style={{ margin: '6px 0 0', fontSize: '0.75rem', whiteSpace: 'pre-wrap', maxHeight: 160, overflow: 'auto' }}>{graphText}</pre></details>}
       </Section>
       <Section title="Or ask the graph directly (no AI)">
         <p className="caption">Offline demo: a fixed set of question patterns, not an AI model. Every number comes from the graph geometry.</p>
