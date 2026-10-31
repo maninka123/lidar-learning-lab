@@ -394,6 +394,7 @@ test('segmentation: label clusters by hand and use them in the scene graph', asy
   await page.getByTestId('nav-13').click();
   await page.getByRole('button', { name: '2 Scene graph', exact: true }).click();
   await page.getByRole('button', { name: 'My labelled clusters' }).click();
+  await expect(page.getByTestId('graph-empty')).toHaveCount(0);
   await expect(page.getByTestId('graph-view')).toContainText('Chair 1');
   await expect(page.getByTestId('graph-view')).toContainText('Table 1');
 });
@@ -535,4 +536,19 @@ test('supervised learning: images left, point clouds right, drag blocks, clear e
   await page.getByTestId('nn-train-both').click();
   await expect(page.getByTestId('nn-points-epoch')).toContainText('epoch 200 / 200', { timeout: 120000 });
   await expect(page.getByTestId('nn-summary')).toContainText(/0\.\d\d \/ 0\.\d\d/);
+});
+
+test('scene graph: true objects to try it, and a clear choice when there are no named clusters', async ({ page }) => {
+  await page.goto('/'); await page.getByTestId('nav-13').click();
+  await page.getByRole('button', { name: '2 Scene graph', exact: true }).click();
+  await expect(page.getByTestId('graph-view')).toContainText('Table 1', { timeout: 60000 });
+  await expect(page.getByTestId('graph-view')).toContainText('Whiteboard');
+  await expect(page.getByTestId('graph-legend')).toContainText('Chair');
+  await page.getByRole('button', { name: 'My labelled clusters' }).click();
+  await expect(page.getByTestId('graph-empty')).toBeVisible();
+  await expect(page.getByTestId('graph-go-cluster')).toBeVisible();
+  await expect(page.getByTestId('graph-go-train')).toBeVisible();
+  await page.getByTestId('graph-use-truth').click();
+  await expect(page.getByTestId('graph-view')).toContainText('Table 1');
+  await page.getByTestId('graph-go-cluster').count();
 });

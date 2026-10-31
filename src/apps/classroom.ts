@@ -59,6 +59,14 @@ export function paintClasses(c: PointCloud): PointCloud {
 }
 
 /** Scene-graph nodes for the classroom: the room (floor, walls, ceiling) and every piece of furniture, from the scan's classes and object groups. */
+/** What a piece of furniture most likely is, from the class in the scan file and its size and height (the file only says chair / cabinet / table / other). */
+export function nameObject(cls: number, dims: Vec3, centreZ: number): string {
+  const w = Math.max(dims[0], dims[1]), d = Math.min(dims[0], dims[1]), h = dims[2];
+  if (cls === 4) { if (w > 1.2 && h > 1.0) return 'Whiteboard'; if (centreZ > 0.9) return 'Wall item'; if (h < 0.6) return 'Bin'; return 'Cabinet'; }
+  if (cls === 6) return d < 0.3 && h > 1.2 ? 'Door' : 'Other';
+  return CLASSROOM_CLASSES[cls]?.name ?? 'Object';
+}
+
 export function nodesFromClassroom(c: PointCloud): GraphNode[] {
   const lab = c.labels!, inst = c.instances!;
   const box = () => ({ min: [Infinity, Infinity, Infinity] as Vec3, max: [-Infinity, -Infinity, -Infinity] as Vec3, n: 0 });
@@ -79,8 +87,8 @@ export function nodesFromClassroom(c: PointCloud): GraphNode[] {
   const counter = new Map<number, number>();
   [...objs.entries()].filter(([, o]) => o.b.n >= 60).sort((a, b) => a[1].b.min[1] - b[1].b.min[1]).forEach(([, o]) => {
     let cls = 3, best = 0; o.votes.forEach((v, k) => { if (v > best) { best = v; cls = k; } });
-    const n = (counter.get(cls) ?? 0) + 1; counter.set(cls, n);
-    const name = CLASSROOM_CLASSES[cls]?.name ?? 'Object';
+    const dims: Vec3 = [o.b.max[0] - o.b.min[0], o.b.max[1] - o.b.min[1], o.b.max[2] - o.b.min[2]], name = nameObject(cls, dims, (o.b.min[2] + o.b.max[2]) / 2);
+    const n = (counter.get(name.length * 1000 + name.charCodeAt(0) * 7 + name.charCodeAt(name.length - 1)) ?? 0) + 1; counter.set(name.length * 1000 + name.charCodeAt(0) * 7 + name.charCodeAt(name.length - 1), n);
     nodes.push(mk(`${name.toLowerCase()}-${n}`, `${name} ${n}`, scene[cls] ?? 20, o.b, false, name));
   });
   return nodes;

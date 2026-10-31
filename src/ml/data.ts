@@ -39,7 +39,7 @@ function pointSample(i: number): Sample {
     const a = r.range(1.6, 2.6), b = r.range(1.6, 2.6), h = r.range(1.2, 2.2); fx = a; fy = b; fz = h;
     for (let k = 0; k < nObj; k++) { const f = r.next(); let p: [number, number, number]; if (f < 0.3) p = [ox + r.range(-a / 2, a / 2), oy + r.range(-b / 2, b / 2), h]; else if (f < 0.65) p = [ox + (r.next() < 0.5 ? -a / 2 : a / 2), oy + r.range(-b / 2, b / 2), r.range(0, h)]; else p = [ox + r.range(-a / 2, a / 2), oy + (r.next() < 0.5 ? -b / 2 : b / 2), r.range(0, h)]; pts.push({ p, l: 1 }); }
   } else if (cls === 1) { // a pole: tall and thin
-    const rad = r.range(0.15, 0.25), h = r.range(2.6, 3.2); fx = fy = 2 * rad; fz = h;
+    const rad = r.range(0.25, 0.4), h = r.range(2.6, 3.2); fx = fy = 2 * rad; fz = h;
     for (let k = 0; k < nObj; k++) { const t = r.range(0, 2 * Math.PI); pts.push({ p: [ox + Math.cos(t) * rad, oy + Math.sin(t) * rad, r.range(0, h)], l: 2 }); }
   } else { // a bush: a low dome
     const rad = r.range(1.1, 1.6); fx = fy = 2 * rad; fz = rad * 0.6;
@@ -75,7 +75,14 @@ export function augment(s: Sample, r: Rng): Sample {
     }
     return { ...s, input, seg, box: [ncx, ncy, w2, h2] };
   }
-  const dx = r.range(-0.08, 0.08), dy = r.range(-0.08, 0.08), input = new Float32Array(s.input.length);
-  for (let k = 0; k < PTS; k++) { const x = s.input[k * 3] + dx; input[k * 3] = (flip ? 1 - x : x) + r.gauss() * 0.004; input[k * 3 + 1] = s.input[k * 3 + 1] + dy + r.gauss() * 0.004; input[k * 3 + 2] = s.input[k * 3 + 2] + r.gauss() * 0.004; }
-  return { ...s, input, box: [flip ? 1 - (s.box[0] + dx) : s.box[0] + dx, s.box[1] + dy, ...s.box.slice(2)] };
+  // point clouds: turn the scene by any angle, mirror it, zoom it and move it; the box is measured again from the object's own points, so it is always exact
+  const th = r.range(0, 2 * Math.PI), co = Math.cos(th), si = Math.sin(th), zoom = r.range(0.85, 1.2), zs = r.range(0.9, 1.15), dx = r.range(-0.18, 0.18), dy = r.range(-0.18, 0.18);
+  const input = new Float32Array(s.input.length), lo = [1e9, 1e9, 1e9], hi = [-1e9, -1e9, -1e9];
+  for (let k = 0; k < PTS; k++) {
+    let x = s.input[k * 3] - 0.5; const y = s.input[k * 3 + 1] - 0.5; if (flip) x = -x;
+    const X = 0.5 + zoom * (co * x - si * y) + dx + r.gauss() * 0.004, Y = 0.5 + zoom * (si * x + co * y) + dy + r.gauss() * 0.004, Z = s.input[k * 3 + 2] * zs + r.gauss() * 0.004;
+    input[k * 3] = X; input[k * 3 + 1] = Y; input[k * 3 + 2] = Z;
+    if (s.seg[k] > 0) { [X, Y, Z].forEach((v, a) => { if (v < lo[a]) lo[a] = v; if (v > hi[a]) hi[a] = v; }); }
+  }
+  return { ...s, input, box: [(lo[0] + hi[0]) / 2, (lo[1] + hi[1]) / 2, (lo[2] + hi[2]) / 2, hi[0] - lo[0], hi[1] - lo[1], hi[2] - lo[2]] };
 }

@@ -1,6 +1,9 @@
 import { Fragment, ReactNode } from 'react';
 
-/** A small Markdown renderer for model answers: headings, bold / italic / code, bullet and numbered lists, rules and paragraphs. */
+/** A small Markdown renderer for model answers: headings, bold / italic / code, bullet and numbered lists, tables, rules and paragraphs. */
+const isRow = (l: string) => /^\s*\|.*\|?\s*$/.test(l) && l.includes('|');
+const isSep = (l: string) => /^\s*\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)+\|?\s*$/.test(l) || /^\s*\|\s*:?-{2,}:?\s*\|?\s*$/.test(l);
+const cells = (l: string) => { const t = l.trim().replace(/^\|/, '').replace(/\|$/, ''); return t.split('|').map((c) => c.trim()); };
 function inline(t: string): ReactNode[] {
   const out: ReactNode[] = [], re = /(\*\*[^*]+\*\*|`[^`]+`|\*[^*\s][^*]*\*)/g;
   let last = 0, m: RegExpExecArray | null, k = 0;
@@ -23,6 +26,20 @@ export function Markdown({ text }: { text: string }) {
     const h = /^(#{1,4})\s+(.*)$/.exec(l);
     if (h) { const size = [1.15, 1.05, 0.98, 0.95][h[1].length - 1]; blocks.push(<div key={k++} style={{ fontWeight: 700, fontSize: `${size}rem`, margin: '6px 0 2px' }}>{inline(h[2])}</div>); i++; continue; }
     if (/^\s*([-*_])\1{2,}\s*$/.test(l)) { blocks.push(<hr key={k++} style={{ border: 0, borderTop: '1px solid #d9d9de', margin: '6px 0' }} />); i++; continue; }
+    if (isRow(l) || (l.includes('|') && i + 1 < lines.length && isSep(lines[i + 1]))) { // a table: header row, a --- row, then the body rows
+      const rows: string[] = []; while (i < lines.length && lines[i].trim() && lines[i].includes('|')) { rows.push(lines[i]); i++; }
+      const hasHead = rows.length > 1 && isSep(rows[1]), head = hasHead ? cells(rows[0]) : null, sep = hasHead ? cells(rows[1]) : [];
+      const body = rows.slice(hasHead ? 2 : 0).filter((r) => !isSep(r)).map(cells), n = Math.max(head?.length ?? 0, ...body.map((r) => r.length), 1);
+      const align = (c: number): 'left' | 'right' | 'center' => { const a = sep[c] ?? ''; return a.startsWith(':') && a.endsWith(':') ? 'center' : a.endsWith(':') ? 'right' : 'left'; };
+      blocks.push(
+        <div key={k++} style={{ overflowX: 'auto', margin: '4px 0' }}>
+          <table className="table" style={{ fontSize: '0.8125rem', width: '100%' }}>
+            {head && <thead><tr>{Array.from({ length: n }, (_, c) => <th key={c} style={{ textAlign: align(c) }}>{inline(head[c] ?? '')}</th>)}</tr></thead>}
+            <tbody>{body.map((r, j) => <tr key={j}>{Array.from({ length: n }, (_, c) => <td key={c} style={{ textAlign: align(c), verticalAlign: 'top' }}>{inline(r[c] ?? '')}</td>)}</tr>)}</tbody>
+          </table>
+        </div>);
+      continue;
+    }
     const ul = /^\s*[-*•]\s+/, ol = /^\s*\d+[.)]\s+/;
     if (ul.test(l) || ol.test(l)) {
       const ordered = ol.test(l), items: string[] = [];
@@ -32,7 +49,7 @@ export function Markdown({ text }: { text: string }) {
       continue;
     }
     const para: string[] = [];
-    while (i < lines.length && lines[i].trim() && !/^(#{1,4})\s/.test(lines[i]) && !ul.test(lines[i]) && !ol.test(lines[i])) { para.push(lines[i]); i++; }
+    while (i < lines.length && lines[i].trim() && !/^(#{1,4})\s/.test(lines[i]) && !ul.test(lines[i]) && !ol.test(lines[i]) && !isRow(lines[i])) { para.push(lines[i]); i++; }
     blocks.push(<p key={k++} style={{ margin: '2px 0' }}>{para.map((p, j) => <Fragment key={j}>{j > 0 && <br />}{inline(p)}</Fragment>)}</p>);
   }
   return <div style={{ display: 'grid', gap: 4, lineHeight: 1.45 }}>{blocks}</div>;

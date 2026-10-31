@@ -11,11 +11,11 @@ import { noKeyMessage } from '../apps/workshop';
 import { Viewport } from '../ui/Viewport';
 import { TabFrame } from '../ui/TabFrame';
 import { Btn, Callout, Section, Select, Seg, Slider, Toggle, Badge, fmtN } from '../ui/controls';
-import { CloudLayer, BoxOutline } from '../ui/three';
+import { CloudLayer, BoxOutline, TextSprite } from '../ui/three';
 import { ExternalLink, Cpu, Play } from '../ui/icons';
 import { buildGraph, nodesFromLabelledClusters, REL_LABEL, RelType, SceneGraph, GraphNode } from '../graph/sceneGraph';
 import { answerQuery, QueryAnswer, SUPPORTED_QUESTIONS, LLM_TOOL_SCHEMA } from '../graph/query';
-import { circularLayout } from '../graph/layout';
+import { forceLayout } from '../graph/layout';
 import { Vec3 } from '../core/math';
 
 const REL_COLOR: Record<RelType, string> = { near: '#64d2ff', above: '#30d158', below: '#a3e635', inside: '#bf5af2', left_of: '#ff9f0a', right_of: '#ffd60a', intersects: '#ff453a', blocks_path: '#ff375f' };
@@ -42,49 +42,60 @@ function GraphView({ graph, filters, selected, onSelect, showStructural, highlig
   const nodes = useMemo(() => graph.nodes.filter((n) => showStructural || !n.structural), [graph, showStructural]);
   const edges = useMemo(() => graph.edges.filter((e) => filters[e.type] && nodes.some((n) => n.id === e.from) && (nodes.some((n) => n.id === e.to) || e.to === 'corridor')), [graph, filters, nodes]);
   const ids = useMemo(() => [...nodes.map((n) => n.id), ...(edges.some((e) => e.to === 'corridor') ? ['corridor'] : [])], [nodes, edges]);
+  const small = ids.length > 22, R = small ? 12 : 16, radius = (id: string, on: boolean) => (id === 'corridor' ? 20 : (on ? R + 4 : R));
   const layout = useMemo(() => {
     const seen = new Set<string>();
     const pairs = edges.map((e) => ({ a: e.from, b: e.to })).filter((e) => { const k = [e.a, e.b].sort().join('|'); if (e.a === e.b || seen.has(k)) return false; seen.add(k); return true; });
-    const S = Math.min(w, h * 0.92);
-    const L = circularLayout(ids, pairs, S, S);
-    const ox = (w - S) / 2, oy = (h - S) / 2;
-    return new Map(L.map((n) => [n.id, { ...n, x: n.x + ox, y: n.y + oy }]));
-  }, [ids, edges, w, h]);
+    const L = forceLayout(ids, pairs, Math.max(w, 300), Math.max(h, 300), small ? 70 : 90);
+    return new Map(L.map((n) => [n.id, n]));
+  }, [ids, edges, w, h, small]);
+  // several relations between the same two objects are drawn as separate curves, not as doubled lines
+  const lanes = useMemo(() => { const cnt = new Map<string, number>(), at = new Map<number, number>(); edges.forEach((e, i) => { const k = [e.from, e.to].sort().join('|'), m = cnt.get(k) ?? 0; at.set(i, m); cnt.set(k, m + 1); }); return { at, cnt }; }, [edges]);
   const focus = hover ?? selected;
+  const legend = useMemo(() => { const m = new Map<string, number[]>(); nodes.forEach((n) => { const name = n.classLabel ?? n.label; if (!m.has(name)) m.set(name, classColor(n.classId)); }); return [...m.entries()]; }, [nodes]);
+  const types = [...new Set(edges.map((e) => e.type))];
   return (
     <div ref={box} style={{ position: 'absolute', inset: 0 }} data-testid="graph-view">
       <svg width={w} height={h} role="img" aria-label="Scene graph" onClick={() => onSelect(null)}>
-        <defs><marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="context-stroke" /></marker></defs>
+        <defs>{types.map((t) => <marker key={t} id={`arr-${t}`} viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill={REL_COLOR[t]} /></marker>)}</defs>
         {edges.map((e, i) => {
           const a = layout.get(e.from), b = layout.get(e.to);
           if (!a || !b || e.from === e.to) return null;
           const on = !focus || e.from === focus || e.to === focus;
-          const off = ((i % 3) - 1) * 4;
-          const dx = b.x - a.x, dy = b.y - a.y, d = Math.hypot(dx, dy) || 1;
-          const ox = (-dy / d) * off, oy = (dx / d) * off;
+          const dx = b.x - a.x, dy = b.y - a.y, d = Math.hypot(dx, dy) || 1, ux = dx / d, uy = dy / d;
+          const ra = radius(e.from, selected === e.from) + 2, rb = radius(e.to, selected === e.to) + 3;
+          const cnt = lanes.cnt.get([e.from, e.to].sort().join('|')) ?? 1, lane = (lanes.at.get(i) ?? 0) - (cnt - 1) / 2, bend = lane * 26 * (e.from < e.to ? 1 : -1);
+          const mx = (a.x + b.x) / 2 - uy * bend, my = (a.y + b.y) / 2 + ux * bend;
+          // start and end on the rim of the circles, aiming at the curve's control point so the line leaves where it should
+          const sx = a.x + ((mx - a.x) / (Math.hypot(mx - a.x, my - a.y) || 1)) * ra, sy = a.y + ((my - a.y) / (Math.hypot(mx - a.x, my - a.y) || 1)) * ra;
+          const ex = b.x + ((mx - b.x) / (Math.hypot(mx - b.x, my - b.y) || 1)) * rb, ey = b.y + ((my - b.y) / (Math.hypot(mx - b.x, my - b.y) || 1)) * rb;
           const dir = e.type === 'near' || e.type === 'intersects';
           return (
-            <g key={i} opacity={on ? 0.95 : 0.12}>
-              <line x1={a.x + ox} y1={a.y + oy} x2={b.x + ox - (dx / d) * 24} y2={b.y + oy - (dy / d) * 24} stroke={REL_COLOR[e.type]} strokeWidth={on && focus ? 2.4 : 1.6} markerEnd={dir ? undefined : 'url(#arr)'} />
-              {focus && on && <text x={(a.x + b.x) / 2 + ox} y={(a.y + b.y) / 2 + oy - 3} fontSize="12.5" fill={REL_COLOR[e.type]} textAnchor="middle" style={{ paintOrder: 'stroke', stroke: 'rgba(0,0,0,.55)', strokeWidth: 3 }}>{REL_LABEL[e.type]}{e.value !== undefined && e.type !== 'blocks_path' ? ` ${e.value.toFixed(2)} m` : ''}</text>}
+            <g key={i} opacity={on ? (focus ? 1 : 0.8) : 0.1}>
+              <path d={`M${sx},${sy} Q${mx},${my} ${ex},${ey}`} fill="none" stroke={REL_COLOR[e.type]} strokeWidth={on && focus ? 2.4 : 1.6} markerEnd={dir ? undefined : `url(#arr-${e.type})`} />
+              {focus && on && <text x={(sx + 2 * mx + ex) / 4} y={(sy + 2 * my + ey) / 4 - 4} fontSize="12" fill={REL_COLOR[e.type]} fontWeight={600} textAnchor="middle" style={{ paintOrder: 'stroke', stroke: 'var(--bg)', strokeWidth: 4 }}>{REL_LABEL[e.type]}{e.value !== undefined && e.type !== 'blocks_path' ? ` ${e.value.toFixed(2)} m` : ''}</text>}
             </g>
           );
         })}
         {ids.map((id) => {
           const p = layout.get(id)!;
-          if (id === 'corridor') return <g key={id}><rect x={p.x - 26} y={p.y - 14} width={52} height={28} rx={8} fill="rgba(48,209,88,.25)" stroke="#30d158" /><text x={p.x} y={p.y + 5} fontSize="12.5" textAnchor="middle" fill="#30d158">corridor</text></g>;
+          if (id === 'corridor') return <g key={id} transform={`translate(${p.x},${p.y})`}><rect x={-30} y={-14} width={60} height={28} rx={8} fill="rgba(48,209,88,.25)" stroke="#30d158" /><text y={5} fontSize="12.5" textAnchor="middle" fill="#248a3d" fontWeight={600}>corridor</text></g>;
           const n = nodes.find((q) => q.id === id)!;
           const c = classColor(n.classId);
-          const sel = selected === id, hl = highlight.includes(id), crowded = ids.length > 18 && Math.min(w, h) < 560, small = ids.length > 18;
+          const sel = selected === id, hl = highlight.includes(id), dim = !!focus && focus !== id && !edges.some((e) => (e.from === focus && e.to === id) || (e.to === focus && e.from === id));
           const estimated = n.source !== 'ground-truth annotation';
           return (
-            <g key={id} transform={`translate(${p.x},${p.y})`} style={{ cursor: 'pointer' }} onClick={(ev) => { ev.stopPropagation(); onSelect(id); }} onMouseEnter={() => setHover(id)} onMouseLeave={() => setHover(null)} data-testid={`node-${id}`}>
-              <circle r={sel ? (small ? 15 : 20) : (small ? 11 : 16)} fill={`rgb(${c.join(',')})`} fillOpacity={0.9} stroke={sel ? '#fff' : hl ? '#ffd60a' : 'rgba(0,0,0,.4)'} strokeWidth={sel || hl ? 3 : 1.5} strokeDasharray={estimated ? '4 3' : undefined} />
-              {(!crowded || sel || focus === id) && <text y={small ? 26 : 31} fontSize="13.5" fontWeight={600} textAnchor="middle" fill="var(--text)" style={{ paintOrder: 'stroke', stroke: 'var(--bg)', strokeWidth: 3.5 }}>{n.label.length > 16 ? n.label.slice(0, 15) + '…' : n.label}</text>}
+            <g key={id} transform={`translate(${p.x},${p.y})`} opacity={dim ? 0.3 : 1} style={{ cursor: 'pointer' }} onClick={(ev) => { ev.stopPropagation(); onSelect(id); }} onMouseEnter={() => setHover(id)} onMouseLeave={() => setHover(null)} data-testid={`node-${id}`}>
+              <circle r={radius(id, sel)} fill={`rgb(${c.join(',')})`} fillOpacity={0.92} stroke={sel ? '#1d1d1f' : hl ? '#ffd60a' : 'rgba(0,0,0,.45)'} strokeWidth={sel || hl ? 3 : 1.5} strokeDasharray={estimated ? '4 3' : undefined} />
+              <text y={radius(id, sel) + 14} fontSize={small ? 11.5 : 13} fontWeight={600} textAnchor="middle" fill="var(--text)" style={{ paintOrder: 'stroke', stroke: 'var(--bg)', strokeWidth: 4 }}>{n.label}</text>
             </g>
           );
         })}
       </svg>
+      <div className="overlay glass card" style={{ left: 12, bottom: 12, padding: '0.4rem 0.7rem', display: 'flex', gap: 12, flexWrap: 'wrap', fontSize: '0.75rem', maxWidth: 'calc(100% - 24px)' }} data-testid="graph-legend">
+        {legend.map(([name, col]) => <span key={name}><i style={{ display: 'inline-block', width: 10, height: 10, borderRadius: 5, background: `rgb(${col.join(',')})`, marginRight: 5, verticalAlign: -1 }} />{name}</span>)}
+        {types.map((t) => <span key={t} style={{ color: REL_COLOR[t], fontWeight: 600 }}>— {REL_LABEL[t]}</span>)}
+      </div>
     </div>
   );
 }
@@ -129,8 +140,9 @@ export default function Tab8() {
 
   const graph = g.graph;
   useEffect(() => {
-    if (!truthNodes.length) return;
-    const nodes = g.source === 'segmentation' && seg ? nodesFromLabelledClusters(seg, s.seg.names) : truthNodes;
+    // the objects come from the clusters you named; the scan's own answer key is only used when asked for explicitly
+    const nodes = g.source === 'ground-truth' ? truthNodes : seg && Object.values(s.seg.names).some(Boolean) ? nodesFromLabelledClusters(seg, s.seg.names) : [];
+    if (!nodes.length) { if (useLab.getState().graph.graph) setG({ graph: null }); return; }
     const gr = buildGraph(nodes, { pos: scannerPos, yaw: 0 }, undefined, g.nearThreshold);
     setG({ graph: gr });
   }, [g.source, g.nearThreshold, truthNodes, seg, s.seg.names]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -187,9 +199,21 @@ export default function Tab8() {
         <Viewport id="sg3d" home={[8, -10, 6.5]} target={[0, 0, 1.2]} hideGrid hideAxes bgOverride="#ffffff">
           {classCloud && <CloudLayer cloud={classCloud} mode="rgb" size={Math.max(2, s.view.pointSize - 1)} budget={Math.max(s.view.renderBudget, 150000)} pickable={false} clip={{ on: true, min: -1, max: 2.28 }} />}
           {graph && nodes.filter((n) => !n.structural).map((n) => <BoxOutline key={n.id} bbox={n.bbox} color={hlIds.includes(n.id) ? '#ffd60a' : g.source === 'segmentation' ? '#ff375f' : '#0a84ff'} dashed={g.source === 'segmentation'} />)}
+          {graph && nodes.filter((n) => !n.structural && (hlIds.includes(n.id) || g.selectedNode === n.id || !/^(Chair|Table)/.test(n.label))).map((n) => <TextSprite key={`t-${n.id}`} text={n.label} position={[n.position[0], n.position[1], n.bbox.max[2] + 0.18]} height={0.022} bg={hlIds.includes(n.id) ? 'rgba(255,214,10,0.95)' : 'rgba(29,29,31,0.72)'} color={hlIds.includes(n.id) ? '#1d1d1f' : '#fff'} />)}
         </Viewport>
       </div>
       <div style={{ position: 'relative', background: 'var(--bg)' }}>
+        {!graph && (
+          <div style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', padding: 24 }} data-testid="graph-empty">
+            <div style={{ display: 'grid', gap: 10, maxWidth: 360, justifyItems: 'stretch' }}>
+              <b style={{ fontSize: '1.05rem', textAlign: 'center' }}>Where should the objects come from?</b>
+              <Btn variant="primary" onClick={() => useLab.getState().setTab(11)} testId="graph-go-cluster">Cluster the room and name the clusters</Btn>
+              <Btn onClick={() => useLab.getState().setTab(12)} testId="graph-go-train">Train a segmentation model</Btn>
+              <Btn onClick={() => setG({ source: 'ground-truth' })} testId="graph-use-truth">Just try it: use the true objects</Btn>
+              <span className="caption" style={{ textAlign: 'center' }}>Clusters you name in Unsupervised Learning become the objects of the graph. The true objects are the scan's own answer key, only for trying things out.</span>
+            </div>
+          </div>
+        )}
         {graph && <GraphView graph={graph} filters={g.filters} selected={g.selectedNode} onSelect={selectNode} showStructural={showStructural} highlight={highlight} />}
         <div className="overlay glass card" style={{ top: 12, left: 12, padding: '0.3rem 0.7rem', fontSize: '0.875rem', fontWeight: 600 }}>Graph · tap an object</div>
       </div>
@@ -242,7 +266,7 @@ export default function Tab8() {
       {pane === 'graph' && (<>
       <Section title="Objects">
         <Seg value={g.source} onChange={(source) => setG({ source })} options={[{ value: 'ground-truth', label: 'True objects' }, { value: 'segmentation', label: 'My labelled clusters' }]} />
-        {g.source === 'segmentation' && (!seg || !Object.values(s.seg.names).some(Boolean)) && <Callout kind="warn">Run Clustering & Segmentation (tab 11) and label the clusters in its Results. The clusters you named become the objects of this graph.</Callout>}
+        <p className="hint">{g.source === 'ground-truth' ? 'The scan\'s own answer key: a quick way to try the graph.' : 'The clusters you named in tab 12 (Unsupervised Learning) become the objects.'}</p>
         <Slider label="“Near” threshold" value={g.nearThreshold} min={0.1} max={2} step={0.05} unit=" m" format={(v) => v.toFixed(2)} onChange={(nearThreshold) => setG({ nearThreshold })}  />
         <Toggle label="Show floor / walls" checked={showStructural} onChange={setShowStructural} />
       </Section>

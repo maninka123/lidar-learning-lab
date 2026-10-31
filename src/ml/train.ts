@@ -12,7 +12,7 @@ export const iou = (a: number[], b: number[]) => {
 };
 /** How much of a box must overlap the true box to count as found: half for a flat 2D box, a quarter for a 3D box (the usual choice, 3D is harder). */
 export const FOUND_IOU = (kind: DataKind) => (kind === 'points' ? 0.25 : 0.5);
-const LAMBDA_BOX = 10;
+const LAMBDA_BOX = 30; // how much the box counts next to the class
 
 /** Loss and the gradient to send back into the model for one example. */
 export function lossAndGrad(task: Task, K: number, out: Float32Array, s: Sample, segW: number[]): { loss: number; d: Float32Array } {
