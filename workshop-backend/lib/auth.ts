@@ -72,3 +72,10 @@ export async function loginAllowed(req: Req, deps: Deps): Promise<boolean> {
   await deps.store.expire(`login:ip:${ip}:${win}`, 1000); await deps.store.expire(`login:all:${win}`, 1000);
   return a <= 5 && b <= 30;
 }
+
+/** Generic per-address limiter: true while this address is under `limit` calls in the current 15 minutes. */
+export async function underLimit(req: Req, deps: Deps, name: string, limit: number): Promise<boolean> {
+  const win = Math.floor(deps.now() / 900e3), key = `limit:${name}:${ipTag(clientIp(req.headers, req.ip))}:${win}`;
+  const n = await deps.store.incr(key); await deps.store.expire(key, 1000);
+  return n <= limit;
+}

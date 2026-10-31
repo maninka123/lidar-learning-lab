@@ -11,7 +11,7 @@ import { send, toReq } from '../lib/vercel';
 import { readEnv } from '../lib/env';
 
 for (const f of ['.env.local', '.env']) if (existsSync(f)) for (const l of readFileSync(f, 'utf8').split('\n')) { const m = l.match(/^([A-Z_]+)=(.*)$/); if (m && !process.env[m[1]]) process.env[m[1]] = m[2]; }
-const env = readEnv({ ...process.env, ALLOW_LOCALHOST: '1', FRONTEND_ORIGIN: process.env.FRONTEND_ORIGIN ?? 'http://127.0.0.1:5173', ADMIN_PASSWORD_HASH: hashPassword(process.env.ADMIN_PASSWORD ?? 'workshop-admin-1'), ADMIN_AUTH_SECRET: randomBytes(32).toString('base64url'), UPSTASH_REDIS_REST_URL: 'memory', UPSTASH_REDIS_REST_TOKEN: 'memory' });
+const env = readEnv({ ...process.env, ALLOW_LOCALHOST: '1', FRONTEND_ORIGIN: process.env.FRONTEND_ORIGIN ?? 'http://127.0.0.1:5173', ADMIN_USERNAME: process.env.ADMIN_USERNAME ?? 'admin', ADMIN_PASSWORD_HASH: hashPassword(process.env.ADMIN_PASSWORD ?? 'workshop-admin-1'), ADMIN_AUTH_SECRET: randomBytes(32).toString('base64url'), UPSTASH_REDIS_REST_URL: 'memory', UPSTASH_REDIS_REST_TOKEN: 'memory' });
 const deps = { env, store: new MemoryStore(), now: () => Date.now(), fetch: (...a: Parameters<typeof fetch>) => fetch(...a) };
 const types: Record<string, string> = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css' };
 createServer(async (rq, rs) => {
@@ -21,4 +21,4 @@ createServer(async (rq, rs) => {
   const file = join('public', path === '/admin' ? '/admin/index.html' : path);
   if (existsSync(file) && !file.includes('..')) { rs.writeHead(200, { 'Content-Type': types[extname(file)] ?? 'text/plain' }); return rs.end(readFileSync(file)); }
   rs.writeHead(404).end('not found');
-}).listen(8787, '127.0.0.1', () => console.log('Workshop backend (memory store) on http://127.0.0.1:8787/admin  password: ' + (process.env.ADMIN_PASSWORD ?? 'workshop-admin-1')));
+}).listen(8787, '127.0.0.1', () => console.log('Workshop backend (memory store) on http://127.0.0.1:8787/admin  user: ' + (process.env.ADMIN_USERNAME ?? 'admin') + '  password: ' + (process.env.ADMIN_PASSWORD ?? 'workshop-admin-1')));

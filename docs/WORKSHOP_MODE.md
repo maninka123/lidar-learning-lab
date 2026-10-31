@@ -44,6 +44,7 @@ Type a password (12+ characters). It prints two lines: `ADMIN_PASSWORD_HASH=…`
 | Name | Value |
 |---|---|
 | `DEEPSEEK_API_KEY` | the dedicated workshop key |
+| `ADMIN_USERNAME` | the admin user name you choose |
 | `ADMIN_PASSWORD_HASH` | printed by `npm run hash-password` |
 | `ADMIN_AUTH_SECRET` | printed by `npm run hash-password` (32+ random characters) |
 | `FRONTEND_ORIGIN` | `https://maninka123.github.io` (comma-separate more origins if needed) |
@@ -56,7 +57,7 @@ In GitHub: **Settings → Secrets and variables → Actions → Variables → Ne
 Then re-run the **Deploy to GitHub Pages** workflow once. After this, you never redeploy for a workshop.
 
 ### 7. Open the dashboard
-Go to `https://<your-project>.vercel.app/admin` and log in. Anyone can open that page, but without the password nothing works, and all admin actions are checked on the server.
+Go to `https://<your-project>.vercel.app/admin` and sign in with your username and password (the root address has a faint "admin" link at the bottom right). After the first sign-in, press **Set up Touch ID** to register this device; from then on **Sign in with Touch ID** replaces typing the password (the password keeps working). Only a public key is stored, and Touch ID signs in with the same 8-hour session as a password. Anyone can open that page, but without the password nothing works, and all admin actions are checked on the server.
 
 ## Running a workshop
 
@@ -103,7 +104,7 @@ What is collected, and only for people who enter a workshop code (nothing about 
 * The DeepSeek key exists only in Vercel's environment. The student app never receives it, and it is not in Git, the build, responses, errors or logs. The backend only forwards chat requests with a fixed model (`deepseek-v4-flash`), message-shape checks, a size limit (about 450 KB), a capped `max_tokens`, and a 55 s timeout. It is not an open proxy.
 * Per-student and workshop-wide request caps, a per-minute rate limit, and an optional token budget (with reservations for requests in flight) are enforced with atomic Redis counters, so simultaneous requests cannot exceed them. They are tied to the code, not to the browser, so clearing storage or opening more tabs does not help.
 * If DeepSeek fails, the student's request is not counted. If Redis or the backend is down, AI requests are refused (fail closed) while the offline lab keeps working.
-* Admin login uses a salted scrypt password hash, a signed `HttpOnly; Secure; SameSite=Strict` session cookie that lasts 8 hours, a CSRF token and an origin check on every change, and login throttling (5 tries per address per 15 minutes). There is no registration and no default password.
+* Admin login uses a username, a salted scrypt password hash, optional Touch ID (WebAuthn passkeys bound to the site name), a signed `HttpOnly; Secure; SameSite=Strict` session cookie that lasts 8 hours, a CSRF token and an origin check on every change, and login throttling (5 tries per address per 15 minutes). There is no registration and no default password.
 * Prompts and answers are never stored or logged. Errors are logged by type and status only.
 * Only the student site's origin(s) in `FRONTEND_ORIGIN` are allowed by CORS.
 

@@ -6,6 +6,7 @@ import { adminHandler, publicHandler, studentHandler } from '../lib/handlers';
 
 export const DS_KEY = 'sk-test-secret-key-0000';
 export const PASSWORD = 'correct horse battery';
+export const USER = 'admin-user';
 export const SECRET = 'x'.repeat(40);
 export const ORIGIN = 'https://students.example';
 export const T0 = Date.UTC(2026, 10, 5, 0, 0, 0);
@@ -15,7 +16,7 @@ export interface Ctx { deps: Deps; store: MemoryStore; clock: { t: number }; fet
 
 export function setup(): Ctx {
   const store = new MemoryStore(), clock = { t: T0 }, fetchCalls: Ctx['fetchCalls'] = [], upstream: Ctx['upstream'] = { mode: 'ok', tokens: [100, 50] };
-  const env = readEnv({ DEEPSEEK_API_KEY: DS_KEY, ADMIN_PASSWORD_HASH: hashPassword(PASSWORD), ADMIN_AUTH_SECRET: SECRET, FRONTEND_ORIGIN: ORIGIN, UPSTASH_REDIS_REST_URL: 'x', UPSTASH_REDIS_REST_TOKEN: 'x' });
+  const env = readEnv({ DEEPSEEK_API_KEY: DS_KEY, ADMIN_USERNAME: USER, ADMIN_PASSWORD_HASH: hashPassword(PASSWORD), ADMIN_AUTH_SECRET: SECRET, FRONTEND_ORIGIN: ORIGIN, UPSTASH_REDIS_REST_URL: 'x', UPSTASH_REDIS_REST_TOKEN: 'x' });
   const fetchMock = (async (url: string, init: RequestInit) => {
     fetchCalls.push({ url, init });
     if (upstream.mode === 'throw') throw new Error('network down');
@@ -38,8 +39,8 @@ export function admin(ctx: Ctx, ip = '9.9.9.9') {
   };
   return {
     call,
-    async login(pw = PASSWORD) {
-      const r = await call('POST', 'login', { password: pw });
+    async login(pw = PASSWORD, user = USER) {
+      const r = await call('POST', 'login', { username: user, password: pw });
       if (r.status === 200) { cookie = (r.cookies?.[0] ?? '').split(';')[0]; csrf = (r.body as { csrf: string }).csrf; }
       return r;
     },

@@ -2,6 +2,7 @@ import { Store, upstashStore } from './store';
 
 export interface Env {
   deepseekKey: string;
+  adminUser: string;
   adminHash: string;
   authSecret: string;
   origins: string[];
@@ -13,6 +14,7 @@ export interface Env {
 export function readEnv(e: Record<string, string | undefined> = process.env): Env {
   return {
     deepseekKey: e.DEEPSEEK_API_KEY ?? '',
+    adminUser: e.ADMIN_USERNAME ?? '',
     adminHash: e.ADMIN_PASSWORD_HASH ?? '',
     authSecret: e.ADMIN_AUTH_SECRET ?? '',
     origins: (e.FRONTEND_ORIGIN ?? '').split(',').map((s) => s.trim().replace(/\/$/, '')).filter(Boolean),
@@ -24,7 +26,7 @@ export function readEnv(e: Record<string, string | undefined> = process.env): En
 
 /** Names of required settings that are missing (never their values). */
 export const missingEnv = (env: Env): string[] => [
-  !env.deepseekKey && 'DEEPSEEK_API_KEY', !env.adminHash && 'ADMIN_PASSWORD_HASH', env.authSecret.length < 32 && 'ADMIN_AUTH_SECRET (32+ characters)',
+  !env.deepseekKey && 'DEEPSEEK_API_KEY', !env.adminUser && 'ADMIN_USERNAME', !env.adminHash && 'ADMIN_PASSWORD_HASH', env.authSecret.length < 32 && 'ADMIN_AUTH_SECRET (32+ characters)',
   !env.origins.length && 'FRONTEND_ORIGIN', !env.redisUrl && 'UPSTASH_REDIS_REST_URL', !env.redisToken && 'UPSTASH_REDIS_REST_TOKEN',
 ].filter(Boolean) as string[];
 

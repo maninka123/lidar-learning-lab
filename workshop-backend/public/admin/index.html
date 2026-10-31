@@ -12,11 +12,18 @@
 <main>
   <section id="login" class="card login hidden">
     <h2>Administrator login</h2>
-    <form id="loginForm" class="grid"><label>Password<input id="pw" type="password" autocomplete="current-password" required></label><button class="primary">Log in</button><div id="loginMsg" class="msg bad hidden"></div></form>
+    <button id="touchLogin" class="primary hidden" style="width:100%;margin-bottom:12px">Sign in with Touch ID</button>
+    <form id="loginForm" class="grid">
+      <label>Username<input id="user" autocomplete="username" autocapitalize="none" spellcheck="false" required></label>
+      <label>Password<input id="pw" type="password" autocomplete="current-password" required></label>
+      <button class="primary">Log in</button>
+      <div id="loginMsg" class="msg bad hidden"></div>
+    </form>
   </section>
 
   <div id="app" class="hidden" style="display:grid;gap:16px">
     <div id="toast" class="msg hidden"></div>
+    <section class="card hidden" id="touchCard"><div class="row" style="justify-content:space-between"><span id="touchText">Use Touch ID instead of typing your password on this device.</span><button id="touchSetup">Set up Touch ID</button></div></section>
     <section class="card" id="statusCard">
       <div class="row" style="justify-content:space-between"><h2>Workshop</h2><span id="pill" class="pill">—</span></div>
       <div class="big" id="countdown">—</div>

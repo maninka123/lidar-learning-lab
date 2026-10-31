@@ -96,4 +96,4 @@ export async function workshopChat(code: string, messages: ChatMsg[], maxTokens:
 /** What to tell a student whose AI request found no key. */
 export const noKeyMessage = (action: string) => (workshopSnapshot().available
   ? `Enter your workshop access code below, then press ${action} again.`
-  : `This site has no DeepSeek key of its own. Paste your key below (it stays in your browser) and press ${action} again.`);
+  : `No AI key yet. Paste your own DeepSeek key below (it stays in this browser), then press ${action} again.`);

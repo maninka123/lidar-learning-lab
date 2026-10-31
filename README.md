@@ -78,20 +78,15 @@ npm run test:e2e   # browser tests (Playwright; first run: npx playwright instal
 
 **Videos linked in the app** are by **[Dr. Florent Poux](https://www.youtube.com/@FlorentPoux)**, whose point-cloud tutorials inspired the classroom tabs. Thank you for sharing them: [Scan to CAD](https://www.youtube.com/watch?v=Z8uAzTqdSts) · [Adaptive RANSAC plane detection](https://www.youtube.com/watch?v=MJJNIvvAQzc) · [Smart 3D change detection](https://www.youtube.com/watch?v=38Fu-pDwUoA) · [The library point cloud](https://www.youtube.com/watch?v=X57nSQZePyE) · [University](https://www.youtube.com/watch?v=8nzo4YobRyc) · [Old wool factory](https://www.youtube.com/watch?v=Kq8FKKODkog) · [Implantation point cloud](https://www.youtube.com/watch?v=Hy4hnWMw5ms). The videos play from YouTube; nothing is downloaded or copied.
 
+**AI steps (Scene Graphs, Moving Scene).** They need a DeepSeek key. Pick one: enter a **workshop access code** if your instructor gave you one; **paste your own key** into the box that appears (it stays in your browser); or, running the lab on your own computer, copy `.env.example` to `.env.local`, put `DEEPSEEK_API_KEY=your-key` in it, and run `npm run dev` (the key stays on your machine and nothing needs pasting). Everything else works without any key.
+
 Units are metres, Z-up. LAZ is not decoded in the browser (`pdal translate in.laz out.las`).
 
 ---
 
-<p align="center"><b>Made with care for anyone learning how machines see in 3D.</b></p>
-
 <p align="center">
-Questions, ideas and fixes are very welcome:<br>
-<a href="https://github.com/maninka123/lidar-learning-lab/issues">Open an issue</a> ·
-<a href="https://github.com/maninka123/lidar-learning-lab/pulls">Send a pull request</a> ·
-<a href="https://maninka123.github.io/lidar-learning-lab/">Try the lab</a>
+<b>Made with care for anyone learning how machines see in 3D.</b><br>
+If it helped you, a <a href="https://github.com/maninka123/lidar-learning-lab">⭐ star</a> is lovely · <a href="https://github.com/maninka123/lidar-learning-lab/issues">ideas &amp; fixes welcome</a> · <a href="https://maninka123.github.io/lidar-learning-lab/">try the lab</a>
 </p>
 
-<p align="center"><sub>
-Built with React, TypeScript, Vite, Three.js and Zustand · MIT licence, see <a href="LICENSE">LICENSE</a><br>
-Also see <a href="https://github.com/maninka123/rotating-target-calibration-studio">Rotating Target Calibration Studio</a> and <a href="https://github.com/maninka123/local-llm-fit">Model Fit Explorer</a>
-</sub></p>
+<p align="center"><sub>MIT licence · React, TypeScript, Vite, Three.js · also <a href="https://github.com/maninka123/rotating-target-calibration-studio">Rotating Target Calibration Studio</a> and <a href="https://github.com/maninka123/local-llm-fit">Model Fit Explorer</a></sub></p>

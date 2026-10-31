@@ -2,8 +2,10 @@ import type { Deps } from './env';
 import { missingEnv } from './env';
 import { Req, Res, json, err, corsHeaders, originAllowed, ipTag, clientIp, MAX_BODY } from './http';
 import { StoreUnavailable } from './store';
-import { clearCookie, createSession, csrfOk, destroySession, getSession, loginAllowed, sameOrigin, verifyPassword } from './auth';
+import { clearCookie, createSession, csrfOk, destroySession, getSession, loginAllowed, sameOrigin, underLimit, verifyPassword } from './auth';
 import * as W from './workshop';
+import * as P from './passkeys';
+import { createHash, timingSafeEqual } from 'node:crypto';
 
 const DEEPSEEK_URL = 'https://api.deepseek.com/chat/completions';
 const UPSTREAM_TIMEOUT_MS = 55_000;
@@ -129,15 +131,28 @@ export const adminHandler = (deps: Deps) => async (req: Req): Promise<Res> => {
     const now = deps.now();
     if (req.method !== 'GET' && !sameOrigin(req)) return err(403, 'bad_origin');
 
+    const sameText = (a: string, b: string) => { const x = createHash('sha256').update(a).digest(), y = createHash('sha256').update(b).digest(); return timingSafeEqual(x, y); };
+    const signIn = async () => { const { cookie, session } = await createSession(deps); return json(200, { ok: true, csrf: session.csrf, expiresAt: session.expiresAt }, { cookies: [cookie] }); };
+
     if (route === 'login' && req.method === 'POST') {
       if (!(await loginAllowed(req, deps))) return err(429, 'too_many_attempts', 'Too many login attempts. Wait 15 minutes.');
-      const pw = (req.body as { password?: unknown } | null)?.password;
-      if (typeof pw !== 'string' || pw.length > 200 || !verifyPassword(pw, deps.env.adminHash)) return err(401, 'bad_login', 'Wrong password.');
-      const { cookie, session } = await createSession(deps);
-      return json(200, { ok: true, csrf: session.csrf, expiresAt: session.expiresAt }, { cookies: [cookie] });
+      const { username: u, password: pw } = (req.body ?? {}) as { username?: unknown; password?: unknown };
+      // both are always checked, so a wrong username takes as long to refuse as a wrong password
+      const userOk = typeof u === 'string' && u.length <= 100 && sameText(u, deps.env.adminUser);
+      const pwOk = typeof pw === 'string' && pw.length <= 200 && verifyPassword(pw, deps.env.adminHash);
+      if (!userOk || !pwOk) return err(401, 'bad_login', 'Wrong username or password.');
+      return signIn();
+    }
+    // Touch ID / passkey sign-in (no session yet, so the same throttle as the password)
+    if ((route === 'passkey-login-options' || route === 'passkey-login') && req.method === 'POST') {
+      // asking for a challenge is cheap and harmless; only the answer counts like a password try
+      const allowed = route === 'passkey-login-options' ? await underLimit(req, deps, 'passkey-options', 40) : await loginAllowed(req, deps);
+      if (!allowed) return err(429, 'too_many_attempts', 'Too many login attempts. Wait 15 minutes.');
+      if (route === 'passkey-login-options') { const o = await P.loginOptions(req, deps); return o ? json(200, o) : err(404, 'no_passkey', 'Touch ID is not set up yet.'); }
+      return (await P.verifyLogin(req, deps, (req.body ?? {}) as never)) ? signIn() : err(401, 'bad_login', 'Touch ID sign-in failed.');
     }
     const session = await getSession(req, deps);
-    if (route === 'session' && req.method === 'GET') return json(200, session ? { authenticated: true, csrf: session.csrf, expiresAt: session.expiresAt, now } : { authenticated: false });
+    if (route === 'session' && req.method === 'GET') return json(200, session ? { authenticated: true, csrf: session.csrf, expiresAt: session.expiresAt, now, passkeys: await P.passkeyCount(deps) } : { authenticated: false, passkeys: (await P.passkeyCount(deps)) > 0 });
     if (!session) return err(401, 'unauthorized');
     if (req.method !== 'GET' && !csrfOk(req, session)) return err(403, 'bad_csrf');
 
@@ -146,6 +161,8 @@ export const adminHandler = (deps: Deps) => async (req: Req): Promise<Res> => {
     const save = async (n: W.WorkshopConfig) => { await W.saveConfig(deps.store, n, now); await W.registerWorkshop(deps.store, n); return ok({ config: await W.loadConfig(deps.store), status: W.statusOf(n, now) }); };
 
     switch (`${req.method} ${route}`) {
+      case 'POST passkey-register-options': return json(200, await P.registrationOptions(req, deps));
+      case 'POST passkey-register': return (await P.registerPasskey(req, deps, body as never)) ? ok({ passkeys: await P.passkeyCount(deps) }) : err(400, 'bad_request', 'Touch ID could not be set up.');
       case 'POST logout': await destroySession(deps, session); return json(200, { ok: true }, { cookies: [clearCookie()] });
       case 'GET workshop': await W.purgeExpired(deps.store, c, now); return json(200, { config: c, ...(await W.stats(deps.store, c, now)) });
       case 'PUT config': {

@@ -15,15 +15,40 @@ function toast(text, bad) { const t = $('toast'); t.textContent = text; t.classN
 const run = async (f) => { try { await f(); } catch (e) { toast(e.message, true); } };
 
 function showLogin() { $('login').classList.remove('hidden'); $('app').classList.add('hidden'); $('logout').classList.add('hidden'); clearInterval(timer); }
+// ---- Touch ID (WebAuthn). Binary fields travel as base64url text.
+const b64 = { enc: (buf) => btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''),
+  dec: (s) => Uint8Array.from(atob(s.replace(/-/g, '+').replace(/_/g, '/').padEnd(Math.ceil(s.length / 4) * 4, '=')), (c) => c.charCodeAt(0)).buffer };
+const hasTouch = async () => !!(window.PublicKeyCredential && (await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable().catch(() => false)));
+const creds = (o) => ({ ...o, challenge: b64.dec(o.challenge), user: o.user && { ...o.user, id: b64.dec(o.user.id) }, excludeCredentials: (o.excludeCredentials || []).map((c) => ({ ...c, id: b64.dec(c.id) })), allowCredentials: (o.allowCredentials || []).map((c) => ({ ...c, id: b64.dec(c.id) })) });
+async function touchRegister() {
+  const { options, challengeId } = await api('POST', 'passkey-register-options', {});
+  const c = await navigator.credentials.create({ publicKey: creds(options) });
+  const r = c.response;
+  await api('POST', 'passkey-register', { challengeId, label: navigator.platform || 'This device', response: { id: c.id, rawId: b64.enc(c.rawId), type: c.type, authenticatorAttachment: c.authenticatorAttachment, clientExtensionResults: c.getClientExtensionResults(), response: { attestationObject: b64.enc(r.attestationObject), clientDataJSON: b64.enc(r.clientDataJSON), transports: r.getTransports ? r.getTransports() : [] } } });
+}
+async function touchLogin() {
+  const { options, challengeId } = await api('POST', 'passkey-login-options', {});
+  const c = await navigator.credentials.get({ publicKey: creds(options) });
+  const r = c.response;
+  const out = await api('POST', 'passkey-login', { challengeId, response: { id: c.id, rawId: b64.enc(c.rawId), type: c.type, authenticatorAttachment: c.authenticatorAttachment, clientExtensionResults: c.getClientExtensionResults(), response: { authenticatorData: b64.enc(r.authenticatorData), clientDataJSON: b64.enc(r.clientDataJSON), signature: b64.enc(r.signature), userHandle: r.userHandle ? b64.enc(r.userHandle) : undefined } } });
+  csrf = out.csrf; await boot();
+}
+$('touchLogin').addEventListener('click', async () => { const m = $('loginMsg'); m.classList.add('hidden'); try { await touchLogin(); } catch (e) { m.textContent = e.name === 'NotAllowedError' ? 'Touch ID was cancelled.' : e.message; m.classList.remove('hidden'); } });
+$('touchSetup').addEventListener('click', () => run(async () => { await touchRegister(); toast('Touch ID is set up on this device'); await boot(); }));
+
 async function boot() {
   const s = await fetch('/api/admin/session', { credentials: 'same-origin' }).then((r) => r.json()).catch(() => ({}));
-  if (!s.authenticated) return showLogin();
+  const touch = await hasTouch();
+  if (!s.authenticated) { showLogin(); $('touchLogin').classList.toggle('hidden', !(touch && s.passkeys)); return; }
+  $('touchCard').classList.toggle('hidden', !touch);
+  $('touchText').textContent = s.passkeys ? `Touch ID is set up (${s.passkeys}). Add this device too, if it is a different one.` : 'Use Touch ID instead of typing your password on this device.';
+  $('touchSetup').textContent = s.passkeys ? 'Add this device' : 'Set up Touch ID';
   csrf = s.csrf; $('login').classList.add('hidden'); $('app').classList.remove('hidden'); $('logout').classList.remove('hidden');
   await refresh(); clearInterval(timer); timer = setInterval(tick, 1000); setInterval(() => run(refresh), 15000);
 }
 $('loginForm').addEventListener('submit', async (e) => {
   e.preventDefault(); const m = $('loginMsg'); m.classList.add('hidden');
-  try { const r = await api('POST', 'login', { password: $('pw').value }); csrf = r.csrf; $('pw').value = ''; await boot(); }
+  try { const r = await api('POST', 'login', { username: $('user').value.trim(), password: $('pw').value }); csrf = r.csrf; $('pw').value = ''; await boot(); }
   catch (err) { m.textContent = err.message; m.classList.remove('hidden'); }
 });
 $('logout').addEventListener('click', () => run(async () => { await api('POST', 'logout'); csrf = ''; showLogin(); }));

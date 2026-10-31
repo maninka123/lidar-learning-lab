@@ -73,7 +73,7 @@ describe('student app: Workshop Mode', () => {
     route = (u) => (u.includes('/api/student/chat') ? json(403, { error: 'expired' }) : u.endsWith('/api/public/status') ? json(200, { available: false, status: 'inactive' }) : json(404, {}));
     await expect(chatDeepSeek(msgs)).rejects.toBeInstanceOf(NoKeyError);
     expect(workshopSnapshot().available).toBe(false);
-    expect(noKeyMessage('Send')).toMatch(/Paste your key/);
+    expect(noKeyMessage('Send')).toMatch(/Paste your own DeepSeek key/);
   });
 
   it('an unreachable backend gives a friendly message, not a crash', async () => {

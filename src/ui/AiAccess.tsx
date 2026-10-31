@@ -17,7 +17,8 @@ export function AiAccess({ needKey, ownKey, setOwnKey, testId }: { needKey: bool
 
   const keyField = (
     <label className="field"><span>Your DeepSeek key (kept only in this browser)</span>
-      <input type="password" value={ownKey} onChange={(e) => { setOwnKey(e.target.value); saveOwnKey(e.target.value); }} placeholder="sk-…" data-testid={testId} autoComplete="off" /></label>
+      <input type="password" value={ownKey} onChange={(e) => { setOwnKey(e.target.value); saveOwnKey(e.target.value); }} placeholder="sk-…" data-testid={testId} autoComplete="off" />
+      <span className="caption" data-testid="key-help">Get a key at <a href="https://platform.deepseek.com/api_keys" target="_blank" rel="noreferrer">platform.deepseek.com</a>. Running the lab on your own computer? Put <code>DEEPSEEK_API_KEY=your-key</code> in a file named <code>.env.local</code> in the project folder instead, restart, and nothing needs pasting.</span></label>
   );
   if (!w.available) return needKey ? keyField : null;
   if (useOwn) return (<>{keyField}<button className="btn sm" onClick={() => setUseOwn(false)}>Use the workshop access code instead</button></>);

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { HOUR, PASSWORD, T0, admin, mk, setup } from './helpers';
+import { HOUR, PASSWORD, T0, USER, admin, mk, setup } from './helpers';
 import { adminHandler } from '../lib/handlers';
 import { hashPassword, verifyPassword } from '../lib/auth';
 import { sydneyToEpoch, epochToSydneyInput, fmtDuration } from '../public/admin/tz.js';
@@ -9,11 +9,14 @@ describe('admin authentication', () => {
     const ctx = setup(); const a = admin(ctx);
     for (const [m, p] of [['GET', 'workshop'], ['PUT', 'config'], ['POST', 'workshop-start'], ['POST', 'workshop-disable'], ['POST', 'workshop-extend'], ['POST', 'workshop-end'], ['GET', 'codes'], ['POST', 'codes'], ['POST', 'codes-revoke'], ['POST', 'logout']] as const)
       expect((await a.call(m, p, {})).status, `${m} ${p}`).toBe(401);
-    expect((await a.call('GET', 'session')).body).toEqual({ authenticated: false });
+    expect((await a.call('GET', 'session')).body).toEqual({ authenticated: false, passkeys: false });
   });
   it('rejects a wrong password, accepts the right one and sets a locked-down cookie', async () => {
     const ctx = setup(); const a = admin(ctx);
     expect((await a.login('nope nope nope')).status).toBe(401);
+    expect((await a.login(PASSWORD, 'someone-else')).status).toBe(401); // right password, wrong username
+    expect((await a.call('POST', 'login', { password: PASSWORD })).status).toBe(401); // no username at all
+    expect(((await a.login('nope nope nope')).body as { message: string }).message).toBe('Wrong username or password.'); // does not say which one
     const r = await a.login(); expect(r.status).toBe(200);
     expect(r.cookies?.[0]).toMatch(/HttpOnly/); expect(r.cookies?.[0]).toMatch(/Secure/); expect(r.cookies?.[0]).toMatch(/SameSite=Strict/);
     expect((await a.call('GET', 'workshop')).status).toBe(200);
@@ -49,7 +52,7 @@ describe('admin authentication', () => {
     const ctx = setup(); const a = admin(ctx);
     for (const p of ['register', 'signup', 'users']) expect((await a.call('POST', p, { password: 'x' })).status).toBe(401);
     expect(verifyPassword('', ctx.deps.env.adminHash)).toBe(false);
-    ctx.deps.env.adminHash = ''; expect((await adminHandler(ctx.deps)(mk('POST', '/api/admin/login', { body: { password: PASSWORD } }))).status).toBe(503);
+    ctx.deps.env.adminHash = ''; expect((await adminHandler(ctx.deps)(mk('POST', '/api/admin/login', { body: { username: USER, password: PASSWORD } }))).status).toBe(503);
   });
   it('password hashes verify only the right password and are salted', () => {
     const h1 = hashPassword('abc'), h2 = hashPassword('abc');
