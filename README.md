@@ -78,7 +78,12 @@ npm run test:e2e   # browser tests (Playwright; first run: npx playwright instal
 
 **Videos linked in the app** are by **[Dr. Florent Poux](https://www.youtube.com/@FlorentPoux)**, whose point-cloud tutorials inspired the classroom tabs. Thank you for sharing them: [Scan to CAD](https://www.youtube.com/watch?v=Z8uAzTqdSts) · [Adaptive RANSAC plane detection](https://www.youtube.com/watch?v=MJJNIvvAQzc) · [Smart 3D change detection](https://www.youtube.com/watch?v=38Fu-pDwUoA) · [The library point cloud](https://www.youtube.com/watch?v=X57nSQZePyE) · [University](https://www.youtube.com/watch?v=8nzo4YobRyc) · [Old wool factory](https://www.youtube.com/watch?v=Kq8FKKODkog) · [Implantation point cloud](https://www.youtube.com/watch?v=Hy4hnWMw5ms). The videos play from YouTube; nothing is downloaded or copied.
 
-**AI steps (Scene Graphs, Moving Scene).** They need a DeepSeek key. Pick one: enter a **workshop access code** if your instructor gave you one; **paste your own key** into the box that appears (it stays in your browser); or, running the lab on your own computer, copy `.env.example` to `.env.local`, put `DEEPSEEK_API_KEY=your-key` in it, and run `npm run dev` (the key stays on your machine and nothing needs pasting). Everything else works without any key.
+**AI steps (Scene Graphs, Moving Scene)** need a DeepSeek key, and there are three ways to get one:
+- **In a workshop:** nothing to do. While your instructor's workshop is running the AI works for everyone (you can add your name if you like).
+- **On the website:** paste your own key into the box that appears. It stays in your browser.
+- **On your own computer:** copy `.env.example` to `.env.local`, put `DEEPSEEK_API_KEY=your-key` in it and run `npm run dev`. The key stays on your machine and nothing needs pasting.
+
+Everything else works without any key.
 
 Units are metres, Z-up. LAZ is not decoded in the browser (`pdal translate in.laz out.las`).
 
