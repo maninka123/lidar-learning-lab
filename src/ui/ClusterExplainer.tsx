@@ -42,7 +42,7 @@ export function clusterSteps(pts: [number, number][], eps: number, minPts: numbe
 const COL = ['#0a84ff', '#ff9f0a', '#30d158', '#bf5af2', '#ff453a', '#64d2ff', '#ffd60a', '#ac8e68'];
 const W = 330, H = 190, SX = 105, OX = 18, OY = 14;
 
-export function ClusterExplainer({ algo, eps, minPts, runKey = 0 }: { algo: 'euclidean' | 'dbscan'; eps: number; minPts: number; runKey?: number }) {
+export function ClusterExplainer({ algo, eps, minPts, runKey = 0, compact = false, onProgress }: { algo: 'euclidean' | 'dbscan'; eps: number; minPts: number; runKey?: number; compact?: boolean; onProgress?: (p: number | null) => void }) {
   const pts = useMemo(toyPoints, []);
   const steps = useMemo(() => clusterSteps(pts, eps, minPts, algo), [pts, eps, minPts, algo]);
   const [i, setI] = useState(0), [play, setPlay] = useState(false);
@@ -54,7 +54,16 @@ export function ClusterExplainer({ algo, eps, minPts, runKey = 0 }: { algo: 'euc
     return () => clearInterval(t);
   }, [play, steps]);
   const st = steps[Math.min(i, steps.length - 1)];
+  // tell the 3D view how far the story has got (null = finished, show the real result)
+  useEffect(() => { onProgress?.(i >= steps.length - 1 ? null : i / (steps.length - 1)); }, [i, steps.length]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => () => onProgress?.(null), []); // eslint-disable-line react-hooks/exhaustive-deps
   const px = (p: [number, number]) => [OX + p[0] * SX, H - OY - p[1] * SX] as const;
+  if (compact) return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }} data-testid="cluster-explainer">
+      <Btn sm variant="primary" icon={play ? <Pause size={14} /> : <Play size={14} />} onClick={() => { if (i >= steps.length - 1) setI(0); setPlay(!play); }} testId="cluster-play">{play ? 'Pause' : 'Play'}</Btn>
+      <span className="caption" data-testid="cluster-caption">Step {Math.min(i, steps.length - 1) + 1} of {steps.length} · {st.clusters} cluster{st.clusters === 1 ? '' : 's'}</span>
+    </div>
+  );
   return (
     <div style={{ display: 'grid', gap: 6 }} data-testid="cluster-explainer">
       <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label="Step-by-step clustering of a small 2D point set" style={{ width: '100%', background: '#fff', borderRadius: 12, border: '1px solid var(--line, #e5e5ea)' }}>

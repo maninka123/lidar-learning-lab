@@ -91,7 +91,7 @@ function GraphView({ graph, filters, selected, onSelect, showStructural, highlig
 
 export default function Tab8() {
   const s = useLab();
-  // the same classroom scan as the Clustering & Segmentation tab
+  // the same classroom scan as the Unsupervised Learning tab
   const [cloud, setCloud] = useState<PointCloud | null>(null);
   useEffect(() => { void loadClassroomForSegmentation().then(setCloud).catch((e) => s.notify((e as Error).message, 'error')); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const classCloud = useMemo(() => (cloud ? paintClasses(cloud) : null), [cloud]);
@@ -319,6 +319,6 @@ export default function Tab8() {
     </>
   );
 
-  return <TabFrame title="Scene Graphs & 3D AI" tab={12} noEnv viewport={viewport} controls={controls} learn={null} noPanelTabs statsRow stats={pane === 'direct' ? undefined : stats} hideViewControls />;
+  return <TabFrame title="Scene Graphs & 3D AI" tab={13} noEnv viewport={viewport} controls={controls} learn={null} noPanelTabs statsRow stats={pane === 'direct' ? undefined : stats} hideViewControls />;
   void Badge; void fmtN; void ({} as GraphNode);
 }

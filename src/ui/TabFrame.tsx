@@ -21,14 +21,15 @@ export interface TabFrameProps {
   envIds?: SceneId[]; // environments offered in the Environment menu (default: the three standard scenes)
   noEnv?: boolean; // hide the Environment menu (tabs that do not use a scene)
   simple?: boolean; // controls only: no Exercise / Learn panes, minimal top bar
+  noPanel?: boolean; // no side panel at all: the stage gets the whole width
 }
 
-export function TabFrame({ title, tab, viewport, controls, learn, stats, overlays, hideViewControls, simple, viewExtras, statsRow, hideExercise, noPanelTabs, topExtras, noEnv, envIds }: TabFrameProps) {
+export function TabFrame({ title, tab, viewport, controls, learn, stats, overlays, hideViewControls, simple, viewExtras, statsRow, hideExercise, noPanelTabs, topExtras, noEnv, envIds, noPanel }: TabFrameProps) {
   const open = useLab((s) => s.rightOpen);
   const [pane, setPane] = useState<'controls' | 'learn'>('controls');
   return (
     <>
-      <TopBar title={title} minimal={simple} extra={topExtras} noEnv={noEnv} envIds={envIds} />
+      <TopBar title={title} minimal={simple} extra={topExtras} noEnv={noEnv} envIds={envIds} noPanelToggle={noPanel} />
       <div className="tab-body">
         <div className="stage" data-testid="stage">
           {viewport}
@@ -36,7 +37,7 @@ export function TabFrame({ title, tab, viewport, controls, learn, stats, overlay
           {stats && <StatsCard items={stats} row={statsRow} />}
           {overlays}
         </div>
-        <aside className={`right glass ${open ? '' : 'closed'}`} aria-label="Experiment controls" data-testid="right-panel">
+        {!noPanel && <aside className={`right glass ${open ? '' : 'closed'}`} aria-label="Experiment controls" data-testid="right-panel">
           {!simple && !noPanelTabs && <div style={{ padding: '0.8rem 1rem 0.4rem' }}>
             <Seg value={pane} onChange={setPane} label="Panel" options={[{ value: 'controls', label: 'Controls' }, { value: 'learn', label: 'Learn' }]} />
           </div>}
@@ -46,7 +47,7 @@ export function TabFrame({ title, tab, viewport, controls, learn, stats, overlay
               {pane === 'learn' && <div style={{ display: 'grid', gap: 12, paddingTop: 12 }}>{learn}</div>}
             </div>
           </div>
-        </aside>
+        </aside>}
       </div>
     </>
   );

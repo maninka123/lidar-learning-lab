@@ -17,6 +17,7 @@ const TabChange = lazy(() => import('./tabs/TabChange'));
 const TabMeshing = lazy(() => import('./tabs/TabMeshing'));
 const Tab5 = lazy(() => import('./tabs/Tab5Processing'));
 const Tab6 = lazy(() => import('./tabs/Tab6Segmentation'));
+const TabSup = lazy(() => import('./tabs/TabSupervised'));
 const Tab7 = lazy(() => import('./tabs/Tab7Recon'));
 const Tab8 = lazy(() => import('./tabs/Tab8SceneGraph'));
 
@@ -32,7 +33,8 @@ const TABS: { label: string; icon: ReactNode; el: ReactNode }[] = [
   { label: 'SLAM & Mobile Scanning', icon: <Route size={18} />, el: <TabMap /> },
   { label: 'LiDAR + Camera Fusion', icon: <Camera size={18} />, el: <TabFusion /> },
   { label: 'Meshing & Surfaces', icon: <Wand size={18} />, el: <TabMeshing /> },
-  { label: 'Clustering & Segmentation', icon: <Network size={18} />, el: <Tab6 /> },
+  { label: 'Unsupervised Learning', icon: <Network size={18} />, el: <Tab6 /> },
+  { label: 'Supervised Learning', icon: <Layers size={18} />, el: <TabSup /> },
   { label: 'Scene Graphs & 3D AI', icon: <Share2 size={18} />, el: <Tab8 /> },
   { label: 'Moving Scene & Temporal Graph', icon: <Route size={18} />, el: <TabMoving /> },
   { label: 'Scan to CAD', icon: <Ruler size={18} />, el: <TabCad /> },

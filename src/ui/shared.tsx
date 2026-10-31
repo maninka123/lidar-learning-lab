@@ -86,7 +86,7 @@ function ExportMenu() {
   );
 }
 
-export function TopBar({ title, minimal, extra, noEnv, envIds }: { title: string; minimal?: boolean; extra?: ReactNode; noEnv?: boolean; envIds?: SceneId[] }) {
+export function TopBar({ title, minimal, extra, noEnv, envIds, noPanelToggle }: { title: string; minimal?: boolean; extra?: ReactNode; noEnv?: boolean; envIds?: SceneId[]; noPanelToggle?: boolean }) {
   const s = useLab();
   const [confirm, setConfirm] = useState(false);
   useEffect(() => { if (confirm) { const t = setTimeout(() => setConfirm(false), 3000); return () => clearTimeout(t); } }, [confirm]);
@@ -100,7 +100,7 @@ export function TopBar({ title, minimal, extra, noEnv, envIds }: { title: string
       {!minimal && <Btn icon={<RotateCcw size={16} />} variant={confirm ? 'danger' : ''} onClick={() => { if (confirm) { s.resetAll(); setConfirm(false); s.notify('Everything reset.', 'info'); } else setConfirm(true); }} title="Reset the whole lab" testId="reset">{extra ? '' : confirm ? 'Confirm reset' : 'Reset'}</Btn>}
       <Btn icon={<Camera size={16} />} onClick={takeScreenshot} title="Save a screenshot of the 3D view" testId="screenshot">{extra ? '' : 'Screenshot'}</Btn>
       {!minimal && <ExportMenu />}
-      <Btn icon={s.rightOpen ? <PanelRightClose size={17} /> : <PanelRightOpen size={17} />} onClick={() => s.patch({ rightOpen: !s.rightOpen })} title="Toggle the controls panel" testId="toggle-panel" />
+      {!noPanelToggle && <Btn icon={s.rightOpen ? <PanelRightClose size={17} /> : <PanelRightOpen size={17} />} onClick={() => s.patch({ rightOpen: !s.rightOpen })} title="Toggle the controls panel" testId="toggle-panel" />}
     </header>
   );
 }

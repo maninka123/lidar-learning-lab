@@ -189,7 +189,7 @@ test.describe('LiDAR Learning Lab', () => {
   });
 
   test('tab 7: LiDAR vs reconstruction needs valid alignment before reporting errors', async ({ page }) => {
-    await go(page, 15);
+    await go(page, 16);
     await expect(page.getByRole('button', { name: 'Exercise' })).toHaveCount(0);
     await expect(page.getByTestId('scene-picker')).toBeVisible();
     await page.getByTestId('scene-living').click();
@@ -212,7 +212,7 @@ test.describe('LiDAR Learning Lab', () => {
 
   test('tab 12: scene graph on the classroom, offline queries, local-llm-fit card and direct DeepSeek inference (mocked)', async ({ page }) => {
     await page.route('**/api/deepseek/**', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ choices: [{ message: { content: '# Summary\n\n**Room:** a classroom per the graph.\n\n- z near 0 is the floor\n- some tables' } }], usage: { prompt_tokens: 9876, completion_tokens: 21 } }) }));
-    await go(page, 12);
+    await go(page, 13);
     await expect(page.getByTestId('ds-preview')).toContainText('points');
     await page.getByTestId('ds-prompt').click();
     await expect(page.getByTestId('ds-prompt-text')).toContainText('System');
@@ -291,7 +291,7 @@ test.describe('classroom applications', () => {
   test.beforeEach(async ({ page }) => { await page.goto('/'); });
   const go2 = async (page: any, n: number) => { await page.getByTestId(`nav-${n}`).click(); };
   test('tab 10: scan to CAD finds walls and exports a DXF', async ({ page }) => {
-    await go2(page, 14);
+    await go2(page, 15);
     await expect(page.getByTestId('stats-card')).toContainText(/Walls found\s*\d+/, { timeout: 90000 });
     await expect.poll(async () => parseInt(((await page.getByTestId('stats-card').innerText()).match(/Walls found\s*(\d+)/) ?? [])[1] ?? '0'), { timeout: 90000 }).toBeGreaterThanOrEqual(4);
     const [dl] = await Promise.all([page.waitForEvent('download'), page.getByTestId('export-dxf').click()]);
@@ -391,7 +391,7 @@ test('segmentation: label clusters by hand and use them in the scene graph', asy
   await page.getByTestId('label-0').selectOption('Chair');
   await page.getByTestId('label-1').selectOption('Table');
   await expect(page.getByText(/trained on labelled point clouds|semantic segmentation model/)).toBeVisible();
-  await page.getByTestId('nav-12').click();
+  await page.getByTestId('nav-13').click();
   await page.getByRole('button', { name: '2 Scene graph', exact: true }).click();
   await page.getByRole('button', { name: 'My labelled clusters' }).click();
   await expect(page.getByTestId('graph-view')).toContainText('Chair 1');
@@ -413,7 +413,7 @@ test('segmentation: planes first, then clusters, as two separate stages', async 
 test('tab 13: drive, point clouds, scene graph per frame, temporal graph, results and AI question (mocked)', async ({ page }) => {
   await page.route('**/api/deepseek/**', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ choices: [{ message: { content: '## Moving\n\n- **person**: crosses ahead' } }], usage: { prompt_tokens: 2000, completion_tokens: 12 } }) }));
   await page.goto('/');
-  await page.getByTestId('nav-13').click();
+  await page.getByTestId('nav-14').click();
   await page.getByTestId('mv-play').click();
   await page.getByTestId('mv-play').click();
   await page.getByRole('button', { name: '2 Clouds', exact: true }).click();
@@ -457,7 +457,7 @@ test.describe('corner cases', () => {
     page.on('pageerror', (e) => bad.push(`pageerror: ${e.message}`));
     page.on('console', (m) => { if (m.type() === 'error' && !/Failed to load resource|ERR_|favicon|ytimg|youtube/i.test(m.text())) bad.push(`console: ${m.text()}`); });
     await page.goto('/');
-    for (let i = 0; i < 16; i++) { await page.getByTestId(`nav-${i}`).click(); await page.waitForTimeout(700); await expect(page.locator('canvas').first()).toBeVisible(); }
+    for (let i = 0; i < 17; i++) { await page.getByTestId(`nav-${i}`).click(); await page.waitForTimeout(700); await expect(page.locator('canvas').first()).toBeVisible(); }
     expect(bad).toEqual([]);
   });
 
@@ -484,7 +484,7 @@ test.describe('corner cases', () => {
 
   test('CAD with a slice at the ceiling, change detection with the same visit twice', async ({ page }) => {
     await page.goto('/');
-    await page.getByTestId('nav-14').click();
+    await page.getByTestId('nav-15').click();
     await expect(page.getByTestId('stats-card')).toContainText(/Walls found\s*[1-9]/, { timeout: 90000 });
     await page.getByTestId('nav-6').click();
     await expect(page.getByTestId('stamp-0')).toBeVisible({ timeout: 90000 });
@@ -502,4 +502,37 @@ test('SLAM tab: a waypoint can be removed and the route follows', async ({ page 
   expect(wp).toBe(n0 - 1);
   await expect(page.getByTestId('wp-remove-0')).toBeVisible();
   await expect(page.getByTestId(`wp-remove-${n0 - 1}`)).toHaveCount(0);
+});
+
+test('supervised learning: images left, point clouds right, drag blocks, clear errors, train, compare', async ({ page }) => {
+  await page.goto('/'); await page.getByTestId('nav-12').click();
+  await expect(page.getByTestId('nn-image-flow')).toBeVisible();
+  await expect(page.getByTestId('nn-points-flow')).toBeVisible();
+  await expect(page.getByTestId('right-panel')).toHaveCount(0);
+  const left = await page.getByTestId('nn-col-image').boundingBox(), right = await page.getByTestId('nn-col-points').boundingBox();
+  expect(left!.x).toBeLessThan(right!.x);
+  await expect(page.locator('[data-testid^="nn-image-sample-"]')).toHaveCount(10);
+  await expect(page.locator('[data-testid^="nn-points-sample-"]')).toHaveCount(10);
+  // an image classifier with no blocks needs Flatten, and the message says so
+  await page.getByTestId('nn-image-clear').click();
+  await expect(page.getByTestId('nn-image-error')).toContainText('Flatten');
+  await expect(page.getByTestId('nn-image-train')).toBeDisabled();
+  // drag a block into the line, then fix the model by clicking
+  await page.getByTestId('nn-image-add-conv').dragTo(page.getByTestId('nn-image-slot-0'));
+  await expect(page.getByTestId('nn-image-block-0')).toContainText('Conv');
+  await page.getByTestId('nn-image-add-flatten').click();
+  await expect(page.getByTestId('nn-image-error')).toHaveCount(0);
+  // train both sides together
+  await page.getByTestId('nn-train-both').click();
+  await expect(page.getByTestId('nn-image-epoch')).toContainText('epoch 200 / 200', { timeout: 120000 });
+  await expect(page.getByTestId('nn-points-epoch')).toContainText('epoch 200 / 200', { timeout: 120000 });
+  await expect(page.getByTestId('nn-image-score')).toContainText('%');
+  await expect(page.getByTestId('nn-summary')).toContainText(/\d+ % \/ \d+ %.*\d+ % \/ \d+ %/s);
+  // segmentation changes the blocks that fit, on both sides
+  await page.getByRole('button', { name: 'Segmentation' }).click();
+  await expect(page.getByTestId('nn-points-add-upsample')).toBeVisible();
+  await expect(page.getByTestId('nn-points-error')).toHaveCount(0);
+  await page.getByTestId('nn-train-both').click();
+  await expect(page.getByTestId('nn-points-epoch')).toContainText('epoch 200 / 200', { timeout: 120000 });
+  await expect(page.getByTestId('nn-summary')).toContainText(/0\.\d\d \/ 0\.\d\d/);
 });

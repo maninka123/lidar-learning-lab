@@ -227,3 +227,66 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 
 .side-foot { margin-top: auto; padding: 0.8rem 0.4rem 0.2rem; font-size: 0.8125rem; color: var(--text3); line-height: 1.5; }
 .side-foot a { color: var(--text2); }
+
+/* Supervised learning tab: model builder, curves and example gallery */
+.nn-stage { position: absolute; inset: 0; overflow: auto; padding: 14px 16px 24px; display: grid; gap: 14px; align-content: start; background: var(--bg, #f5f5f7); }
+.nn-card { background: var(--panel, #fff); border: 1px solid var(--line, #e5e5ea); border-radius: 1.1rem; padding: 0.9rem 1rem; display: grid; gap: 10px; box-shadow: var(--shadow); }
+.nn-title { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.nn-palette { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.nn-chip { display: inline-flex; align-items: center; gap: 5px; border: 1.5px solid; border-radius: 999px; background: #fff; padding: 4px 11px; font: inherit; font-size: 0.8125rem; font-weight: 600; cursor: grab; }
+.nn-chip:hover { background: #f2f2f7; }
+.nn-flow { display: flex; align-items: stretch; flex-wrap: wrap; gap: 0; row-gap: 12px; padding: 6px 0; }
+.nn-end { display: grid; gap: 3px; justify-items: center; align-content: center; padding: 8px; min-width: 96px; text-align: center; }
+.nn-head { border: 2px solid #30d158; background: #30d15822; border-radius: 12px; padding: 10px 12px; font-size: 0.8125rem; font-weight: 600; max-width: 150px; }
+.nn-slot { width: 22px; display: grid; place-items: center; }
+.nn-slot span { width: 14px; height: 2px; background: #c7c7cc; border-radius: 2px; }
+.nn-slot.on { width: 40px; background: #0a84ff1a; border-radius: 10px; outline: 2px dashed #0a84ff; }
+.nn-slot.on span { background: #0a84ff; height: 4px; }
+.nn-blk { border: 2px solid; border-radius: 12px; padding: 8px 10px; background: #fff; display: grid; gap: 5px; justify-items: center; align-content: start; min-width: 104px; cursor: grab; }
+.nn-blk.bad { background: #ff453a12; }
+.nn-blk-h { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; font-size: 0.8125rem; }
+.nn-x { border: 0; background: #f2f2f7; border-radius: 50%; width: 20px; height: 20px; display: grid; place-items: center; cursor: pointer; padding: 0; }
+.nn-x:hover { background: #ffd8d4; }
+.nn-size { display: flex; align-items: center; gap: 6px; font-size: 0.75rem; }
+.nn-size button { border: 1px solid #d1d1d6; background: #fff; border-radius: 6px; width: 20px; height: 20px; line-height: 1; cursor: pointer; padding: 0; }
+.nn-error { background: #ff453a14; color: #c4261c; border-radius: 10px; padding: 8px 12px; font-size: 0.875rem; }
+.nn-train { grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 18px; }
+.nn-score { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.nn-score > div { background: #f2f2f7; border-radius: 12px; padding: 10px 12px; display: grid; gap: 2px; }
+.nn-score b { font-size: 1.5rem; }
+.nn-test { background: #ff9f0a22; color: #a05a00; border-radius: 999px; padding: 1px 8px; font-size: 0.75rem; font-weight: 600; }
+.nn-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 10px; }
+.nn-sample { border: 1px solid #e5e5ea; border-radius: 12px; padding: 8px 10px; display: grid; gap: 6px; }
+.nn-sample-h { display: flex; justify-content: space-between; align-items: center; }
+.nn-trio { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.nn-trio figure { margin: 0; display: grid; gap: 4px; justify-items: center; }
+.nn-trio figcaption { font-size: 0.75rem; text-align: center; color: #636366; line-height: 1.3; }
+.nn-legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 0.8125rem; }
+.nn-legend i { display: inline-block; width: 11px; height: 11px; border-radius: 3px; margin-right: 5px; vertical-align: -1px; }
+@media (max-width: 1100px) { .nn-train { grid-template-columns: 1fr; } }
+
+.nn-bar { display: grid; gap: 10px; background: var(--panel, #fff); border: 1px solid var(--line, #e5e5ea); border-radius: 1.1rem; padding: 0.8rem 1rem; box-shadow: var(--shadow); }
+.nn-bar-task { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; }
+.nn-bar-task > :first-child { min-width: 330px; flex: none; }
+.nn-bar-train { display: flex; gap: 18px; align-items: center; flex-wrap: wrap; }
+.nn-cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px; align-items: start; }
+.nn-col { display: grid; gap: 12px; min-width: 0; }
+.nn-colhead { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.nn-colhead h2 { margin: 0; font-size: 1.25rem; }
+.nn-curves { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.nn-col .nn-grid { grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); }
+@media (max-width: 1250px) { .nn-cols { grid-template-columns: 1fr; } }
+
+.nn-profile { display: grid; gap: 4px; background: #f7f7fa; border-radius: 12px; padding: 8px 12px 8px; }
+.nn-uflow { display: flex; justify-content: space-between; font-size: 0.75rem; font-weight: 600; color: #5e5ce6; padding: 0 6px; }
+.nn-help { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 6px 18px; font-size: 0.8125rem; color: #636366; line-height: 1.4; }
+.nn-help b { color: #1d1d1f; }
+.nn-outinfo { max-width: 170px; line-height: 1.35; }
+.nn-help { grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
+.nn-u { display: grid; gap: 10px 0; align-items: start; }
+.nn-ustage { display: grid; gap: 4px; padding: 6px 7px; margin: 0 4px; background: #fff; border: 1.5px solid #d1d1d6; border-radius: 10px; align-content: start; }
+.nn-uhead { font-size: 0.6875rem; font-weight: 700; color: #5e5ce6; display: flex; justify-content: space-between; gap: 6px; }
+.nn-ublk { border-left: 3px solid; background: #f7f7fa; border-radius: 5px; padding: 2px 6px; font-size: 0.75rem; }
+.nn-uout { border-left-color: #30d158; background: #30d15822; font-weight: 600; }
+.nn-uskip { align-self: center; border-top: 2px dashed #5e5ce6; margin: 0 -2px; text-align: center; height: 0; position: relative; }
+.nn-uskip span { position: absolute; left: 50%; top: -9px; transform: translateX(-50%); background: #f7f7fa; padding: 0 5px; font-size: 0.6875rem; color: #5e5ce6; font-weight: 600; }

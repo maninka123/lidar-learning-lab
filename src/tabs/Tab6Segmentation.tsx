@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLab } from '../state/store';
 import { CLASSROOM_CLASSES, loadClassroomForSegmentation, paintClasses } from '../apps/classroom';
 import { Viewport } from '../ui/Viewport';
@@ -56,6 +56,8 @@ export default function Tab6() {
   const [sel, setSel] = useState<number | null>(null); // the cluster or plane that was clicked (its id in the result)
   const [hideCeiling, setHideCeiling] = useState(true);
   const [showHow, setShowHow] = useState(true);
+  const [howMin, setHowMin] = useState(false);
+  const [howProgress, setHowProgress] = useState<number | null>(null); // how far the little story has got, mirrored in the 3D view
   const [howRun, setHowRun] = useState(0); // bumped whenever clustering runs, so the little explainer replays
   const replay = () => { setShowHow(true); setHowRun((n) => n + 1); };
   const [pane, setPane] = useState<'setup' | 'results'>('setup');
@@ -136,13 +138,28 @@ export default function Tab6() {
   }, [res, cloud]);
 
   const resultLabels = useMemo(() => (res ? res.display : null), [res]);
+  // the story in 3D: clusters appear one after another (and the active one grows outwards from its start), the rest stays grey
+  const seedOrder = useRef(new Map<number, Int32Array>());
+  useEffect(() => { seedOrder.current.clear(); }, [res, cloud]);
+  const animLabels = useMemo(() => {
+    if (!res || !cloud || howProgress === null || !res.clusters.length) return null;
+    const C = res.clusters.length, q = howProgress * C, act = Math.floor(q), frac = q - act, out = res.display.slice();
+    res.clusters.forEach((c, k) => {
+      if (k < act) return;
+      if (k > act) { for (const i of c.indices) out[i] = -1; return; }
+      let ord = seedOrder.current.get(c.id);
+      if (!ord) { const s0 = c.indices[0] * 3, P = cloud.positions; ord = Int32Array.from(c.indices).sort((a, b) => Math.hypot(P[a * 3] - P[s0], P[a * 3 + 1] - P[s0 + 1], P[a * 3 + 2] - P[s0 + 2]) - Math.hypot(P[b * 3] - P[s0], P[b * 3 + 1] - P[s0 + 1], P[b * 3 + 2] - P[s0 + 2])); seedOrder.current.set(c.id, ord); }
+      for (let j = Math.floor(frac * ord.length); j < ord.length; j++) out[ord[j]] = -1;
+    });
+    return out;
+  }, [res, cloud, howProgress]);
   const instLabels = useMemo(() => (cloud?.instances ? cloud.instances : null), [cloud]);
   const stale = res && cloud && seg.cloudId !== cloud.id;
 
   const viewport = (
     <Viewport home={[8, -10, 6.5]} target={[0, 0, 1.2]} hideGrid hideAxes bgOverride="#ffffff" threshold={0.09}>
       {cloud && (show === 'result' && resultLabels && !stale
-        ? <CloudLayer cloud={cloud} mode="cluster" colorOpts={{ clusterLabels: resultLabels }} size={s.view.pointSize} budget={Math.max(s.view.renderBudget, 150000)} pickable={false} onPick={(i) => { const id = resultLabels[i]; setSel(id >= 0 ? id : null); }} pickFilter={(i) => resultLabels[i] >= 0} clip={{ on: hideCeiling, min: -1, max: 2.28 }} />
+        ? <CloudLayer cloud={cloud} mode="cluster" colorOpts={{ clusterLabels: animLabels ?? resultLabels }} size={s.view.pointSize} budget={Math.max(s.view.renderBudget, 150000)} pickable={false} onPick={(i) => { const id = resultLabels[i]; setSel(id >= 0 ? id : null); }} pickFilter={(i) => resultLabels[i] >= 0} clip={{ on: hideCeiling, min: -1, max: 2.28 }} />
         : show === 'instances' && instLabels
           ? <CloudLayer cloud={cloud} mode="cluster" colorOpts={{ clusterLabels: instLabels }} size={s.view.pointSize} budget={s.view.renderBudget} pickable={false} clip={{ on: hideCeiling, min: -1, max: 2.28 }} />
           : <CloudLayer cloud={show === 'semantic' && classCloud ? classCloud : cloud} mode={show === 'semantic' || show === 'rgb' ? 'rgb' : 'height'} size={s.view.pointSize} budget={Math.max(s.view.renderBudget, 150000)} pickable={false} clip={{ on: hideCeiling, min: -1, max: 2.28 }} />)}
@@ -253,12 +270,12 @@ export default function Tab6() {
   const rawText = useMemo(() => (rawOpen && cloud ? new TextDecoder().decode(writePCD({ id: 'raw', name: 'segmented', count: cloud.count, positions: cloud.positions, meta: cloud.meta, ...(res ? { labels: res.display } : {}) } as PointCloud, false)) : ''), [rawOpen, cloud, res]);
 
   return (
-    <TabFrame title="Clustering & Segmentation" tab={11} noEnv viewport={viewport} controls={controls} learn={null} noPanelTabs statsRow stats={stats}
-      viewExtras={<>{p.algo !== 'none' && <Btn sm variant={showHow ? 'primary' : ''} onClick={() => setShowHow(!showHow)} testId="how-toggle">How it works</Btn>}<Btn sm variant="primary" icon={<Play size={15} />} onClick={runMain} busy={busy} disabled={!cloud} testId="run-seg">Segment</Btn><Btn sm icon={<FileText size={15} />} variant={rawOpen ? 'primary' : ''} onClick={() => setRawOpen(!rawOpen)} disabled={!cloud} testId="raw-toggle">Raw</Btn></>}
+    <TabFrame title="Unsupervised Learning · Clustering & Segmentation" tab={11} noEnv viewport={viewport} controls={controls} learn={null} noPanelTabs statsRow stats={stats}
+      viewExtras={<>{p.algo !== 'none' && <Btn sm variant={showHow ? 'primary' : ''} onClick={() => { setShowHow(!showHow); setHowMin(false); }} testId="how-toggle">How it works</Btn>}<Btn sm variant="primary" icon={<Play size={15} />} onClick={runMain} busy={busy} disabled={!cloud} testId="run-seg">Segment</Btn><Btn sm icon={<FileText size={15} />} variant={rawOpen ? 'primary' : ''} onClick={() => setRawOpen(!rawOpen)} disabled={!cloud} testId="raw-toggle">Raw</Btn></>}
       overlays={<>{picked ? <PickedCard p={picked} id={sel!} index={res!.clusters.findIndex((c) => c.id === sel)} name={seg.names[sel!] ?? ''} onName={(v) => useLab.setState({ seg: { ...useLab.getState().seg, names: { ...useLab.getState().seg.names, [sel!]: v } } })} onClose={() => setSel(null)} /> : rawOpen && cloud ? <RawViewer text={rawText} filename="segmented.pcd" onClose={() => setRawOpen(false)} /> : null}{showHow && p.algo !== 'none' && (
-        <div className="overlay glass card fade-in" style={{ right: 12, top: 66, width: 'min(300px, 32%)', padding: 10, display: 'grid', gap: 6 }} data-testid="how-card">
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}><b style={{ fontSize: '0.875rem' }}>How {p.algo === 'dbscan' ? 'DBSCAN' : 'clustering'} works</b><button className="btn sm icon" onClick={() => setShowHow(false)} aria-label="Hide" data-testid="how-close">×</button></div>
-          <ClusterExplainer algo={p.algo} eps={p.algo === 'dbscan' ? p.eps : p.radius} minPts={p.minPts} runKey={howRun} />
+        <div className="overlay glass card fade-in" style={{ right: 12, top: 66, width: howMin ? 'min(250px, 30%)' : 'min(300px, 32%)', padding: howMin ? 8 : 10, display: 'grid', gap: 6 }} data-testid="how-card">
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}><b style={{ fontSize: '0.875rem' }}>How {p.algo === 'dbscan' ? 'DBSCAN' : 'clustering'} works</b><button className="btn sm icon" onClick={() => setHowMin(!howMin)} aria-label={howMin ? 'Expand' : 'Collapse to the corner'} title={howMin ? 'Expand' : 'Collapse to the corner'} data-testid="how-collapse">{howMin ? '▾' : '▴'}</button></div>
+          <ClusterExplainer algo={p.algo} eps={p.algo === 'dbscan' ? p.eps : p.radius} minPts={p.minPts} runKey={howRun} compact={howMin} onProgress={setHowProgress} />
         </div>
       )}</>} />
   );

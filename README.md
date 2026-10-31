@@ -32,17 +32,18 @@ Go through the tabs in order, one idea at a time, about five minutes each. Each 
 | 9 | **SLAM & Mobile Scanning** | Moving scans in a city (handheld, vehicle, UAV) and a SLAM run with drift and loop closure. |
 | 10 | **LiDAR + Camera Fusion** | A colourful hall, a LiDAR and a camera. Move the camera into place with translation and rotation sliders, watch the point cloud colour change, press Calculate to see the errors zoomed in, save the calibration, then map a whole walk in colour in a pop-up. |
 | 11 | **Meshing & Surfaces** | Coloured point clouds (the hall from tab 9, a classroom, a tree) into surfaces: voxel, smoothed, height map, close gaps, simplify, colour from the points, export OBJ. |
-| 12 | **Clustering & Segmentation** | RANSAC plane detection (floor, walls, ceiling taken out with a few settings), then Euclidean clustering or DBSCAN on the same classroom scan, scored against its furniture. |
-| 13 | **Scene Graphs & 3D AI** | Objects and relations, offline question answering, link to [local-llm-fit](https://maninka123.github.io/local-llm-fit/). |
-| 14 | **Moving Scene & Temporal Graph** | A vehicle drives through a street and scans every 0.8 s (a point cloud series). Each frame is segmented fast (ground out, cluster, name by size), objects are tracked from frame to frame, and the result is a **temporal scene graph** with events (approaching, crossing, passing). A language model answers questions from it. |
-| 15 | **Scan to CAD** | Slice a classroom, find wall lines, square the corners, export a **DXF** floor plan. |
-| 16 | **Image to 3D** | Pick a scene (chair, crate, study desk, living corner, garden), three reconstruction methods, meshing, alignment with scale, error map. |
+| 12 | **Unsupervised Learning** (clustering & segmentation) | RANSAC plane detection (floor, walls, ceiling taken out with a few settings), then Euclidean clustering or DBSCAN on the same classroom scan, scored against its furniture. |
+| 13 | **Supervised Learning** (train your own model) | Build a small neural network by dragging blocks (Conv, Pool, Upsample, Dense...; the point-cloud versions work the same way) and train it on 10 labelled images and 10 labelled point clouds, side by side: classification, detection (2D box / 3D box) or segmentation (drawn as a U-Net). Three examples are held back to show whether the model really learned. |
+| 14 | **Scene Graphs & 3D AI** | Objects and relations, offline question answering, link to [local-llm-fit](https://maninka123.github.io/local-llm-fit/). |
+| 15 | **Moving Scene & Temporal Graph** | A vehicle drives through a street and scans every 0.8 s (a point cloud series). Each frame is segmented fast (ground out, cluster, name by size), objects are tracked from frame to frame, and the result is a **temporal scene graph** with events (approaching, crossing, passing). A language model answers questions from it. |
+| 16 | **Scan to CAD** | Slice a classroom, find wall lines, square the corners, export a **DXF** floor plan. |
+| 17 | **Image to 3D** | Pick a scene (chair, crate, study desk, living corner, garden), three reconstruction methods, meshing, alignment with scale, error map. |
 
 Viewport: left-drag rotates, right-drag or the **Pan** button moves the cloud, wheel zooms.
 
 ## AI in the scene graph tab (optional)
 
-Tab 13 can hand a thinned-out point cloud straight to a language model (DeepSeek V4 Flash) to show why that does not work well. It needs a key: copy `.env.example` to `.env.local` and put your DeepSeek key in it. `.env.local` is ignored by git, and the key is added by the dev / preview server, so it is never in the page or the built site. The live GitHub Pages site has no server, so there you paste your own key into the page (kept only in your browser) or skip this section: everything else works without it.
+Tab 14 can hand a thinned-out point cloud straight to a language model (DeepSeek V4 Flash) to show why that does not work well. It needs a key: copy `.env.example` to `.env.local` and put your DeepSeek key in it. `.env.local` is ignored by git, and the key is added by the dev / preview server, so it is never in the page or the built site. The live GitHub Pages site has no server, so there you paste your own key into the page (kept only in your browser) or skip this section: everything else works without it.
 
 ## Run it yourself
 
