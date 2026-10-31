@@ -84,9 +84,10 @@ function render() {
   $('window').textContent = live ? `${fmtSydney(c.startAt)} → ${fmtSydney(c.endAt)}` : data.status === 'expired' ? `Ended ${fmtSydney(c.endAt)}` : '';
   $('idleText').textContent = data.status === 'expired' ? 'That workshop has ended. Start another:' : 'Start a workshop:';
   $('limitsCard').classList.toggle('hidden', !live); $('lowerRow').classList.toggle('g2', live); // while idle, the limits are asked for as part of starting
-  if (!live) { if (document.activeElement !== $('startPerUser')) $('startPerUser').value = c.maxPerStudent; if (document.activeElement !== $('startTotal')) $('startTotal').value = c.maxTotal; if (document.activeElement !== $('startMax')) $('startMax').value = c.maxStudents; }
+  if (!live) { if (document.activeElement !== $('startPerUser')) $('startPerUser').value = c.maxPerStudent; if (document.activeElement !== $('startTotal')) $('startTotal').value = c.maxTotal; if (document.activeElement !== $('startMax')) $('startMax').value = c.maxStudents || ''; $('startUnl').checked = c.maxStudents === 0; $('startMax').disabled = c.maxStudents === 0; }
   if (live && document.activeElement !== $('endExact')) $('endExact').value = epochToSydneyInput(c.endAt);
-  for (const f of $('limitsForm').elements) if (f.name && document.activeElement !== f) f.value = c[f.name];
+  for (const f of $('limitsForm').elements) if (f.name && f.type !== 'checkbox' && document.activeElement !== f) f.value = f.name === 'maxStudents' && !c.maxStudents ? '' : c[f.name];
+  $('limUnl').checked = c.maxStudents === 0; $('limitsForm').elements.maxStudents.disabled = c.maxStudents === 0;
   document.querySelectorAll('[data-access]').forEach((b) => b.setAttribute('aria-pressed', String((b.dataset.access === 'codes') === c.needCode)));
   $('accessText').textContent = c.needCode ? 'Each user needs a personal code. Generate them below.' : 'No codes: anyone using the lab can use the AI while the workshop runs.';
   $('codesBox').classList.toggle('hidden', !c.needCode);
@@ -103,7 +104,7 @@ function render() {
   $('activeNote').textContent = `active = seen in the last ${data.activeWindowMin} min`;
   const place = (r) => [r.city, r.country].filter(Boolean).join(', ') || '—', active = (r) => r.lastSeen > data.now - data.activeWindowMin * 60000;
   $('users').innerHTML = data.perStudent.map((r) => `<tr><td>${esc(r.name ? `${r.name} (${r.label})` : r.label)}${r.revoked ? ' <span class="faint">(blocked)</span>' : active(r) ? ' <span class="chip active">active</span>' : ''}</td><td>${esc(place(r))}</td><td>${r.firstSeen ? fmtSydney(r.firstSeen) : '<span class="faint">not joined</span>'}</td><td>${r.lastSeen ? fmtSydney(r.lastSeen) : '—'}</td><td class="num">${r.requests}</td><td class="num">${(r.tokensIn + r.tokensOut).toLocaleString()}</td><td class="num">${usd(r.costUsd)}</td><td class="num">${r.revoked ? '' : `<button class="btn sm" data-revoke="${esc(r.id)}">${c.needCode ? 'Revoke' : 'Block'}</button>`}</td></tr>`).join('') || `<tr><td colspan="8" class="faint empty">${c.needCode ? 'No codes yet.' : 'Nobody has joined yet.'}</td></tr>`;
-  $('privacy').textContent = `Kept: optional name, approximate city and country (never the IP address), times and usage, only for people who use the workshop AI. Deleted ${data.retentionDays} days after the workshop ends.`;
+  $('privacy').textContent = 'Kept: optional name, approximate city and country (never the IP address), times and usage, only for people who use the workshop AI. Nothing is deleted automatically: use Delete user records when you are done.';
   $('errors').innerHTML = data.errors.map((e) => `<tr><td>${fmtSydney(e.t)}</td><td>${esc(e.kind)}</td><td>${e.status ?? ''}</td><td>${esc(e.code)}</td></tr>`).join('') || '<tr><td colspan="4" class="faint empty">None.</td></tr>';
   tick();
 }
@@ -112,7 +113,7 @@ document.addEventListener('click', (e) => {
   const b = e.target.closest('button'); if (!b) return;
   if (b.dataset.dur) { dur = Number(b.dataset.dur); document.querySelectorAll('[data-dur]').forEach((x) => x.setAttribute('aria-pressed', String(x === b))); }
   if (b.dataset.extend) run(async () => { await api('POST', 'workshop-extend', { minutes: Number(b.dataset.extend) }); toast('End time updated'); await refresh(); });
-  if (b.dataset.bump) { const [f, n] = b.dataset.bump.split(':'); run(async () => { await api('PUT', 'config', { [f]: data.config[f] + Number(n) }); toast('Limit raised'); await refresh(); }); }
+  if (b.dataset.bump) { const [f, n] = b.dataset.bump.split(':'); if (f === 'maxStudents' && data.config.maxStudents === 0) return toast('Users are already unlimited'); run(async () => { await api('PUT', 'config', { [f]: data.config[f] + Number(n) }); toast('Limit raised'); await refresh(); }); }
   if (b.dataset.access) run(async () => { await api('PUT', 'config', { needCode: b.dataset.access === 'codes' }); await refresh(); });
   if (b.dataset.revoke && confirm('Block this user? They lose access to the workshop AI.')) run(async () => { await api('POST', 'codes-revoke', { id: b.dataset.revoke }); await refresh(); });
 });
@@ -121,13 +122,16 @@ $('applyEnd').addEventListener('click', () => run(async () => { await api('POST'
 $('deleteData').addEventListener('click', () => confirm('Delete every user record for this workshop (names, places, usage and any codes)? This cannot be undone.') && run(async () => { await api('POST', 'data-delete'); toast('User records deleted'); await refresh(); }));
 $('saveLimits').addEventListener('click', () => run(async () => {
   const v = {}; for (const f of $('limitsForm').elements) if (f.name) v[f.name] = Number(f.value);
+  if ($('limUnl').checked) v.maxStudents = 0;
   await api('PUT', 'config', v); toast('Limits saved'); await refresh();
 }));
 
 let dur = 180;
+$('startUnl').addEventListener('change', () => { $('startMax').disabled = $('startUnl').checked; });
+$('limUnl').addEventListener('change', () => { $('limitsForm').elements.maxStudents.disabled = $('limUnl').checked; });
 $('startBtn').addEventListener('click', () => run(async () => {
   // the basics first (requests per user, total requests), then switch on
-  await api('PUT', 'config', { maxPerStudent: Number($('startPerUser').value), maxTotal: Number($('startTotal').value), maxStudents: Number($('startMax').value) });
+  await api('PUT', 'config', { maxPerStudent: Number($('startPerUser').value), maxTotal: Number($('startTotal').value), maxStudents: $('startUnl').checked ? 0 : Number($('startMax').value) });
   const dates = $('startAt').value && $('endAt').value ? { startAt: sydneyToEpoch($('startAt').value), endAt: sydneyToEpoch($('endAt').value) } : { durationMinutes: dur };
   await api('POST', 'workshop-start', dates); toast(dates.startAt ? 'Workshop scheduled' : 'Workshop started'); await refresh();
 }));

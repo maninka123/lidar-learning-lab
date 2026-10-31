@@ -31,7 +31,7 @@ export const loadWorkshopName = (): string => { try { return localStorage.getIte
 export const saveWorkshopName = (n: string): void => { try { if (n) localStorage.setItem(NAME_KEY, n); else localStorage.removeItem(NAME_KEY); } catch { /* ignore */ } };
 export const saveWorkshopCode = (c: string): void => { try { if (c) localStorage.setItem(CODE_KEY, c); else localStorage.removeItem(CODE_KEY); } catch { /* ignore */ } };
 
-export interface WorkshopStatus { available: boolean; status: 'active' | 'scheduled' | 'inactive'; endsAt?: number; startsAt?: number; maxOutputTokens?: number; retentionDays?: number; needCode?: boolean }
+export interface WorkshopStatus { available: boolean; status: 'active' | 'scheduled' | 'inactive'; endsAt?: number; startsAt?: number; maxOutputTokens?: number; needCode?: boolean }
 let status: WorkshopStatus = { available: false, status: 'inactive' };
 let fetchedAt = 0;
 const listeners = new Set<() => void>();
@@ -45,7 +45,7 @@ export async function refreshWorkshopStatus(timeoutMs = 4000): Promise<WorkshopS
     try {
       const r = await fetch(`${api}/api/public/status`, { signal: ctl.signal, cache: 'no-store' });
       const j = r.ok ? ((await r.json()) as Partial<WorkshopStatus>) : null;
-      if (j && typeof j.available === 'boolean') next = { available: j.available, status: j.status === 'active' || j.status === 'scheduled' ? j.status : 'inactive', endsAt: j.endsAt, startsAt: j.startsAt, maxOutputTokens: j.maxOutputTokens, retentionDays: j.retentionDays, needCode: j.needCode !== false };
+      if (j && typeof j.available === 'boolean') next = { available: j.available, status: j.status === 'active' || j.status === 'scheduled' ? j.status : 'inactive', endsAt: j.endsAt, startsAt: j.startsAt, maxOutputTokens: j.maxOutputTokens, needCode: j.needCode !== false };
     } catch { /* unreachable: behave as if there is no workshop */ } finally { clearTimeout(timer); }
   }
   fetchedAt = Date.now();

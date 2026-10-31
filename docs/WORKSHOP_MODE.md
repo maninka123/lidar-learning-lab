@@ -65,7 +65,7 @@ Go to `https://<your-project>.vercel.app/admin` and sign in with your username a
 
 **While it runs:** the dashboard refreshes every 5 seconds: time left, users joined and active now, requests, tokens and the **spend so far**, worked out per request from DeepSeek's advertised prices for the model (see below). Extend or shorten with **+1 h / +3 h / +1 day / −1 h** or an exact end time; **Turn off now** ends it at once.
 
-**Limits:** starting asks for *Requests per user*, *Total requests* and *Max users* (defaults 40, 1,500 and 100). You can raise any of them at any time while it runs, with the Limits card or the quick "+100 / +500 / +10 / +25" buttons; changes apply to the next request. The lab chooses its own reply sizes, and a hard ceiling on tokens per request is built in. Other safeguards need no setting: a per-minute rate limit per user and per network address, a cap on how many different users one address can create (a whole classroom may share one address), and a cap on how many users one address can create.
+**Limits:** starting asks for *Requests per user*, *Total requests* and *Max users* (defaults 40, 1,500 and 100; tick *Unlimited* for no limit on users). You can raise any of them at any time while it runs, with the Limits card or the quick "+100 / +500 / +10 / +25" buttons; changes apply to the next request. The lab chooses its own reply sizes, and a hard ceiling on tokens per request is built in. Other safeguards need no setting: a per-minute rate limit per user and per network address, a cap on how many different users one address can create (a whole classroom may share one address), and a cap on how many users one address can create.
 
 **Access codes (optional):** switch *Access* to **Codes** if you want personal codes (for a smaller or untrusted group). Generate them, copy or download the CSV, and hand one to each user. Codes are shown once and stored only as keyed hashes.
 
@@ -90,9 +90,9 @@ What is collected, and only for people who enter a workshop code (nothing about 
 | Approximate city and country | from Vercel's edge geolocation headers; no coordinates |
 | Joined / last-active times, request and token counts | counted by the backend |
 
-**Not kept:** IP addresses (they are never stored; a short-lived one-way tag is used only for rate limiting and expires within minutes), prompts, answers, or browser identifiers. Students see a notice next to the code box describing exactly this and the retention period.
+**Not kept:** IP addresses (they are never stored; a short-lived one-way tag is used only for rate limiting and expires within minutes), prompts, answers, or browser identifiers. Students see a notice next to the code box describing exactly this.
 
-**Retention:** records are kept 30 days (changeable through the API field `retentionDays`). After that many days past the workshop's end, the backend deletes the codes, names, places and usage for that workshop automatically (checked as the dashboard or students use the service, at most every 10 minutes). *Delete user records* removes them immediately.
+**Deleting:** nothing is deleted automatically. When you are done, press **Delete user records** on the dashboard to remove the names, places, usage and codes of the current workshop.
 
 ## What protects your key and budget
 

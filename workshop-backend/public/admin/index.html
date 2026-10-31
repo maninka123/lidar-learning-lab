@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex, nofollow">
 <title>Workshop control</title>
+<link rel="icon" href="/admin/favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/admin/favicon.svg">
 <link rel="stylesheet" href="/admin/admin.css">
 </head>
 <body>
@@ -47,7 +49,7 @@
         <details><summary>Or pick dates</summary>
           <div class="grid g2"><label>Starts<input type="datetime-local" id="startAt"></label><label>Ends<input type="datetime-local" id="endAt"></label></div>
         </details>
-        <div class="grid g3"><label>Requests per user<input id="startPerUser" type="number" min="1"></label><label>Total requests<input id="startTotal" type="number" min="1"></label><label>Max users<input id="startMax" type="number" min="1" max="500"></label></div>
+        <div class="grid g3"><label>Requests per user<input id="startPerUser" type="number" min="1"></label><label>Total requests<input id="startTotal" type="number" min="1"></label><label>Max users<input id="startMax" type="number" min="1" max="500"><span class="check"><input type="checkbox" id="startUnl"> Unlimited</span></label></div>
         <p class="faint">You can raise any of these later while the workshop is running.</p>
         <div class="row"><button id="startBtn" class="btn primary">Start workshop</button></div>
       </div>
@@ -80,7 +82,7 @@
         <form id="limitsForm" class="grid g3">
           <label>Per user<input name="maxPerStudent" type="number" min="1"></label>
           <label>Total<input name="maxTotal" type="number" min="1"></label>
-          <label>Max users<input name="maxStudents" type="number" min="1" max="500"></label>
+          <label>Max users<input name="maxStudents" type="number" min="1" max="500"><span class="check"><input type="checkbox" id="limUnl"> Unlimited</span></label>
         </form>
         <div class="row"><button id="saveLimits" class="btn primary">Save</button><button class="btn sm" data-bump="maxTotal:100">Total +100</button><button class="btn sm" data-bump="maxTotal:500">Total +500</button><button class="btn sm" data-bump="maxPerStudent:10">Per user +10</button><button class="btn sm" data-bump="maxStudents:25">Users +25</button></div>
       </section>

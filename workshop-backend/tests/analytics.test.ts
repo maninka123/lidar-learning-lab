@@ -8,7 +8,7 @@ const dump = (ctx: ReturnType<typeof setup>) => JSON.stringify([
   [...(ctx.store as unknown as { l: Map<string, string[]> }).l.entries()],
 ]);
 type Row = { label: string; name: string; city: string; country: string; firstSeen: number; lastSeen: number; requests: number; tokensIn: number; tokensOut: number; costUsd: number };
-const view = async (a: ReturnType<typeof admin>) => (await a.call('GET', 'workshop')).body as { joined: number; activeNow: number; perStudent: Row[]; spendUsd: number; pricing: { peak: boolean; miss: number; out: number; model: string }; retentionDays: number };
+const view = async (a: ReturnType<typeof admin>) => (await a.call('GET', 'workshop')).body as { joined: number; activeNow: number; perStudent: Row[]; spendUsd: number; pricing: { peak: boolean; miss: number; out: number; model: string } };
 const SYD = { 'x-vercel-ip-city': 'Sydney', 'x-vercel-ip-country': 'AU', 'x-forwarded-for': '203.0.113.77' };
 
 describe('student analytics', () => {
@@ -67,12 +67,6 @@ describe('student analytics', () => {
     expect((await view(a)).perStudent).toHaveLength(1);
   });
 
-  it('tells students what is collected and for how long', async () => {
-    const ctx = setup(); const a = await startWorkshop(ctx); const [c] = await makeCodes(a, 1);
-    expect((await publicStatus(ctx)).body).toMatchObject({ retentionDays: 30 });
-    expect((await student(ctx)('validate', c.code)).body).toMatchObject({ retentionDays: 30 });
-  });
-
   it('sanitises names and places', () => {
     expect(cleanName('<script>alert(1)</script> Al')).toBe('scriptalert(1)/script Al');
     expect(cleanName('x'.repeat(100))).toHaveLength(30); expect(cleanName(42)).toBe(''); expect(cleanName('  a \n b  ')).toBe('a b');
@@ -81,26 +75,22 @@ describe('student analytics', () => {
   });
 });
 
-describe('retention and deletion', () => {
-  it('deletes participant records once the retention period after the workshop has passed, not before', async () => {
-    const ctx = setup(); const a = await startWorkshop(ctx, 3, { retentionDays: 2 }); const [c] = await makeCodes(a, 1); const ask = student(ctx);
+describe('deleting user records', () => {
+  it('nothing is deleted automatically, however long ago the workshop ended', async () => {
+    const ctx = setup(); const a = await startWorkshop(ctx, 3); const [c] = await makeCodes(a, 1); const ask = student(ctx);
     await ask('validate', c.code, { name: 'Kim' }, { headers: SYD }); await ask('chat', c.code);
-    ctx.clock.t = T0 + 3 * HOUR + 47 * HOUR; // 47 h after the end (the old admin session has expired: log in again)
+    ctx.clock.t = T0 + 400 * 864e5; // more than a year later
     const b = admin(ctx, '5.5.5.5'); await b.login();
-    await b.call('GET', 'workshop'); expect(dump(ctx)).toContain('Kim');
-    ctx.clock.t = T0 + 3 * HOUR + 49 * HOUR + 11 * 60e3; // beyond 2 days (and the 10-minute purge interval)
-    expect((await b.call('GET', 'workshop')).status).toBe(200);
-    const all = dump(ctx); expect(all).not.toContain('Kim'); expect(all).not.toContain('Sydney'); expect(all).not.toContain(':code:'); expect(all).not.toContain(':lookup:'); // (rate counters hold only an id and expire by themselves)
+    expect((await view(b)).perStudent[0]).toMatchObject({ name: 'Kim', city: 'Sydney', requests: 1 });
+    expect(dump(ctx)).toContain('Kim');
   });
-  it('the retention setting is validated, and the dashboard can delete everything right away', async () => {
+  it('the instructor can delete everything right away', async () => {
     const ctx = setup(); const a = await startWorkshop(ctx); const [c] = await makeCodes(a, 2); await student(ctx)('validate', c.code, { name: 'Lee' }, { headers: SYD });
-    for (const bad of [0, 400, 'x']) expect((await a.call('PUT', 'config', { retentionDays: bad })).status).toBe(400);
-    expect((await a.call('PUT', 'config', { retentionDays: 7 })).status).toBe(200);
     expect((await a.call('POST', 'data-delete')).status).toBe(200);
     expect(dump(ctx)).not.toContain('Lee'); expect((await view(a)).perStudent).toHaveLength(0);
     expect((await student(ctx)('validate', c.code)).body).toMatchObject({ error: 'invalid_code' }); // the codes went with the records
   });
-  it('purging needs an administrator', async () => {
+  it('deleting needs an administrator', async () => {
     const ctx = setup(); expect((await admin(ctx).call('POST', 'data-delete')).status).toBe(401);
   });
 });

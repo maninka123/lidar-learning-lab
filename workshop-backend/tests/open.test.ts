@@ -103,4 +103,10 @@ describe('open access (no codes)', () => {
     await a.call('PUT', 'config', { maxTotal: 50 });
     expect((await g('chat', cid(2))).status).toBe(200);
   });
+
+  it('unlimited users: 0 removes the seat limit (one address can still only create 300)', async () => {
+    const ctx = setup(); await startWorkshop(ctx, 3, { needCode: false, maxStudents: 0, rpm: 60, rpmAddress: 600, maxPerAddress: 100000 }); const g = guest(ctx);
+    for (let i = 1; i <= 8; i++) expect((await g('chat', cid(i), undefined, { ip: `2.2.2.${i}` })).status).toBe(200); // far beyond any small seat limit
+    const a2 = admin(ctx, '4.4.4.4'); await a2.login(); expect((await a2.call('PUT', 'config', { maxStudents: 0 })).status).toBe(200);
+  });
 });

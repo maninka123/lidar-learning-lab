@@ -39,7 +39,7 @@ export function AiAccess({ needKey, ownKey, setOwnKey, testId }: { needKey: bool
         <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="Your name (optional)" maxLength={30} autoComplete="off" data-testid="ws-name" style={{ flex: 1 }} />
         <button className="btn sm" onClick={() => void joinOpen()} data-testid="ws-save-name">Save</button>
       </div>
-      <span className="caption" data-testid="ws-privacy">Your instructor can see your name (if you add one), your approximate city and country, when you were last active and how much AI you used. That is all{w.retentionDays ? `, and it is deleted ${w.retentionDays} days after the workshop` : ''}.</span>
+      <span className="caption" data-testid="ws-privacy">Your instructor can see your name (if you add one), your approximate city and country, when you were last active and how much AI you used. That is all; your instructor removes it when they delete the workshop's records.</span>
       {state.text && <span className="caption" role="status" style={{ color: state.kind === 'bad' ? '#c4271c' : undefined }}>{state.text}</span>}
       <button className="btn sm" onClick={() => setUseOwn(true)} style={{ justifySelf: 'start' }}>Use my own DeepSeek key instead</button>
     </div>
@@ -55,7 +55,7 @@ export function AiAccess({ needKey, ownKey, setOwnKey, testId }: { needKey: bool
         <button className="btn sm" onClick={() => void check()} disabled={state.kind === 'checking'} data-testid="ws-check">{state.kind === 'checking' ? 'Checking…' : 'Use code'}</button>
       </div>
       <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="Your name (optional)" maxLength={30} autoComplete="off" data-testid="ws-name" />
-      <span className="caption" data-testid="ws-privacy">With a code, your instructor can see your name (if you add one), your approximate city and country, when you were last active and how much AI you used. That is all, it is only recorded when you use a code{w.retentionDays ? `, and it is deleted ${w.retentionDays} days after the workshop` : ''}.</span>
+      <span className="caption" data-testid="ws-privacy">With a code, your instructor can see your name (if you add one), your approximate city and country, when you were last active and how much AI you used. That is all, it is only recorded when you use a code; your instructor removes it when they delete the workshop's records.</span>
       {state.text && <span className="caption" role="status" style={{ color: state.kind === 'bad' ? '#c4271c' : undefined }} data-testid="ws-msg">{state.text}</span>}
       <button className="btn sm" onClick={() => setUseOwn(true)} style={{ justifySelf: 'start' }}>Use my own DeepSeek key instead</button>
     </div>
