@@ -38,9 +38,15 @@ test.describe('LiDAR Learning Lab', () => {
     await page.getByRole('button', { name: 'Controls', exact: true }).click();
     await expect(page.getByText('Horizontal field of view')).toBeVisible();
     await expect(page.getByTestId('person-points')).toContainText('Points on the wall');
-    await page.getByTestId('mat-glass').click();
-    await expect(page.getByTestId('person-points')).toContainText('0 points · gap');
+    await expect(page.getByText('LiDAR needs reflected light to return to its sensor. Dark surfaces return less light, while mirrors may reflect light away.')).toBeVisible();
+    await expect(page.getByTestId('material-note')).toContainText('Strong return signal and longer detection range.');
+    await page.getByTestId('mat-rubber').click();
+    await expect(page.getByTestId('material-note')).toContainText('Weak return signal and shorter detection range.');
+    await page.getByTestId('mat-mirror').click();
+    await expect(page.getByTestId('material-note')).toContainText('Specular reflection');
+    await expect(page.getByText('Turn the wall (angle to the sensor)')).toBeVisible();
     await page.getByTestId('mat-white').click();
+    await expect(page.getByText('Turn the wall (angle to the sensor)')).toHaveCount(0);
     await page.getByTestId('raw-toggle').click();
     await expect(page.getByTestId('raw-view')).toContainText('DATA ascii');
     await expect(page.getByTestId('raw-view')).toContainText('FIELDS x y z intensity');

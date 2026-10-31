@@ -105,19 +105,39 @@ export default function Tab2() {
 
   useEffect(() => { setFrame(0); setPlaying(false); }, [sel]);
   const nFrames = entry.frames?.length ?? 1;
+  const frameFile = (i: number) => (entry.frames ? entry.frames[i % entry.frames.length] : entry.file);
+  // Load every frame of the selected set in the background so playback never waits on the network or the parser.
+  useEffect(() => {
+    if (!entry.frames) return;
+    let on = true;
+    (async () => { for (const f of entry.frames!) { if (!on) return; try { await loadReal(entry, f); } catch { return; } await new Promise((r) => setTimeout(r, 0)); } })();
+    return () => { on = false; };
+  }, [sel]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Only step to the next frame once it is ready, at a steady pace.
   useEffect(() => {
     if (!playing || nFrames < 2) return;
-    const t = setInterval(() => setFrame((f) => (f + 1) % nFrames), 400);
+    const t = setInterval(() => setFrame((f) => { const n = (f + 1) % nFrames; return cache.has(frameFile(n)) ? n : f; }), 250);
     return () => clearInterval(t);
-  }, [playing, nFrames]);
+  }, [playing, nFrames, sel]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { const v = useLab.getState().galleryViewed; if (!v.includes(sel)) useLab.setState({ galleryViewed: [...v, sel] }); }, [sel]);
   useEffect(() => {
-    let on = true; setBusy(true);
-    loadReal(entry, entry.frames ? entry.frames[Math.min(frame, entry.frames.length - 1)] : entry.file).then((c) => { if (!on) return; setCloud(c); setBusy(false); }).catch((e) => { useLab.getState().notify(e.message, 'error'); setBusy(false); });
+    let on = true;
+    const file = entry.frames ? entry.frames[Math.min(frame, entry.frames.length - 1)] : entry.file;
+    const hit = cache.get(file);
+    if (hit) { setCloud(hit); setBusy(false); return; }
+    setBusy(true);
+    loadReal(entry, file).then((c) => { if (!on) return; setCloud(c); setBusy(false); }).catch((e) => { useLab.getState().notify(e.message, 'error'); setBusy(false); });
     return () => { on = false; };
   }, [sel, frame]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const fr = useMemo(() => (cloud ? robustFrame(cloud) : null), [cloud]);
+  // Frame the camera once per point cloud, not on every animation frame, so playing does not jolt the view.
+  const frCache = useRef<{ sel: string; fr: ReturnType<typeof robustFrame> } | null>(null);
+  const fr = useMemo(() => {
+    if (!cloud) return null;
+    const key = `${cloud.name}|${entry.frames ? '' : cloud.count}`;
+    if (frCache.current && frCache.current.sel === key) return frCache.current.fr;
+    const f = robustFrame(cloud); frCache.current = { sel: key, fr: f }; return f;
+  }, [cloud]);
   const home = useMemo<[number, number, number]>(() => { if (!fr) return [4, -4, 3]; const k = fr.r * 1.6; return [fr.c[0] + k * 0.8, fr.c[1] - k * 0.8, fr.c[2] + k * 0.6]; }, [fr]);
   const target = useMemo<[number, number, number]>(() => (fr ? fr.c : [0, 0, 0]), [fr]);
   const rawText = useMemo(() => {

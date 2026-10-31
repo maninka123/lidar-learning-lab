@@ -7,7 +7,7 @@ import { Btn, Callout, Seg, Section, Slider, Toggle, fmtN } from '../ui/controls
 import { SceneFromStore } from './common';
 import { CloudLayer, Marker, PolyLine } from '../ui/three';
 import { Plan2D } from '../ui/Plan2D';
-import { Crosshair, Dots, Play, Trash2 } from '../ui/icons';
+import { Crosshair, Dots, Eye, Play, Trash2 } from '../ui/icons';
 import { getPreset, presetToConfig, SensorConfig } from '../sensor/presets';
 import { runTask } from '../engine/client';
 import { staticPose } from '../sensor/simulate';
@@ -43,6 +43,7 @@ export default function TabTls() {
   const [byStation, setByStation] = useState(true), [cov, setCov] = useState<number | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [pointsOnly, setPointsOnly] = useState(false);
+  const [colourOn, setColourOn] = useState(true);
   const b = scene.bounds;
   const gen = useRef(0); // bumped whenever the environment changes, so a scan still running for the old one is thrown away
 
@@ -151,10 +152,11 @@ export default function TabTls() {
   }, [placed, scene]);
   const coloured = useMemo(() => placed.map((c, i) => {
     const col = new Uint8Array(c.count * 3), z0 = b.min[2], dz = Math.max(0.5, b.max[2] - b.min[2]);
-    if (byStation && placed.length > 1) for (let k = 0; k < c.count; k++) col.set(COLOURS[i % 6], k * 3);
+    if (!colourOn) for (let k = 0; k < c.count; k++) { col[k * 3] = 205; col[k * 3 + 1] = 208; col[k * 3 + 2] = 214; }
+    else if (byStation && placed.length > 1) for (let k = 0; k < c.count; k++) col.set(COLOURS[i % 6], k * 3);
     else for (let k = 0; k < c.count; k++) { const t = turbo(Math.min(1, Math.max(0, (c.positions[k * 3 + 2] - z0) / dz))); col[k * 3] = t[0]; col[k * 3 + 1] = t[1]; col[k * 3 + 2] = t[2]; }
     return { ...c, colors: col } as PointCloud;
-  }), [placed, byStation, b]);
+  }), [placed, byStation, colourOn, b]);
 
   const worst = regs ? Math.max(...regs.map((r) => r.ptErr)) : null;
   const stats = [
@@ -222,5 +224,6 @@ export default function TabTls() {
     viewExtras={<>
       <Btn sm variant="primary" icon={<Play size={15} />} onClick={scanAll} busy={busy === 'scan'} disabled={stations.length < 1} testId="scan-toolbar">Scan</Btn>
       <Btn sm icon={<Dots size={15} />} variant={pointsOnly ? 'primary' : ''} onClick={() => setPointsOnly(!pointsOnly)} testId="points-only">{pointsOnly ? 'Show scene' : 'Point cloud'}</Btn>
+      <Btn sm icon={<Eye size={15} />} variant={colourOn ? '' : 'primary'} onClick={() => setColourOn(!colourOn)} testId="tls-colour">{colourOn ? 'Colour on' : 'Colour off'}</Btn>
     </>} />;
 }

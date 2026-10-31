@@ -22,15 +22,23 @@ const MAX_RANGE = 40; // fixed sensor maximum range (m)
 const DETECT = 0.04; // minimum returned intensity the detector can see
 /** Darker surfaces are seen less far: effective max range scales with √reflectivity (80 % target = full range). */
 const effRange = (maxRange: number, rho: number) => maxRange * Math.min(1, Math.sqrt(Math.max(rho, 0) / 0.8));
-const MATERIALS: { id: string; label: string; rho: number }[] = [
-  { id: 'white', label: 'White paint (0.90)', rho: 0.9 },
-  { id: 'concrete', label: 'Concrete (0.50)', rho: 0.5 },
-  { id: 'dark', label: 'Dark rubber (0.08)', rho: 0.08 },
-  { id: 'glass', label: 'Clear glass (0.01)', rho: 0.01 },
+/** Peak return of a mirror when the laser hits it head-on. */
+const MIRROR_PEAK = 0.9;
+/** Simplified mirror model: a mirror sends the laser out at the same angle it came in, so the light only comes back to the
+ *  sensor when the laser hits it almost head-on. The returned share falls off quickly with the angle of incidence
+ *  (the angle between the beam and the line pointing straight out of the wall), and is almost zero beyond ~20°. */
+const MIRROR_LOBE_DEG = 10;
+const mirrorReflectivity = (incidenceDeg: number) => MIRROR_PEAK * Math.exp(-((incidenceDeg / MIRROR_LOBE_DEG) ** 2));
+interface Material { id: string; label: string; note: string; rho?: number; mirror?: boolean }
+const MATERIALS: Material[] = [
+  { id: 'white', label: 'White wall (0.90)', rho: 0.9, note: 'Strong return signal and longer detection range.' },
+  { id: 'concrete', label: 'Concrete (0.50)', rho: 0.5, note: 'Moderate return signal and normal detection range.' },
+  { id: 'rubber', label: 'Black rubber (0.08)', rho: 0.08, note: 'Weak return signal and shorter detection range.' },
+  { id: 'mirror', label: 'Mirror (angle dependent)', mirror: true, note: 'Specular reflection. At oblique angles, the reflected laser can miss the receiver and produce missing points.' },
 ];
 type Lesson = 'tof' | 'div' | 'fov';
 
-interface Beam { det: boolean; rGeo: number; IGeo: number; i: number; az: number; el: number; hit: boolean; r: number; p: [number, number, number]; n: [number, number, number]; obj: number; mixed: boolean; cos: number; rho: number; I: number }
+interface Beam { det: boolean; rGeo: number; IGeo: number; i: number; az: number; el: number; hit: boolean; r: number; p: [number, number, number]; n: [number, number, number]; obj: number; mixed: boolean; cos: number; rho: number; I: number; away?: boolean }
 
 /** A simple human-like figure (legs, torso, arms, head) standing at x = px, facing the sensor. */
 function personParts(px: number) {
@@ -183,7 +191,10 @@ export default function Tab0() {
   const [div, setDiv] = useState(20); // full-angle divergence, mrad
   const [D, setD] = useState(12);
   const [noiseMm, setNoiseMm] = useState(0);
-  const [rho, setRho] = useState(0.9);
+  const [matId, setMatId] = useState('white');
+  const material = MATERIALS.find((m) => m.id === matId) ?? MATERIALS[0];
+  const isMirror = !!material.mirror;
+  const rho = material.rho ?? MIRROR_PEAK; // reflectivity given to the wall in the scene (the mirror model overrides it per beam)
   const maxRange = MAX_RANGE;
   const [wallYaw, setWallYaw] = useState(0);
   const pw = 5, tres = 1; // fixed teaching values
@@ -232,12 +243,15 @@ export default function Tab0() {
       if (cos < 0) { nx = -nx; ny = -ny; nz = -nz; cos = -cos; }
       const mixed = false;
       const o = scene.objects[h.obj];
-      const I = Math.min(1, Math.max(0, (o.reflectivity * cos) / (1 + (r / r0) ** 2)));
-      const det = I >= DETECT && r <= effRange(maxRange, o.reflectivity);
-      out.push({ det, rGeo: r, IGeo: I, i: out.length, az, el, hit: det, r: det ? r : 80, p: det ? [d[0] * r, d[1] * r, zs + d[2] * r] : [d[0] * 20, d[1] * 20, zs + d[2] * 20], n: [nx, ny, nz], obj: h.obj, mixed, cos, rho: o.reflectivity, I });
+      // ordinary surfaces: reflectivity × cos(angle). Mirror wall: only the light that bounces straight back counts.
+      const mirrorWall = isMirror && o.id === 'wall';
+      const rhoEff = mirrorWall ? mirrorReflectivity(Math.acos(Math.min(1, cos)) / D2R) : o.reflectivity;
+      const I = Math.min(1, Math.max(0, ((mirrorWall ? rhoEff : o.reflectivity * cos)) / (1 + (r / r0) ** 2)));
+      const det = I >= DETECT && r <= effRange(maxRange, rhoEff);
+      out.push({ det, rGeo: r, IGeo: I, i: out.length, az, el, hit: det, r: det ? r : 80, p: det ? [d[0] * r, d[1] * r, zs + d[2] * r] : [d[0] * 20, d[1] * 20, zs + d[2] * 20], n: [nx, ny, nz], obj: h.obj, mixed, cos, rho: rhoEff, I, away: mirrorWall && !det });
     }
     return out;
-  }, [scene, hFov, vFov, nH, nV, div, noiseMm, maxRange]);
+  }, [scene, hFov, vFov, nH, nV, div, noiseMm, maxRange, isMirror]);
 
   const centre = beams[Math.floor(nV / 2) * nH + Math.floor(nH / 2)];
   const focus = sel !== null && beams[sel] ? beams[sel] : centre;
@@ -247,6 +261,8 @@ export default function Tab0() {
   const dAz = nH > 1 ? hFov / (hFov >= 360 ? nH : nH - 1) : 0, dEl = nV > 1 ? vFov / (nV - 1) : 0;
   const spacingH = focus ? focus.r * Math.tan(dAz * D2R) : 0;
   const hits = beams.filter((b) => b.hit);
+  /** Reflectivity used for the max-range readout: a mirror is judged at the angle the wall is turned to. */
+  const shownRho = isMirror ? mirrorReflectivity(Math.abs(wallYaw)) : rho;
   
   const shown = useMemo(() => (pointsOnly ? beams.filter((b) => b.hit) : beams), [beams, pointsOnly]);
   const hitGeom = useMemo(() => {
@@ -337,7 +353,7 @@ export default function Tab0() {
         </group>
       )}
       {/* effective maximum range for the current wall material */}
-      {(() => { const R = effRange(maxRange, rho), span = Math.min(hFov, 170) / 2 * D2R; const pts = Array.from({ length: 41 }, (_, k) => { const a = -span + (2 * span * k) / 40; return [R * Math.cos(a), R * Math.sin(a), zs] as V3; }); return (<><Line points={pts} color="#000000" lineWidth={1.4} dashed dashSize={0.5} gapSize={0.35} depthTest={false} /></>); })()}
+      {(() => { const R = effRange(maxRange, shownRho), span = Math.min(hFov, 170) / 2 * D2R; const pts = Array.from({ length: 41 }, (_, k) => { const a = -span + (2 * span * k) / 40; return [R * Math.cos(a), R * Math.sin(a), zs] as V3; }); return (<><Line points={pts} color="#000000" lineWidth={1.4} dashed dashSize={0.5} gapSize={0.35} depthTest={false} /></>); })()}
       <TextSprite text="Sensor" position={[0, -1.1, zs - 0.1]} bg="rgba(0,70,160,0.9)" />
       {fovOutline.edges.map((pts, i) => <Line key={`e${i}`} points={pts} color="#000000" lineWidth={1.8} depthTest={false} />)}
       <lineSegments geometry={lineGeom} raycast={() => null}><lineBasicMaterial color="#007aff" transparent opacity={0.2} /></lineSegments>
@@ -359,7 +375,9 @@ export default function Tab0() {
         : focus.rGeo > 0
           ? <CardSprite accent="#c4163f" position={focus.p} onClose={closeCard} lines={focus.rGeo > effRange(maxRange, focus.rho)
             ? [`Point #${focus.i + 1}: no return`, `Range  ${focus.rGeo.toFixed(1)} m`, `Max range here  ${effRange(maxRange, focus.rho).toFixed(1)} m`, 'Too far for this surface']
-            : [`Point #${focus.i + 1}: no return`, `Intensity  ${focus.IGeo.toFixed(3)} < ${DETECT}`, 'Too little light came back']} />
+            : focus.away
+              ? [`Point #${focus.i + 1}: no return`, `Angle to the mirror  ${(Math.acos(Math.min(1, focus.cos)) / D2R).toFixed(0)}°`, 'The mirror bounced the laser away']
+              : [`Point #${focus.i + 1}: no return`, `Intensity  ${focus.IGeo.toFixed(3)} < ${DETECT}`, 'Too little light came back']} />
           : <CardSprite accent="#666666" position={focus.p} lines={[`Point #${focus.i + 1}: no return`, 'This beam hit nothing']} onClose={closeCard} />)}
       {!sceneOnly && focus?.hit && <mesh position={focus.p} raycast={() => null}><ringGeometry args={[0.14, 0.2, 24]} /><meshBasicMaterial color="#ff9f0a" side={THREE.DoubleSide} depthTest={false} /></mesh>}
       {detail && pulseOn && focus?.hit && <Pulse from={new THREE.Vector3(0, 0, zs)} to={new THREE.Vector3(...focus.p)} slow={slow} playing={playing} onTick={setPhase} />}
@@ -372,7 +390,9 @@ export default function Tab0() {
   const clock = phase * t0; // 0 → Δt over the whole round trip
 
   const info = focus && !focus.hit && focus.rGeo > 0 ? (
-    <div className="callout bad" data-testid="concept-point-info"><b>No return</b><span>This beam hit a surface with reflectivity {focus.rho.toFixed(2)} but only {focus.IGeo.toFixed(3)} of the light came back, below the detection level ({DETECT}). The sensor sees nothing, so there is no point. Try a more reflective material or a shorter range.</span></div>
+    <div className="callout bad" data-testid="concept-point-info"><b>No return</b><span>{focus.away
+      ? `This beam hit the mirror at ${(Math.acos(Math.min(1, focus.cos)) / D2R).toFixed(0)}° off head-on. A mirror sends the laser away at the same angle, so almost no light reached the sensor and there is no point. Turn the wall to face the sensor to get returns.`
+      : `This beam hit a surface with reflectivity ${focus.rho.toFixed(2)} but only ${focus.IGeo.toFixed(3)} of the light came back, below the detection level (${DETECT}). The sensor sees nothing, so there is no point. Try a more reflective material or a shorter range.`}</span></div>
   ) : focus?.hit ? (
     <div className="callout" data-testid="concept-point-info" style={{ gap: 6 }}>
       <b>{sel !== null ? `Point #${focus.i + 1}` : 'Middle beam'} <span className="caption">· click any dot to see its details</span></b>
@@ -431,9 +451,11 @@ export default function Tab0() {
       </Section>
       <Section title="Surface">
         <Slider label="Range to the wall" value={D} min={2} max={30} step={0.5} unit=" m" onChange={setD} />
-        <div className="field"><label>Wall material (reflectivity)</label>
-          <div className="chip-row">{MATERIALS.map((m) => <button key={m.id} className="chip" aria-pressed={rho === m.rho} onClick={() => setRho(m.rho)} data-testid={`mat-${m.id}`}>{m.label}</button>)}</div>
-          <span className="caption">Darker surfaces are seen less far, and clear ones not at all. Watch “Max range on this wall”.</span></div>
+        <div className="field"><label>Wall material</label>
+          <div className="chip-row">{MATERIALS.map((m) => <button key={m.id} className="chip" aria-pressed={matId === m.id} onClick={() => { setMatId(m.id); if (!m.mirror) setWallYaw(0); }} data-testid={`mat-${m.id}`}>{m.label}</button>)}</div>
+          <span className="caption" data-testid="material-note"><b>{material.label.replace(/ \(.*\)$/, '')}:</b> {material.note}</span>
+          <span className="caption">LiDAR needs reflected light to return to its sensor. Dark surfaces return less light, while mirrors may reflect light away.</span></div>
+        {isMirror && <Slider label="Turn the wall (angle to the sensor)" value={wallYaw} min={0} max={60} step={1} unit="°" onChange={setWallYaw} />}
       </Section>
       <Section title="More settings" open={false}>
         <Slider label="Range noise" value={noiseMm} min={0} max={200} step={1} unit=" mm" onChange={setNoiseMm} />
@@ -479,7 +501,7 @@ export default function Tab0() {
               <div className="glass card" style={{ minWidth: 170, padding: '0.45rem 0.8rem' }}><div className="caption">Coverage</div><div style={{ fontSize: '1.3rem', fontWeight: 650 }}>{(2 * D * Math.tan(hFov * D2R / 2)).toFixed(1)} × {(2 * D * Math.tan(vFov * D2R / 2)).toFixed(1)} m</div><div className="caption">{hFov}° × {vFov}° FOV</div></div>
             </div>
             <div className="stat-row2" style={{ display: 'flex', gap: 8 }}>
-              <div className="glass card" style={{ minWidth: 170, padding: '0.45rem 0.8rem' }}><div className="caption">Max range on this wall</div><div style={{ fontSize: '1.3rem', fontWeight: 650 }}>{effRange(maxRange, rho).toFixed(1)} m</div><div className="caption">sensor max {maxRange} m · wall at {D} m</div></div>
+              <div className="glass card" style={{ minWidth: 170, padding: '0.45rem 0.8rem' }}><div className="caption">Max range on this wall</div><div style={{ fontSize: '1.3rem', fontWeight: 650 }}>{effRange(maxRange, shownRho).toFixed(1)} m</div><div className="caption">sensor max {maxRange} m · wall at {D} m{isMirror ? ` · wall turned ${wallYaw}°` : ''}</div></div>
               <div className="glass card" style={{ minWidth: 170, padding: '0.45rem 0.8rem' }}><div className="caption">Number of points</div><div style={{ fontSize: '1.3rem', fontWeight: 650 }}>{hits.length}</div><div className="caption">of {beams.length} beams got a return</div></div>
             </div>
           </div>
