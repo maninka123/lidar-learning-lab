@@ -345,7 +345,7 @@ export default function Tab3({ labSwitch }: { labSwitch?: React.ReactNode }) {
                   <b>How that number comes about</b>
                   <span className="mono" style={{ fontSize: '0.875rem', fontWeight: 600 }}>{fmtN(Math.round(pointsPerSecond(mlsSensor)))} points per second</span>
                   <span className="caption">{isSteered(mlsSensor.pattern) ? `${mlsSensor.frequency} sweeps per second` : `${mlsSensor.channels} channels · ${mlsSensor.frequency} turns per second`}</span>
-                  <span className="mono" style={{ fontSize: '0.875rem' }}>× {traj.duration.toFixed(1)} s ({traj.length.toFixed(1)} m ÷ {s.mlsOpts.speed} m/s) = {fmtN(Math.round(pointsPerSecond(mlsSensor) * traj.duration))} points</span>
+                  <span className="mono" style={{ fontSize: '0.875rem' }}>× {traj.duration.toFixed(1)} s ({traj.length.toFixed(1)} m ÷ {s.mlsOpts.speed} m/s) = {fmtN(Math.round(pointsPerSecond(mlsSensor) * traj.duration))} points ({fmtN(Math.round(mlsSensor.frequency * traj.duration))} frames)</span>
                   <span className="caption">Nominal = every beam fired. Beams that hit nothing return no point, so the real cloud is smaller.</span>
                 </div>
               </>
