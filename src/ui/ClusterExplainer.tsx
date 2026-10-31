@@ -42,20 +42,21 @@ export function clusterSteps(pts: [number, number][], eps: number, minPts: numbe
 const COL = ['#0a84ff', '#ff9f0a', '#30d158', '#bf5af2', '#ff453a', '#64d2ff', '#ffd60a', '#ac8e68'];
 const W = 330, H = 190, SX = 105, OX = 18, OY = 14;
 
-export function ClusterExplainer({ algo, eps, minPts }: { algo: 'euclidean' | 'dbscan'; eps: number; minPts: number }) {
+export function ClusterExplainer({ algo, eps, minPts, runKey = 0 }: { algo: 'euclidean' | 'dbscan'; eps: number; minPts: number; runKey?: number }) {
   const pts = useMemo(toyPoints, []);
   const steps = useMemo(() => clusterSteps(pts, eps, minPts, algo), [pts, eps, minPts, algo]);
   const [i, setI] = useState(0), [play, setPlay] = useState(false);
   useEffect(() => { setI(0); setPlay(false); }, [steps]);
+  useEffect(() => { if (runKey > 0) { setI(0); setPlay(true); } }, [runKey]); // pressing Cluster / Segment replays the story
   useEffect(() => {
     if (!play) return;
-    const t = setInterval(() => setI((k) => { if (k >= steps.length - 1) { setPlay(false); return k; } return k + 1; }), 450);
+    const t = setInterval(() => setI((k) => { if (k >= steps.length - 1) { setPlay(false); return k; } return k + 1; }), 260);
     return () => clearInterval(t);
   }, [play, steps]);
   const st = steps[Math.min(i, steps.length - 1)];
   const px = (p: [number, number]) => [OX + p[0] * SX, H - OY - p[1] * SX] as const;
   return (
-    <div style={{ display: 'grid', gap: 8 }} data-testid="cluster-explainer">
+    <div style={{ display: 'grid', gap: 6 }} data-testid="cluster-explainer">
       <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label="Step-by-step clustering of a small 2D point set" style={{ width: '100%', background: '#fff', borderRadius: 12, border: '1px solid var(--line, #e5e5ea)' }}>
         {st.cur >= 0 && (() => { const [cx, cy] = px(pts[st.cur]); return <circle cx={cx} cy={cy} r={eps * SX} fill="rgba(10,132,255,0.10)" stroke="#0a84ff" strokeWidth={1.5} strokeDasharray="5 3" />; })()}
         {pts.map((p, k) => {
@@ -64,14 +65,13 @@ export function ClusterExplainer({ algo, eps, minPts }: { algo: 'euclidean' | 'd
           return <circle key={k} cx={x} cy={y} r={k === st.cur ? 5.5 : 3.8} fill={fill} stroke={k === st.cur ? '#1d1d1f' : l === -1 ? '#636366' : 'none'} strokeWidth={k === st.cur ? 2 : 1} />;
         })}
       </svg>
-      <p className="hint" style={{ minHeight: '3.2em', margin: 0 }} data-testid="cluster-caption">{st.caption}</p>
+      <p className="hint" style={{ minHeight: '2.6em', margin: 0, fontSize: '0.8125rem' }} data-testid="cluster-caption">{st.caption}</p>
       <div className="btn-row">
         <Btn sm onClick={() => { setPlay(false); setI(Math.max(0, i - 1)); }} disabled={i === 0}>Back</Btn>
         <Btn sm variant="primary" icon={play ? <Pause size={14} /> : <Play size={14} />} onClick={() => { if (i >= steps.length - 1) setI(0); setPlay(!play); }} testId="cluster-play">{play ? 'Pause' : 'Play'}</Btn>
         <Btn sm onClick={() => { setPlay(false); setI(Math.min(steps.length - 1, i + 1)); }} disabled={i >= steps.length - 1} testId="cluster-next">Next</Btn>
-        <Btn sm onClick={() => { setPlay(false); setI(0); }}>Reset</Btn>
       </div>
-      <span className="caption">Step {Math.min(i, steps.length - 1) + 1} of {steps.length} · {st.clusters} cluster{st.clusters === 1 ? '' : 's'} so far. Grey = not looked at yet, dark grey = noise. The dashed circle is the radius ({eps.toFixed(2)} m): change it above and watch the groups change.</span>
+      <span className="caption">Step {Math.min(i, steps.length - 1) + 1} of {steps.length} · {st.clusters} cluster{st.clusters === 1 ? '' : 's'}. Dashed circle = radius ({eps.toFixed(2)} m).</span>
     </div>
   );
 }

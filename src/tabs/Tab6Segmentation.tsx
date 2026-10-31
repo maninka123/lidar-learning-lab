@@ -56,6 +56,8 @@ export default function Tab6() {
   const [sel, setSel] = useState<number | null>(null); // the cluster or plane that was clicked (its id in the result)
   const [hideCeiling, setHideCeiling] = useState(true);
   const [showHow, setShowHow] = useState(true);
+  const [howRun, setHowRun] = useState(0); // bumped whenever clustering runs, so the little explainer replays
+  const replay = () => { setShowHow(true); setHowRun((n) => n + 1); };
   const [pane, setPane] = useState<'setup' | 'results'>('setup');
   const [rawOpen, setRawOpen] = useState(false);
   const [sweep, setSweep] = useState<{ x: number[]; clusters: number[]; over: number[]; under: number[]; recovered: number[]; label: string } | null>(null);
@@ -83,6 +85,7 @@ export default function Tab6() {
     setShow('result');
   }
   async function runCluster() {
+    replay();
     if (!cloud) return;
     const out = await run(p, planeRes ?? undefined);
     if (!out) return;
@@ -98,6 +101,7 @@ export default function Tab6() {
     } catch (e) { s.notify((e as Error).message, 'error'); return null; } finally { setBusy(false); }
   }
   async function runMain() {
+    replay();
     const out = await run();
     if (!out) return;
     setPlaneRes(planesOnly(out.result));
@@ -252,9 +256,9 @@ export default function Tab6() {
     <TabFrame title="Clustering & Segmentation" tab={11} noEnv viewport={viewport} controls={controls} learn={null} noPanelTabs statsRow stats={stats}
       viewExtras={<>{p.algo !== 'none' && <Btn sm variant={showHow ? 'primary' : ''} onClick={() => setShowHow(!showHow)} testId="how-toggle">How it works</Btn>}<Btn sm variant="primary" icon={<Play size={15} />} onClick={runMain} busy={busy} disabled={!cloud} testId="run-seg">Segment</Btn><Btn sm icon={<FileText size={15} />} variant={rawOpen ? 'primary' : ''} onClick={() => setRawOpen(!rawOpen)} disabled={!cloud} testId="raw-toggle">Raw</Btn></>}
       overlays={<>{picked ? <PickedCard p={picked} id={sel!} index={res!.clusters.findIndex((c) => c.id === sel)} name={seg.names[sel!] ?? ''} onName={(v) => useLab.setState({ seg: { ...useLab.getState().seg, names: { ...useLab.getState().seg.names, [sel!]: v } } })} onClose={() => setSel(null)} /> : rawOpen && cloud ? <RawViewer text={rawText} filename="segmented.pcd" onClose={() => setRawOpen(false)} /> : null}{showHow && p.algo !== 'none' && (
-        <div className="overlay glass card fade-in" style={{ right: 12, top: 66, width: 'min(470px, 46%)', padding: 14, display: 'grid', gap: 8 }} data-testid="how-card">
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}><b>How {p.algo === 'dbscan' ? 'DBSCAN' : 'Euclidean clustering'} works</b><button className="btn sm icon" onClick={() => setShowHow(false)} aria-label="Hide" data-testid="how-close">×</button></div>
-          <ClusterExplainer algo={p.algo} eps={p.algo === 'dbscan' ? p.eps : p.radius} minPts={p.minPts} />
+        <div className="overlay glass card fade-in" style={{ right: 12, top: 66, width: 'min(300px, 32%)', padding: 10, display: 'grid', gap: 6 }} data-testid="how-card">
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}><b style={{ fontSize: '0.875rem' }}>How {p.algo === 'dbscan' ? 'DBSCAN' : 'clustering'} works</b><button className="btn sm icon" onClick={() => setShowHow(false)} aria-label="Hide" data-testid="how-close">×</button></div>
+          <ClusterExplainer algo={p.algo} eps={p.algo === 'dbscan' ? p.eps : p.radius} minPts={p.minPts} runKey={howRun} />
         </div>
       )}</>} />
   );
