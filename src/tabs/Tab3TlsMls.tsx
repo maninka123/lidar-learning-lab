@@ -12,7 +12,7 @@ import { autoRays } from '../state/actions';
 import { SceneFromStore, CloudFromStore } from './common';
 import { SensorMarker, PolyLine, Marker, CloudLayer } from '../ui/three';
 import { Plan2D } from '../ui/Plan2D';
-import { Crosshair, Pause, Play, Plus, Trash2, Undo2, Route as RouteIcon } from '../ui/icons';
+import { Crosshair, Pause, Play, Plus, Trash2, Undo2, X, Route as RouteIcon } from '../ui/icons';
 import { PRESETS, getPreset, presetToConfig, SensorConfig, pointsPerSecond, raysPerSweep, isSteered } from '../sensor/presets';
 import { runTask } from '../engine/client';
 import { staticPose, PoseSample } from '../sensor/simulate';
@@ -329,7 +329,15 @@ export default function Tab3({ labSwitch }: { labSwitch?: React.ReactNode }) {
               <Btn sm onClick={() => s.patch({ waypoints: zigWps() })}>Zig-zag preset</Btn>
               <Btn sm icon={<Trash2 size={15} />} onClick={() => s.patch({ waypoints: [] })} disabled={!s.waypoints.length}>Clear</Btn>
             </div>
-            <ol style={{ margin: 0, paddingLeft: '1.3rem', display: 'grid', gap: 2 }}>{s.waypoints.map(([x, y], i) => <li key={i} className="mono" style={{ fontSize: '0.875rem' }}>{x.toFixed(2)}, {y.toFixed(2)}</li>)}</ol>
+            <ol style={{ margin: 0, paddingLeft: '1.3rem', display: 'grid', gap: 2 }}>{s.waypoints.map(([x, y], i) => (
+              <li key={i} className="mono" style={{ fontSize: '0.875rem' }}>
+                <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                  <span>{x.toFixed(2)}, {y.toFixed(2)}</span>
+                  <button className="btn sm" style={{ padding: '2px 6px', minHeight: 0 }} title={`Remove waypoint ${i + 1}`} aria-label={`Remove waypoint ${i + 1}`} data-testid={`wp-remove-${i}`}
+                    onClick={() => { const before = useLab.getState().waypoints; s.patch({ waypoints: before.filter((_, j) => j !== i) }); pushUndo('remove waypoint', () => useLab.setState({ waypoints: before })); }}><X size={13} /></button>
+                </span>
+              </li>
+            ))}</ol>
             {traj && (
               <>
                 <p className="hint">{traj.length.toFixed(1)} m · {traj.duration.toFixed(1)} s · ~{fmtN(Math.round(pointsPerSecond(mlsSensor) * traj.duration))} nominal points</p>

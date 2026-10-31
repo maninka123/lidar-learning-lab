@@ -491,3 +491,15 @@ test.describe('corner cases', () => {
     await expect(page.getByTestId('change-chart')).toContainText(/\d+\.\d%/, { timeout: 120000 });
   });
 });
+
+test('SLAM tab: a waypoint can be removed and the route follows', async ({ page }) => {
+  await page.goto('/'); await page.getByTestId('nav-8').click();
+  await page.getByRole('button', { name: 'Loop preset' }).click();
+  const n0 = await state(page, (s) => s.waypoints.length);
+  expect(n0).toBeGreaterThan(3);
+  await page.getByTestId('wp-remove-1').click();
+  const wp = await state(page, (s) => s.waypoints.length);
+  expect(wp).toBe(n0 - 1);
+  await expect(page.getByTestId('wp-remove-0')).toBeVisible();
+  await expect(page.getByTestId(`wp-remove-${n0 - 1}`)).toHaveCount(0);
+});
