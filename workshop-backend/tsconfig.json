@@ -1,13 +1,21 @@
 {
   "compilerOptions": {
     "target": "ES2022",
-    "module": "ESNext",
-    "moduleResolution": "Bundler",
+    "module": "CommonJS",
+    "moduleResolution": "Node",
     "strict": true,
     "noEmit": true,
     "skipLibCheck": true,
     "allowJs": true,
-    "types": ["node"]
+    "types": [
+      "node"
+    ],
+    "esModuleInterop": true
   },
-  "include": ["api", "lib", "tests", "scripts"]
+  "include": [
+    "api",
+    "lib",
+    "tests",
+    "scripts"
+  ]
 }
