@@ -85,8 +85,6 @@ npm run test:e2e   # browser tests (Playwright; first run: npx playwright instal
 
 Everything else works without any key.
 
-Units are metres, Z-up. LAZ is not decoded in the browser (`pdal translate in.laz out.las`).
-
 ---
 
 <p align="center">
