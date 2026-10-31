@@ -8,80 +8,82 @@
 <link rel="stylesheet" href="/admin/admin.css">
 </head>
 <body>
-<header><div><h1>LiDAR Lab · Workshop control</h1><small>Times are shown in Australia/Sydney</small></div><button id="logout" class="hidden">Log out</button></header>
+<header>
+  <div class="brand"><span class="logo" aria-hidden="true"></span><div><h1>Workshop control</h1><small>LiDAR Learning Lab · times in Australia/Sydney</small></div></div>
+  <div class="tools">
+    <div class="seg" role="group" aria-label="Theme" id="themeSeg"><button data-theme-set="system" aria-pressed="true">System</button><button data-theme-set="light" aria-pressed="false">Light</button><button data-theme-set="dark" aria-pressed="false">Dark</button></div>
+    <button id="logout" class="btn sm hidden">Log out</button>
+  </div>
+</header>
 <main>
   <section id="login" class="card login hidden">
     <h2>Administrator login</h2>
-    <button id="touchLogin" class="primary hidden" style="width:100%;margin-bottom:12px">Sign in with Touch ID</button>
+    <button id="touchLogin" class="btn primary hidden">Sign in with Touch ID</button>
     <form id="loginForm" class="grid">
       <label>Username<input id="user" autocomplete="username" autocapitalize="none" spellcheck="false" required></label>
       <label>Password<input id="pw" type="password" autocomplete="current-password" required></label>
-      <button class="primary">Log in</button>
+      <button class="btn primary">Log in</button>
       <div id="loginMsg" class="msg bad hidden"></div>
     </form>
   </section>
 
-  <div id="app" class="hidden" style="display:grid;gap:16px">
+  <div id="app" class="hidden stack">
     <div id="toast" class="msg hidden"></div>
-    <section class="card hidden" id="touchCard"><div class="row" style="justify-content:space-between"><span id="touchText">Use Touch ID instead of typing your password on this device.</span><button id="touchSetup">Set up Touch ID</button></div></section>
-    <section class="card" id="statusCard">
-      <div class="row" style="justify-content:space-between"><h2>Workshop</h2><span id="pill" class="pill">—</span></div>
-      <div class="big" id="countdown">—</div>
-      <p class="muted" id="window">—</p>
-      <div class="row">
-        <button id="disable" class="danger">Turn off now</button>
-        <button data-extend="60">+1 h</button><button data-extend="180">+3 h</button><button data-extend="1440">+1 day</button><button data-extend="-60">−1 h</button>
+    <section class="card hidden" id="touchCard"><div class="row between"><span class="muted" id="touchText"></span><button id="touchSetup" class="btn sm">Set up Touch ID</button></div></section>
+
+    <section class="card hero" id="workshopCard">
+      <div class="card-head"><div class="status"><span class="dot" id="dot"></span><h2 id="statusText">Off</h2></div><span class="faint" id="window"></span></div>
+
+      <div id="runningView" class="hidden stack">
+        <div class="big" id="countdown">—</div>
+        <div class="bar" aria-hidden="true"><i id="barFill"></i></div>
+        <div class="row"><button class="btn sm" data-extend="60">+1 h</button><button class="btn sm" data-extend="180">+3 h</button><button class="btn sm" data-extend="1440">+1 day</button><button class="btn sm" data-extend="-60">−1 h</button><button id="disable" class="btn sm danger">Turn off now</button></div>
+        <details><summary>Set an exact end time</summary><div class="row"><input type="datetime-local" id="endExact" class="auto"><button id="applyEnd" class="btn sm">Apply</button></div></details>
       </div>
-      <div class="row" style="margin-top:10px"><label style="flex:1;min-width:220px">Set the exact end<input type="datetime-local" id="endExact"></label><button id="applyEnd" style="align-self:end">Apply</button></div>
+
+      <div id="idleView" class="stack">
+        <p class="muted" id="idleText">Start a workshop for a fixed time:</p>
+        <div class="row"><button class="btn" data-start="180">3 hours</button><button class="btn" data-start="360">6 hours</button><button class="btn" data-start="1440">1 day</button><button class="btn" data-start="2880">2 days</button></div>
+        <details><summary>Or pick dates</summary>
+          <div class="grid g2"><label>Starts<input type="datetime-local" id="startAt"></label><label>Ends<input type="datetime-local" id="endAt"></label></div>
+          <div class="row" style="margin-top:10px"><button id="schedule" class="btn primary">Schedule</button></div>
+        </details>
+      </div>
     </section>
 
     <section class="card">
-      <h2>Start a workshop</h2>
-      <p class="muted">Start now for a fixed time:</p>
-      <div class="row"><button data-start="180">3 hours</button><button data-start="360">6 hours</button><button data-start="1440">1 day</button><button data-start="2880">2 days</button></div>
-      <p class="muted" style="margin-top:14px">Or choose dates (Sydney time):</p>
-      <div class="grid g2"><label>Starts<input type="datetime-local" id="startAt"></label><label>Ends<input type="datetime-local" id="endAt"></label></div>
-      <div class="row" style="margin-top:10px"><button id="schedule" class="primary">Schedule / start with these dates</button></div>
+      <div class="card-head"><h2>Live</h2><span class="faint" id="pricingNote"></span></div>
+      <div class="grid g4" id="liveTiles"></div>
     </section>
 
     <section class="card">
-      <h2>Limits</h2>
-      <form id="limitsForm" class="grid g4">
-        <label>Requests per student<input name="maxPerStudent" type="number" min="1"></label>
-        <label>Total requests<input name="maxTotal" type="number" min="1"></label>
-        <label>Max output tokens<input name="maxOutputTokens" type="number" min="50" max="4000"></label>
-        <label>Requests per minute (each student)<input name="rpm" type="number" min="1" max="60"></label>
-        <label>Token budget (0 = none)<input name="tokenBudget" type="number" min="0"></label>
-        <label>Max students<input name="maxStudents" type="number" min="1" max="500"></label>
-        <label>Keep student records (days)<input name="retentionDays" type="number" min="1" max="365"></label>
-        <label>Price in, USD per 1M tokens<input name="priceInPerM" type="number" min="0" step="0.001"></label>
-        <label>Price out, USD per 1M tokens<input name="priceOutPerM" type="number" min="0" step="0.001"></label>
-      </form>
-      <p class="muted">Enter DeepSeek's current prices from its pricing page to see an estimated spend. Leave at 0 to hide it.</p>
-      <button id="saveLimits" class="primary">Save limits</button>
+      <div class="card-head"><h2>Users</h2><span class="faint" id="activeNote"></span></div>
+      <div class="scroll"><table><thead><tr><th>User</th><th>Where</th><th>Joined</th><th>Last active</th><th class="num">Requests</th><th class="num">Tokens</th><th class="num">Cost</th><th></th></tr></thead><tbody id="users"></tbody></table></div>
+      <div class="row between"><p class="faint" id="privacy"></p><button id="deleteData" class="btn sm danger">Delete user records</button></div>
     </section>
 
-    <section class="card">
-      <h2>Student access codes</h2>
-      <div class="row"><label style="width:120px">How many<input id="codeCount" type="number" min="1" max="200" value="10"></label><label style="width:200px">Label<input id="codePrefix" value="Student"></label><button id="makeCodes" class="primary" style="align-self:end">Generate</button></div>
-      <div id="newCodes" class="hidden" style="margin-top:14px"><div class="msg good">Copy these now: they are not stored in readable form and cannot be shown again.</div>
-        <div class="row" style="margin:8px 0"><button id="copyCodes">Copy all</button><button id="csvCodes">Download CSV</button></div><table><tbody id="newCodesBody"></tbody></table></div>
-    </section>
+    <div class="grid g2">
+      <section class="card">
+        <div class="card-head"><h2>Access</h2>
+          <div class="seg" role="group" aria-label="Access" id="accessSeg"><button data-access="open" aria-pressed="true">Open</button><button data-access="codes" aria-pressed="false">Codes</button></div></div>
+        <p class="muted" id="accessText"></p>
+        <div id="codesBox" class="hidden stack">
+          <div class="row"><label style="width:90px">How many<input id="codeCount" type="number" min="1" max="200" value="10"></label><label style="flex:1;min-width:120px">Label<input id="codePrefix" value="User"></label><button id="makeCodes" class="btn primary" style="align-self:end">Generate</button></div>
+          <div id="newCodes" class="hidden"><div class="msg good">Copy these now: they cannot be shown again.</div>
+            <div class="row" style="margin:8px 0"><button id="copyCodes" class="btn sm">Copy all</button><button id="csvCodes" class="btn sm">Download CSV</button></div><table><tbody id="newCodesBody"></tbody></table></div>
+        </div>
+      </section>
+      <section class="card">
+        <div class="card-head"><h2>Limits</h2></div>
+        <form id="limitsForm" class="grid g2">
+          <label>Requests per user<input name="maxPerStudent" type="number" min="1"></label>
+          <label>Total requests<input name="maxTotal" type="number" min="1"></label>
+        </form>
+        <div class="row"><button id="saveLimits" class="btn primary">Save</button></div>
+      </section>
+    </div>
 
-    <section class="card">
-      <h2>Students</h2>
-      <div class="grid g4" id="studentTiles"></div>
-      <div style="overflow:auto;margin-top:12px"><table><thead><tr><th>Student</th><th>Where (approx.)</th><th>Joined</th><th>Last active</th><th>Requests</th><th>Tokens</th><th>Est. cost</th><th></th></tr></thead><tbody id="students"></tbody></table></div>
-      <p class="muted" id="privacy">What is kept: an optional name, approximate city and country (from the connection, never the IP address), join and last-activity times, and AI usage. Only people who enter a workshop code are recorded.</p>
-      <div class="row"><button id="deleteData" class="danger">Delete all student records now</button></div>
-    </section>
-
-    <section class="card">
-      <h2>Workshop usage</h2>
-      <div class="grid g4" id="tiles"></div>
-      <h2 style="margin-top:20px">Recent errors</h2>
-      <div style="overflow:auto"><table><thead><tr><th>Time</th><th>Kind</th><th>Status</th><th>Student</th></tr></thead><tbody id="errors"></tbody></table></div>
-    </section>
+    <section class="card"><details><summary>Recent errors</summary><div class="scroll"><table><thead><tr><th>Time</th><th>Kind</th><th>Status</th><th>User</th></tr></thead><tbody id="errors"></tbody></table></div></details></section>
   </div>
 </main>
 <script type="module" src="/admin/admin.js"></script>

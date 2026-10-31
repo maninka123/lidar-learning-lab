@@ -2,7 +2,7 @@
 
 The small Vercel service behind **Workshop Mode** of the LiDAR Learning Lab: it lets students in a live workshop use the AI steps with a personal access code, without their own DeepSeek keys, for a limited time.
 
-- **Admin dashboard** (`/admin`): start, schedule, extend or stop a workshop; set limits; generate and revoke student codes; see who joined, usage and cost. Sign in with username and password, or Touch ID once set up.
+- **Admin dashboard** (`/admin`): start, schedule, extend or stop a workshop; set two limits; choose open access or personal codes; see who joined, live usage and spend. Sign in with username and password, or Touch ID once set up.
 - **API** (`/api/...`): checks codes, enforces quotas and expiry on the server, and forwards chat requests to DeepSeek. The DeepSeek key lives only in Vercel's environment variables.
 - **Data**: Upstash Redis (settings, codes, usage). Participant records are deleted after a retention period.
 
@@ -10,7 +10,7 @@ Live: <https://lidar-learning-lab-workshop-backend.vercel.app> · deployed from 
 
 ```bash
 npm install
-npm test                      # 47 tests
+npm test                      # 60 tests
 ADMIN_USERNAME=me ADMIN_PASSWORD=choose-one npm run dev   # local copy with an in-memory store: http://localhost:8787/admin
 npm run hash-password         # make ADMIN_PASSWORD_HASH for Vercel
 ```

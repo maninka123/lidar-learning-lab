@@ -12,7 +12,7 @@ export const ORIGIN = 'https://students.example';
 export const T0 = Date.UTC(2026, 10, 5, 0, 0, 0);
 export const HOUR = 3600e3;
 
-export interface Ctx { deps: Deps; store: MemoryStore; clock: { t: number }; fetchCalls: { url: string; init: RequestInit }[]; upstream: { mode: 'ok' | 'http500' | 'throw' | 'abort' | 'empty'; tokens: [number, number] } }
+export interface Ctx { deps: Deps; store: MemoryStore; clock: { t: number }; fetchCalls: { url: string; init: RequestInit }[]; upstream: { mode: 'ok' | 'http500' | 'throw' | 'abort' | 'empty'; tokens: [number, number]; hit?: number } }
 
 export function setup(): Ctx {
   const store = new MemoryStore(), clock = { t: T0 }, fetchCalls: Ctx['fetchCalls'] = [], upstream: Ctx['upstream'] = { mode: 'ok', tokens: [100, 50] };
@@ -23,7 +23,7 @@ export function setup(): Ctx {
     if (upstream.mode === 'abort') { const e = new Error('aborted'); e.name = 'AbortError'; throw e; }
     if (upstream.mode === 'http500') return new Response('{"error":{"message":"boom"}}', { status: 500, headers: { 'content-type': 'application/json' } });
     if (upstream.mode === 'empty') return new Response('{}', { status: 200, headers: { 'content-type': 'application/json' } });
-    return new Response(JSON.stringify({ choices: [{ message: { content: 'hello' } }], usage: { prompt_tokens: upstream.tokens[0], completion_tokens: upstream.tokens[1] } }), { status: 200, headers: { 'content-type': 'application/json' } });
+    return new Response(JSON.stringify({ choices: [{ message: { content: 'hello' } }], usage: { prompt_tokens: upstream.tokens[0], completion_tokens: upstream.tokens[1], ...(upstream.hit ? { prompt_cache_hit_tokens: upstream.hit } : {}) } }), { status: 200, headers: { 'content-type': 'application/json' } });
   }) as unknown as typeof fetch;
   return { deps: { store, env, now: () => clock.t, fetch: fetchMock }, store, clock, fetchCalls, upstream };
 }
@@ -48,9 +48,10 @@ export function admin(ctx: Ctx, ip = '9.9.9.9') {
   };
 }
 
-export async function startWorkshop(ctx: Ctx, hours = 3, limits: Record<string, number> = {}) {
+/** Starts a workshop. Most tests use personal codes, so access codes are switched on unless `needCode: false` is passed. */
+export async function startWorkshop(ctx: Ctx, hours = 3, limits: Record<string, number | boolean> = {}) {
   const a = admin(ctx); await a.login();
-  if (Object.keys(limits).length) { const r = await a.call('PUT', 'config', limits); if (r.status !== 200) throw new Error(JSON.stringify(r.body)); }
+  const r0 = await a.call('PUT', 'config', { needCode: true, ...limits }); if (r0.status !== 200) throw new Error(JSON.stringify(r0.body));
   const r = await a.call('POST', 'workshop-start', { durationMinutes: hours * 60 });
   if (r.status !== 200) throw new Error(JSON.stringify(r.body));
   return a;
@@ -63,3 +64,11 @@ export const student = (ctx: Ctx) => {
     h(mk('POST', '/api/student/' + route, { body: body ?? { messages: [{ role: 'user', content: 'hi' }], max_tokens: 100 }, ip: o.ip, tooLarge: o.tooLarge, headers: { 'x-workshop-code': code, ...(o.origin === null ? {} : { origin: o.origin ?? ORIGIN }), ...(o.headers ?? {}) } }));
 };
 export const publicStatus = (ctx: Ctx, origin: string | null = ORIGIN) => publicHandler(ctx.deps)(mk('GET', '/api/public/status', { headers: origin ? { origin } : {} }));
+
+/** Open access: no code, just an anonymous per-browser id, like the student app sends. */
+export const guest = (ctx: Ctx) => {
+  const h = studentHandler(ctx.deps);
+  return (route: 'chat' | 'validate', clientId: string | null, body?: unknown, o: { ip?: string; headers?: Record<string, string> } = {}) =>
+    h(mk('POST', '/api/student/' + route, { body: body ?? { messages: [{ role: 'user', content: 'hi' }], max_tokens: 100 }, ip: o.ip, headers: { origin: ORIGIN, ...(clientId === null ? {} : { 'x-workshop-client': clientId }), ...(o.headers ?? {}) } }));
+};
+export const cid = (n: number) => `client-id-${String(n).padStart(8, '0')}`;

@@ -16,7 +16,7 @@ describe('workshop on/off, schedule, expiry, extend', () => {
   });
 
   it('a future workshop is scheduled, becomes active at its start and rejects students before that', async () => {
-    const ctx = setup(); const a = admin(ctx); await a.login();
+    const ctx = setup(); const a = admin(ctx); await a.login(); await a.call('PUT', 'config', { needCode: true });
     await a.call('POST', 'workshop-start', { startAt: T0 + 2 * HOUR, endAt: T0 + 5 * HOUR });
     expect((await publicStatus(ctx)).body).toMatchObject({ available: false, status: 'scheduled', startsAt: T0 + 2 * HOUR });
     const [c] = await makeCodes(a, 1);

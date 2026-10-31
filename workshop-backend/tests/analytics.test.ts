@@ -7,8 +7,8 @@ const dump = (ctx: ReturnType<typeof setup>) => JSON.stringify([
   [...(ctx.store as unknown as { h: Map<string, Map<string, string>> }).h.entries()].map(([k, m]) => [k, [...m]]),
   [...(ctx.store as unknown as { l: Map<string, string[]> }).l.entries()],
 ]);
-type Row = { label: string; name: string; city: string; country: string; firstSeen: number; lastSeen: number; requests: number; tokensIn: number; tokensOut: number; costUsd: number | null };
-const view = async (a: ReturnType<typeof admin>) => (await a.call('GET', 'workshop')).body as { joined: number; activeNow: number; perStudent: Row[]; estimatedSpendUsd: number | null; retentionDays: number };
+type Row = { label: string; name: string; city: string; country: string; firstSeen: number; lastSeen: number; requests: number; tokensIn: number; tokensOut: number; costUsd: number };
+const view = async (a: ReturnType<typeof admin>) => (await a.call('GET', 'workshop')).body as { joined: number; activeNow: number; perStudent: Row[]; spendUsd: number; pricing: { peak: boolean; miss: number; out: number; model: string }; retentionDays: number };
 const SYD = { 'x-vercel-ip-city': 'Sydney', 'x-vercel-ip-country': 'AU', 'x-forwarded-for': '203.0.113.77' };
 
 describe('student analytics', () => {
@@ -32,14 +32,27 @@ describe('student analytics', () => {
     ctx.clock.t = T0 + 30 * 60e3; expect((await view(a)).activeNow).toBe(0);
   });
 
-  it('shows tokens and an estimated cost per student once prices are set', async () => {
-    const ctx = setup(); const a = await startWorkshop(ctx, 3, { priceInPerM: 0.1, priceOutPerM: 0.4, rpm: 60 }); const [c] = await makeCodes(a, 1);
+  it('adds up the real cost per user from DeepSeek\'s advertised prices (off-peak)', async () => {
+    const ctx = setup(); const a = await startWorkshop(ctx, 3, { rpm: 60 }); const [c] = await makeCodes(a, 1); // 2026-11-05 00:00 UTC is a Thursday night: off-peak
     ctx.upstream.tokens = [1000, 500]; const ask = student(ctx); await ask('chat', c.code); await ask('chat', c.code);
     const v = await view(a);
     expect(v.perStudent[0]).toMatchObject({ requests: 2, tokensIn: 2000, tokensOut: 1000 });
-    expect(v.perStudent[0].costUsd).toBeCloseTo((2000 * 0.1 + 1000 * 0.4) / 1e6, 10); expect(v.estimatedSpendUsd).toBeCloseTo(0.0006, 10);
-    const b = setup(); const a2 = await startWorkshop(b); const [c2] = await makeCodes(a2, 1); await student(b)('chat', c2.code);
-    expect((await view(a2)).perStudent[0].costUsd).toBeNull(); // no prices: no invented number
+    const want = (2000 * 0.15 + 1000 * 0.6) / 1e6; // $0.15 in (cache miss) and $0.60 out, per 1M tokens
+    expect(v.perStudent[0].costUsd).toBeCloseTo(want, 9); expect(v.spendUsd).toBeCloseTo(want, 9);
+    expect(v.pricing).toMatchObject({ peak: false, miss: 0.15, out: 0.6, model: 'deepseek-flash' });
+  });
+
+  it('charges peak prices (double) during DeepSeek\'s peak hours, weekdays only, and cache hits at the cheap rate', async () => {
+    const ctx = setup(); const a = await startWorkshop(ctx, 72, { rpm: 60 }); const [c] = await makeCodes(a, 1); const ask = student(ctx);
+    ctx.upstream.tokens = [1000, 500];
+    ctx.clock.t = T0 + 2 * HOUR; await ask('chat', c.code); // Thursday 02:00 UTC: peak
+    const v1 = await view(a); expect(v1.spendUsd).toBeCloseTo((1000 * 0.3 + 500 * 1.2) / 1e6, 9); expect(v1.pricing.peak).toBe(true);
+    ctx.clock.t = T0 + 2 * 864e5 + 2 * HOUR; // Saturday 02:00 UTC: weekend, so off-peak
+    const b = admin(ctx, '6.6.6.6'); await b.login(); ctx.upstream.hit = 600; // 600 of the 1000 input tokens came from the cache
+    await ask('chat', c.code);
+    const v2 = (await b.call('GET', 'workshop')).body as { spendUsd: number; pricing: { peak: boolean } };
+    expect(v2.pricing.peak).toBe(false);
+    expect(v2.spendUsd - v1.spendUsd).toBeCloseTo((600 * 0.003 + 400 * 0.15 + 500 * 0.6) / 1e6, 9);
   });
 
   it('never stores an IP address, and only people who enter a code are tracked', async () => {

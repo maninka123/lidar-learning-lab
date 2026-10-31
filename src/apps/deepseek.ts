@@ -1,5 +1,5 @@
 import { PointCloud } from '../core/pointcloud';
-import { loadWorkshopCode, refreshWorkshopStatus, workshopChat, workshopConfigured, WorkshopError } from './workshop';
+import { loadWorkshopCode, refreshWorkshopStatus, workshopChat, workshopConfigured, workshopSnapshot, WorkshopError } from './workshop';
 
 /** The cheap, fast DeepSeek chat model (V4 Flash). */
 export const DEEPSEEK_MODEL = 'deepseek-v4-flash';
@@ -46,10 +46,12 @@ export async function chatDeepSeek(messages: ChatMsg[], maxTokens = 700, ownKey 
   let res = await call('/api/deepseek/chat/completions', {}).catch(() => null);
   if (!res || !res.json || res.r.status === 404 || res.r.status === 405) {
     if (!ownKey) {
-      // During a workshop a student's access code stands in for a key; the backend holds the real one.
-      const code = workshopConfigured() ? loadWorkshopCode() : '';
-      if (!code) throw new NoKeyError();
-      try { const w = await workshopChat(code, messages, maxTokens, DEEPSEEK_MODEL); return { ...w, ms: performance.now() - t0, via: 'workshop' }; }
+      // During a workshop the lab's AI is shared: with an access code, or open to everyone, depending on the instructor's choice.
+      let w = workshopSnapshot();
+      if (workshopConfigured() && !w.available) w = await refreshWorkshopStatus();
+      const code = loadWorkshopCode();
+      if (!workshopConfigured() || !w.available || (w.needCode && !code)) throw new NoKeyError();
+      try { const r = await workshopChat(w.needCode ? code : '', messages, maxTokens, DEEPSEEK_MODEL); return { ...r, ms: performance.now() - t0, via: 'workshop' }; }
       catch (e) { if (e instanceof WorkshopError && (e.code === 'expired' || e.code === 'workshop_inactive')) { await refreshWorkshopStatus(); throw new NoKeyError(); } throw e; }
     }
     via = 'own key';

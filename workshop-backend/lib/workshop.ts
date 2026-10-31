@@ -1,5 +1,6 @@
 import { createHmac, randomBytes } from 'node:crypto';
 import type { Store } from './store';
+import { costNano, ratesAt, PRICING_CHECKED, PRICING_URL } from './pricing';
 
 export interface WorkshopConfig {
   workshopId: string;
@@ -12,16 +13,19 @@ export interface WorkshopConfig {
   rpm: number; // requests per minute per student
   tokenBudget: number; // 0 = no budget
   maxStudents: number;
-  priceInPerM: number; // USD per million tokens; 0 = unknown, so no spend estimate is shown
-  priceOutPerM: number;
   retentionDays: number; // participation records are deleted this long after the workshop ends
+  needCode: boolean; // false (default): anyone using the lab while the workshop runs can use the AI, counted per device; true: personal access codes
+  maxPerAddress: number; // open access: requests allowed from one network address (a whole classroom may share one)
+  rpmAddress: number; // open access: requests per minute from one network address
   updatedAt: number;
 }
 export type Status = 'off' | 'scheduled' | 'active' | 'expired';
 
-export const DEFAULTS: WorkshopConfig = { workshopId: 'w0', enabled: false, startAt: 0, endAt: 0, maxPerStudent: 40, maxTotal: 1500, maxOutputTokens: 1500, rpm: 6, tokenBudget: 0, maxStudents: 40, priceInPerM: 0, priceOutPerM: 0, retentionDays: 30, updatedAt: 0 };
-export const LIMITS = { maxPerStudent: [1, 1000], maxTotal: [1, 100000], maxOutputTokens: [50, 4000], rpm: [1, 60], tokenBudget: [0, 1e9], maxStudents: [1, 500], priceInPerM: [0, 1000], priceOutPerM: [0, 1000], retentionDays: [1, 365] } as const;
+export const DEFAULTS: WorkshopConfig = { workshopId: 'w0', enabled: false, startAt: 0, endAt: 0, maxPerStudent: 40, maxTotal: 1500, maxOutputTokens: 0, rpm: 6, tokenBudget: 0, maxStudents: 100, retentionDays: 30, needCode: false, maxPerAddress: 1000, rpmAddress: 60, updatedAt: 0 };
+export const LIMITS = { maxPerStudent: [1, 1000], maxTotal: [1, 100000], maxOutputTokens: [0, 4000], rpm: [1, 60], tokenBudget: [0, 1e9], maxStudents: [1, 500], retentionDays: [1, 365], maxPerAddress: [1, 100000], rpmAddress: [1, 600] } as const;
 export const MODELS = ['deepseek-v4-flash'] as const; // allowlist: the cheap model the app already uses
+/** The most output tokens one request may ask for, whatever the app sends. The app chooses its own size below this. */
+export const HARD_MAX_OUTPUT = 4000;
 export const MAX_DURATION_MS = 14 * 864e5;
 
 export const k = {
@@ -30,6 +34,7 @@ export const k = {
   totals: (id: string) => `ws:${id}:totals`,
   codes: (id: string) => `ws:${id}:codes`,
   meta: (id: string) => `ws:${id}:meta`,
+  addr: (id: string, tag: string) => `ws:${id}:addr:${tag}`,
   history: 'ws:history',
   lastPurge: 'ws:lastPurge',
   code: (id: string, cid: string) => `ws:${id}:code:${cid}`,
@@ -42,15 +47,20 @@ export const statusOf = (c: WorkshopConfig, now: number): Status => (!c.enabled 
 export async function loadConfig(s: Store): Promise<WorkshopConfig> {
   const raw = await s.get(k.config);
   if (!raw) return { ...DEFAULTS };
-  try { return { ...DEFAULTS, ...(JSON.parse(raw) as Partial<WorkshopConfig>) }; } catch { return { ...DEFAULTS }; }
+  try {
+    const c = { ...DEFAULTS, ...(JSON.parse(raw) as Partial<WorkshopConfig> & { v?: number }) };
+    if (!(JSON.parse(raw) as { v?: number }).v) c.maxOutputTokens = 0; // older saves capped output at 1500; the app decides now
+    return c;
+  } catch { return { ...DEFAULTS }; }
 }
-export const saveConfig = (s: Store, c: WorkshopConfig, now: number) => s.set(k.config, JSON.stringify({ ...c, updatedAt: now }));
+export const saveConfig = (s: Store, c: WorkshopConfig, now: number) => s.set(k.config, JSON.stringify({ ...c, v: 2, updatedAt: now }));
 
 const newId = () => 'w' + randomBytes(5).toString('hex');
 
 /** Check and clamp limit fields from the dashboard. Returns an error message, or the cleaned values. */
 export function parseLimits(input: Record<string, unknown>): { ok: true; values: Partial<WorkshopConfig> } | { ok: false; message: string } {
-  const out: Record<string, number> = {};
+  const out: Record<string, number | boolean> = {};
+  if (input.needCode !== undefined) { if (typeof input.needCode !== 'boolean') return { ok: false, message: 'needCode must be true or false' }; out.needCode = input.needCode; }
   for (const [name, [lo, hi]] of Object.entries(LIMITS)) {
     if (input[name] === undefined) continue;
     const v = Number(input[name]);
@@ -102,10 +112,10 @@ export function randomCode(): string {
 
 export interface CodeRecord {
   id: string; label: string; createdAt: number; revoked: boolean; requests: number; tokensIn: number; tokensOut: number; lastUsed: number;
-  name: string; city: string; country: string; firstSeen: number; lastSeen: number;
+  name: string; city: string; country: string; firstSeen: number; lastSeen: number; costNano: number;
 }
 const num = (v: string | undefined) => Number(v ?? 0) || 0;
-const toRecord = (id: string, h: Record<string, string>): CodeRecord => ({ id, label: h.label ?? '', createdAt: num(h.createdAt), revoked: h.revoked === '1', requests: num(h.requests), tokensIn: num(h.tokensIn), tokensOut: num(h.tokensOut), lastUsed: num(h.lastUsed), name: h.name ?? '', city: h.city ?? '', country: h.country ?? '', firstSeen: num(h.firstSeen), lastSeen: num(h.lastSeen) });
+const toRecord = (id: string, h: Record<string, string>): CodeRecord => ({ id, label: h.label ?? '', createdAt: num(h.createdAt), revoked: h.revoked === '1', requests: num(h.requests), tokensIn: num(h.tokensIn), tokensOut: num(h.tokensOut), lastUsed: num(h.lastUsed), name: h.name ?? '', city: h.city ?? '', country: h.country ?? '', firstSeen: num(h.firstSeen), lastSeen: num(h.lastSeen), costNano: num(h.costNano) });
 
 export async function listCodes(s: Store, workshopId: string): Promise<CodeRecord[]> {
   const ids = await s.smembers(k.codes(workshopId));
@@ -123,7 +133,7 @@ export async function createCodes(s: Store, c: WorkshopConfig, secret: string, c
   for (let i = 0; i < count; i++) {
     const code = randomCode(), id = randomBytes(4).toString('hex'), label = `${labelPrefix.trim().slice(0, 30) || 'Student'} ${base + i + 1}`;
     const hash = codeHash(secret, code); // a keyed one-way hash: kept so the record can be deleted later, useless for guessing the code
-    await s.hset(k.code(c.workshopId, id), { label, createdAt: String(now), revoked: '0', requests: '0', tokensIn: '0', tokensOut: '0', lastUsed: '0', hash, firstSeen: '0', lastSeen: '0' });
+    await s.hset(k.code(c.workshopId, id), { label, createdAt: String(now), revoked: '0', requests: '0', tokensIn: '0', tokensOut: '0', lastUsed: '0', hash, firstSeen: '0', lastSeen: '0', costNano: '0' });
     await s.set(k.lookup(c.workshopId, hash), id);
     await s.sadd(k.codes(c.workshopId), id);
     out.push({ id, label, code });
@@ -144,8 +154,8 @@ export async function findCode(s: Store, c: WorkshopConfig, secret: string, code
 }
 
 // ------------------------------------------------------------------ quotas
-export type Denied = 'revoked' | 'student_quota' | 'total_quota' | 'rate_limit' | 'token_budget';
-export interface Reservation { id: string; tokens: number; minute: number }
+export type Denied = 'revoked' | 'student_quota' | 'total_quota' | 'rate_limit' | 'token_budget' | 'address_quota' | 'address_rate';
+export interface Reservation { id: string; tokens: number; minute: number; addr?: string }
 
 /**
  * Take one request slot for a student. Each step is an atomic increment; if a later step refuses, the earlier ones are
@@ -172,18 +182,56 @@ export async function reserve(s: Store, c: WorkshopConfig, rec: CodeRecord, rese
   return { id: cid, tokens: c.tokenBudget > 0 ? reserveTokens : 0, minute };
 }
 
-/** Replace the reservation with what DeepSeek actually reported. */
-export async function finalize(s: Store, c: WorkshopConfig, r: Reservation, tokensIn: number, tokensOut: number, now: number) {
-  const id = c.workshopId;
+// ------------------------------------------------------------------ open access (no codes)
+const hex = (secret: string, label: string, v: string) => createHmac('sha256', secret).update(label + ':' + v).digest('hex');
+/** A keyed one-way tag for a network address. The address itself is never stored; the tag cannot be reversed without the server secret. */
+export const addrTag = (secret: string, ip: string) => hex(secret, 'addr', ip).slice(0, 16);
+
+/**
+ * Find (or create) the participant for a browser-made anonymous id. They are counted per device, so the instructor still sees
+ * each student's usage, without anyone typing a code. The id is only ever stored as a keyed hash.
+ */
+export async function resolveGuest(s: Store, c: WorkshopConfig, secret: string, clientId: string, addr: string): Promise<CodeRecord | 'full' | 'bad'> {
+  if (!/^[A-Za-z0-9_-]{16,64}$/.test(clientId)) return 'bad';
+  const id = c.workshopId, cid = hex(secret, `guest:${id}`, clientId).slice(0, 8);
+  const read = async () => { const h = await s.hgetall(k.code(id, cid)); return h ? toRecord(cid, h) : null; };
+  const have = await read(); if (have) return have;
+  if ((await s.incr(`ws:${id}:seen:${cid}`)) > 1) { // another request is creating it right now
+    for (let i = 0; i < 6; i++) { const r = await read(); if (r) return r; await new Promise((ok) => setTimeout(ok, 40)); }
+    return 'bad';
+  }
+  await s.expire(`ws:${id}:seen:${cid}`, 259200);
+  // a new participant takes a seat: the workshop has a seat limit, and one address cannot take them all
+  const joins = await s.hincrby(k.addr(id, addr), 'joins', 1); await s.expire(k.addr(id, addr), 259200);
+  const seats = await s.hincrby(k.totals(id), 'guests', 1);
+  if (joins > c.maxStudents || seats > c.maxStudents) { await s.hincrby(k.addr(id, addr), 'joins', -1); await s.hincrby(k.totals(id), 'guests', -1); await s.del(`ws:${id}:seen:${cid}`); return 'full'; }
+  await s.hset(k.code(id, cid), { label: `Guest ${seats}`, createdAt: String(Date.now()), revoked: '0', requests: '0', tokensIn: '0', tokensOut: '0', lastUsed: '0', hash: '', firstSeen: '0', lastSeen: '0', costNano: '0' });
+  await s.sadd(k.codes(id), cid);
+  return (await read()) ?? 'bad';
+}
+
+/** Per-address limits for open access. Returns what to give back if the request later fails. */
+export async function reserveAddress(s: Store, c: WorkshopConfig, addr: string, now: number): Promise<Denied | null> {
+  const key = k.addr(c.workshopId, addr), minute = Math.floor(now / 60000);
+  if ((await s.hincrby(key, `m${minute}`, 1)) > c.rpmAddress) return 'address_rate';
+  await s.expire(key, 259200);
+  if ((await s.hincrby(key, 'total', 1)) > c.maxPerAddress) { await s.hincrby(key, 'total', -1); return 'address_quota'; }
+  return null;
+}
+
+/** Replace the reservation with what DeepSeek actually reported, and add the cost at the prices in force right now. */
+export async function finalize(s: Store, c: WorkshopConfig, r: Reservation, u: { prompt: number; hit: number; out: number }, now: number) {
+  const id = c.workshopId, cost = costNano(u, now);
   if (r.tokens) await s.hincrby(k.totals(id), 'reserved', -r.tokens);
-  await s.hincrby(k.totals(id), 'tokensIn', tokensIn); await s.hincrby(k.totals(id), 'tokensOut', tokensOut);
-  await s.hincrby(k.code(id, r.id), 'tokensIn', tokensIn); await s.hincrby(k.code(id, r.id), 'tokensOut', tokensOut);
+  await s.hincrby(k.totals(id), 'tokensIn', u.prompt); await s.hincrby(k.totals(id), 'tokensOut', u.out); await s.hincrby(k.totals(id), 'costNano', cost);
+  await s.hincrby(k.code(id, r.id), 'tokensIn', u.prompt); await s.hincrby(k.code(id, r.id), 'tokensOut', u.out); await s.hincrby(k.code(id, r.id), 'costNano', cost);
   await s.hset(k.code(id, r.id), { lastUsed: String(now) });
 }
 /** The request did not produce an answer: give the slot and the reserved tokens back. */
 export async function release(s: Store, c: WorkshopConfig, r: Reservation) {
   const id = c.workshopId;
   await s.hincrby(k.code(id, r.id), 'requests', -1); await s.hincrby(k.totals(id), 'requests', -1);
+  if (r.addr) await s.hincrby(k.addr(id, r.addr), 'total', -1);
   if (r.tokens) await s.hincrby(k.totals(id), 'reserved', -r.tokens);
 }
 
@@ -255,14 +303,13 @@ export async function purgeExpired(s: Store, c: WorkshopConfig, now: number): Pr
 export async function stats(s: Store, c: WorkshopConfig, now: number) {
   const t = (await s.hgetall(k.totals(c.workshopId))) ?? {}, codes = await listCodes(s, c.workshopId);
   const requests = num(t.requests), tokensIn = num(t.tokensIn), tokensOut = num(t.tokensOut);
-  const priced = c.priceInPerM > 0 || c.priceOutPerM > 0;
   return {
     status: statusOf(c, now), now, startAt: c.startAt, endAt: c.endAt, remainingMs: statusOf(c, now) === 'active' ? c.endAt - now : 0,
     requests, requestsRemaining: Math.max(0, c.maxTotal - requests), tokensIn, tokensOut,
     tokenBudget: c.tokenBudget, tokensRemaining: c.tokenBudget > 0 ? Math.max(0, c.tokenBudget - tokensIn - tokensOut - num(t.reserved)) : null,
-    estimatedSpendUsd: priced ? (tokensIn * c.priceInPerM + tokensOut * c.priceOutPerM) / 1e6 : null,
+    spendUsd: num(t.costNano) / 1e9, pricing: { model: 'deepseek-flash', ...ratesAt(now), checked: PRICING_CHECKED, url: PRICING_URL },
     codes: codes.length, activeStudents: codes.filter((r) => r.requests > 0).length, retentionDays: c.retentionDays, joined: codes.filter((r) => r.firstSeen > 0).length, activeNow: codes.filter((r) => r.lastSeen > now - ACTIVE_WINDOW_MS).length, activeWindowMin: ACTIVE_WINDOW_MS / 60e3,
-    perStudent: codes.map((r) => ({ ...r, remaining: Math.max(0, c.maxPerStudent - r.requests), costUsd: priced ? (r.tokensIn * c.priceInPerM + r.tokensOut * c.priceOutPerM) / 1e6 : null })),
+    perStudent: codes.map((r) => ({ ...r, remaining: Math.max(0, c.maxPerStudent - r.requests), costUsd: r.costNano / 1e9 })),
     errors: (await recentErrors(s)).filter((e) => e.workshopId === c.workshopId || e.workshopId === '-'),
   };
 }

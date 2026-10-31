@@ -19,7 +19,7 @@ export function originAllowed(origin: string, deps: Deps): boolean {
 export function corsHeaders(req: Req, deps: Deps): Record<string, string> {
   const origin = req.headers['origin'];
   if (!origin || !originAllowed(origin, deps)) return {};
-  return { 'Access-Control-Allow-Origin': origin, 'Vary': 'Origin', 'Access-Control-Allow-Methods': 'GET, POST, OPTIONS', 'Access-Control-Allow-Headers': 'content-type, x-workshop-code', 'Access-Control-Max-Age': '600' };
+  return { 'Access-Control-Allow-Origin': origin, 'Vary': 'Origin', 'Access-Control-Allow-Methods': 'GET, POST, OPTIONS', 'Access-Control-Allow-Headers': 'content-type, x-workshop-code, x-workshop-client', 'Access-Control-Max-Age': '600' };
 }
 
 /** A short, non-reversible tag for an IP address, used only for rate limiting. */

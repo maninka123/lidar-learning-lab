@@ -13,12 +13,25 @@ export const setWorkshopApi = (url: string) => { api = url.replace(/\/+$/, ''); 
 
 const CODE_KEY = 'lidar-lab-workshop-code';
 export const loadWorkshopCode = (): string => { try { return localStorage.getItem(CODE_KEY) ?? ''; } catch { return ''; } };
+/** An anonymous id for this browser, so open-access usage is counted per user without anyone typing a code. */
+const CLIENT_KEY = 'lidar-lab-workshop-client';
+export function clientId(): string {
+  try {
+    let id = localStorage.getItem(CLIENT_KEY);
+    if (!id || !/^[A-Za-z0-9_-]{16,64}$/.test(id)) {
+      const b = new Uint8Array(18); crypto.getRandomValues(b);
+      id = btoa(String.fromCharCode(...b)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); localStorage.setItem(CLIENT_KEY, id);
+    }
+    return id;
+  } catch { return 'session-' + Math.random().toString(36).slice(2, 12).padEnd(10, '0'); }
+}
+
 const NAME_KEY = 'lidar-lab-workshop-name';
 export const loadWorkshopName = (): string => { try { return localStorage.getItem(NAME_KEY) ?? ''; } catch { return ''; } };
 export const saveWorkshopName = (n: string): void => { try { if (n) localStorage.setItem(NAME_KEY, n); else localStorage.removeItem(NAME_KEY); } catch { /* ignore */ } };
 export const saveWorkshopCode = (c: string): void => { try { if (c) localStorage.setItem(CODE_KEY, c); else localStorage.removeItem(CODE_KEY); } catch { /* ignore */ } };
 
-export interface WorkshopStatus { available: boolean; status: 'active' | 'scheduled' | 'inactive'; endsAt?: number; startsAt?: number; maxOutputTokens?: number; retentionDays?: number }
+export interface WorkshopStatus { available: boolean; status: 'active' | 'scheduled' | 'inactive'; endsAt?: number; startsAt?: number; maxOutputTokens?: number; retentionDays?: number; needCode?: boolean }
 let status: WorkshopStatus = { available: false, status: 'inactive' };
 let fetchedAt = 0;
 const listeners = new Set<() => void>();
@@ -32,7 +45,7 @@ export async function refreshWorkshopStatus(timeoutMs = 4000): Promise<WorkshopS
     try {
       const r = await fetch(`${api}/api/public/status`, { signal: ctl.signal, cache: 'no-store' });
       const j = r.ok ? ((await r.json()) as Partial<WorkshopStatus>) : null;
-      if (j && typeof j.available === 'boolean') next = { available: j.available, status: j.status === 'active' || j.status === 'scheduled' ? j.status : 'inactive', endsAt: j.endsAt, startsAt: j.startsAt, maxOutputTokens: j.maxOutputTokens, retentionDays: j.retentionDays };
+      if (j && typeof j.available === 'boolean') next = { available: j.available, status: j.status === 'active' || j.status === 'scheduled' ? j.status : 'inactive', endsAt: j.endsAt, startsAt: j.startsAt, maxOutputTokens: j.maxOutputTokens, retentionDays: j.retentionDays, needCode: j.needCode !== false };
     } catch { /* unreachable: behave as if there is no workshop */ } finally { clearTimeout(timer); }
   }
   fetchedAt = Date.now();
@@ -71,7 +84,7 @@ const FRIENDLY: Record<string, string> = {
 
 async function post(route: 'chat' | 'validate', code: string, body: unknown): Promise<{ r: Response; j: Record<string, any> | null }> {
   let r: Response;
-  try { r = await fetch(`${api}/api/student/${route}`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Workshop-Code': code }, body: JSON.stringify(body) }); }
+  try { r = await fetch(`${api}/api/student/${route}`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Workshop-Client': clientId(), ...(code ? { 'X-Workshop-Code': code } : {}) }, body: JSON.stringify(body) }); }
   catch { throw new WorkshopError('unreachable', 'Could not reach the workshop service. Check your connection and try again.'); }
   const j = await r.json().catch(() => null);
   if (!r.ok) {
@@ -82,7 +95,7 @@ async function post(route: 'chat' | 'validate', code: string, body: unknown): Pr
   return { r, j };
 }
 
-/** Check a code and return what is left of it. */
+/** Check a code (or, in open access, just join) and return what is left. */
 export async function validateWorkshopCode(code: string, name = ''): Promise<{ remainingRequests: number; endsAt: number }> {
   const { j } = await post('validate', code, name.trim() ? { name: name.trim().slice(0, 30) } : {});
   return { remainingRequests: j?.remainingRequests ?? 0, endsAt: j?.endsAt ?? 0 };

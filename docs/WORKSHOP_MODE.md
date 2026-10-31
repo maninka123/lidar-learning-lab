@@ -61,31 +61,26 @@ Go to `https://<your-project>.vercel.app/admin` and sign in with your username a
 
 ## Running a workshop
 
-**Before**
-1. Log in at `/admin`.
-2. **Limits**: set requests per student, total requests, max output tokens, requests per minute, an optional token budget, and the number of students. Click *Save limits*. Add DeepSeek's current prices if you want a spend estimate.
-3. **Start a workshop**: pick *3 hours / 6 hours / 1 day / 2 days* to start now, or enter a start and end date (Australia/Sydney time) and press *Schedule*.
-4. **Student access codes**: choose how many, press *Generate*, then *Copy all* or *Download CSV* and hand one code to each student. Codes are shown once and cannot be recovered later (only a keyed hash is stored). Generate more any time, up to the student limit.
+**Start:** open `/admin`, press **3 hours / 6 hours / 1 day / 2 days** (or *Or pick dates* for a Sydney-time schedule). That is all. By default access is **open**: while the workshop runs, anyone using the lab can use its AI steps with no key and no code. Each browser gets an anonymous id, so usage is still counted per user.
 
-**During**
-* Students open the normal lab address, go to an AI step, and enter their code where the key box used to appear (it only appears while a workshop is running). They can still choose "Use my own DeepSeek key instead".
-* The dashboard refreshes every 15 seconds: remaining time, active students, requests used and left, tokens, estimated spend, per-student usage and recent errors.
-* **Extend or shorten**: *+1 h / +3 h / +1 day / −1 h*, or set an exact end time.
-* **Revoke one student**: *Revoke* next to their name.
-* **Stop immediately**: *Turn off now*. Every code stops working at once.
+**While it runs:** the dashboard refreshes every 5 seconds: time left, users joined and active now, requests, tokens and the **spend so far**, worked out per request from DeepSeek's advertised prices for the model (see below). Extend or shorten with **+1 h / +3 h / +1 day / −1 h** or an exact end time; **Turn off now** ends it at once.
 
-**After**
-* The workshop ends by itself at the end time. The server checks the time on **every** request, so nothing depends on a timer or a scheduled job. All codes stop working, the dashboard shows *Expired*, and the lab goes back to bring-your-own-key.
-* Starting a new workshop after one has expired creates a fresh one: new codes are needed and the counters start from zero.
-* **Revoke the dedicated DeepSeek key** in the DeepSeek platform, and optionally delete `DEEPSEEK_API_KEY` from Vercel.
-* **Check normal behaviour**: open the lab, go to *Scene Graphs & 3D AI*. No code box should appear, and the AI step should ask for your own key as before. Everything offline works throughout.
+**Limits** (two numbers): *Requests per user* and *Total requests*. The lab chooses its own reply sizes, and a hard ceiling on tokens per request is built in. Other safeguards need no setting: a per-minute rate limit per user and per network address, a cap on how many different users one address can create (a whole classroom may share one address), and a seat limit of 100 users.
+
+**Access codes (optional):** switch *Access* to **Codes** if you want personal codes (for a smaller or untrusted group). Generate them, copy or download the CSV, and hand one to each user. Codes are shown once and stored only as keyed hashes.
+
+**After:** the workshop ends by itself at its end time (checked by the server on every request); the lab goes back to bring-your-own-key. Then revoke the dedicated DeepSeek key and, if you like, **Delete user records**.
+
+**Cost:** the estimate uses the advertised `deepseek-flash` prices (which `deepseek-v4-flash` is billed as): $0.15 per 1M input tokens ($0.003 on cache hits) and $0.60 per 1M output tokens off-peak, double at peak (01:00–04:00 and 06:00–10:00 UTC, Monday to Friday). Source and date are shown on the dashboard and in `workshop-backend/lib/pricing.ts`; check them against <https://api-docs.deepseek.com/quick_start/pricing/> and update that file if DeepSeek changes its prices. The estimate ignores Chinese public holidays.
+
+**Protecting your budget without codes:** open access cannot tell two browsers on one network apart from a determined abuser, so the real protection is *Total requests* plus the per-address caps. Pick a *Total requests* you are happy to pay for (1,500 requests cost roughly $1 or less at these prices), and watch the spend tile.
 
 ## Student analytics (privacy-conscious)
 
 The dashboard's **Students** section shows who has joined and what they have used:
 
-* totals: students joined (of the codes issued), students active now (activity in the last 10 minutes), AI requests, estimated cost;
-* a table with each student's name (or code label), approximate city and country, first joined, last active, requests (and how many are left), tokens and estimated cost. Cost appears only if you entered DeepSeek's prices under *Limits*.
+* totals: users joined, users active now (activity in the last 10 minutes), AI requests, tokens and spend so far;
+* a table with each student's name (or code label), approximate city and country, first joined, last active, requests (and how many are left), tokens and estimated cost. Cost per user is computed per request from DeepSeek's advertised prices.
 
 What is collected, and only for people who enter a workshop code (nothing about visitors who just use the lab):
 
@@ -97,7 +92,7 @@ What is collected, and only for people who enter a workshop code (nothing about 
 
 **Not kept:** IP addresses (they are never stored; a short-lived one-way tag is used only for rate limiting and expires within minutes), prompts, answers, or browser identifiers. Students see a notice next to the code box describing exactly this and the retention period.
 
-**Retention:** *Keep student records (days)* under *Limits* (default 30). After that many days past the workshop's end, the backend deletes the codes, names, places and usage for that workshop automatically (checked as the dashboard or students use the service, at most every 10 minutes). *Delete all student records now* removes them immediately.
+**Retention:** records are kept 30 days (changeable through the API field `retentionDays`). After that many days past the workshop's end, the backend deletes the codes, names, places and usage for that workshop automatically (checked as the dashboard or students use the service, at most every 10 minutes). *Delete user records* removes them immediately.
 
 ## What protects your key and budget
 

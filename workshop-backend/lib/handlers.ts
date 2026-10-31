@@ -30,7 +30,7 @@ export const publicHandler = (deps: Deps) => async (req: Req): Promise<Res> => {
   // Fail closed: if anything is wrong the student app simply sees "no workshop" and keeps its normal behaviour.
   const res = await guarded(req, deps, async () => {
     const c = await W.loadConfig(deps.store), st = W.statusOf(c, deps.now());
-    const body = st === 'active' ? { available: true, status: 'active', endsAt: c.endAt, maxOutputTokens: c.maxOutputTokens, retentionDays: c.retentionDays } : st === 'scheduled' ? { available: false, status: 'scheduled', startsAt: c.startAt } : { available: false, status: 'inactive' };
+    const body = st === 'active' ? { available: true, status: 'active', needCode: c.needCode, endsAt: c.endAt, maxOutputTokens: c.maxOutputTokens || W.HARD_MAX_OUTPUT, retentionDays: c.retentionDays } : st === 'scheduled' ? { available: false, status: 'scheduled', startsAt: c.startAt } : { available: false, status: 'inactive' };
     return json(200, body);
   }, true);
   return res.status >= 500 ? { ...json(200, { available: false, status: 'inactive' }), headers: res.headers } : res;
@@ -63,6 +63,8 @@ const DENIED: Record<W.Denied, [number, string, string]> = {
   revoked: [403, 'revoked', 'This access code has been revoked.'],
   student_quota: [429, 'student_quota', 'You have used all of your workshop AI requests.'],
   total_quota: [429, 'total_quota', 'The workshop has reached its overall request limit.'],
+  address_quota: [429, 'address_quota', 'This network has used its share of the workshop AI requests.'],
+  address_rate: [429, 'address_rate', 'Too many requests from this network at once. Wait a few seconds and try again.'],
   rate_limit: [429, 'rate_limit', 'Too many requests too quickly. Wait a few seconds and try again.'],
   token_budget: [429, 'token_budget', 'The workshop has reached its AI usage budget.'],
 };
@@ -78,10 +80,19 @@ export const studentHandler = (deps: Deps) => async (req: Req): Promise<Res> => 
     const now = deps.now(), c = await W.loadConfig(deps.store), st = W.statusOf(c, now);
     // Expiry is decided here, on every request: no timer or scheduled job is involved.
     if (st !== 'active') return err(403, st === 'expired' ? 'expired' : 'workshop_inactive', st === 'expired' ? 'The workshop has ended.' : 'There is no workshop running right now.');
-    const tag = ipTag(clientIp(req.headers, req.ip)), minute = Math.floor(now / 60000), failKey = `ws:fail:${tag}:${minute}`;
-    if (Number((await deps.store.get(failKey)) ?? 0) >= 15) return err(429, 'too_many_attempts', 'Too many wrong codes. Wait a minute and try again.');
-    const rec = await W.findCode(deps.store, c, deps.env.authSecret, req.headers['x-workshop-code'] ?? '');
-    if (!rec) { await deps.store.incr(failKey); await deps.store.expire(failKey, 120); return err(401, 'invalid_code', 'That access code is not valid.'); }
+    const ip = clientIp(req.headers, req.ip), tag = ipTag(ip), minute = Math.floor(now / 60000), failKey = `ws:fail:${tag}:${minute}`;
+    let rec: W.CodeRecord | null;
+    if (c.needCode) {
+      if (Number((await deps.store.get(failKey)) ?? 0) >= 15) return err(429, 'too_many_attempts', 'Too many wrong codes. Wait a minute and try again.');
+      rec = await W.findCode(deps.store, c, deps.env.authSecret, req.headers['x-workshop-code'] ?? '');
+      if (!rec) { await deps.store.incr(failKey); await deps.store.expire(failKey, 120); return err(401, 'invalid_code', 'That access code is not valid.'); }
+    } else {
+      // open access: no code. Each browser gets an anonymous id so usage is still counted per student.
+      const g = await W.resolveGuest(deps.store, c, deps.env.authSecret, req.headers['x-workshop-client'] ?? '', W.addrTag(deps.env.authSecret, ip));
+      if (g === 'bad') return err(400, 'bad_client', 'Reload the lab and try again.');
+      if (g === 'full') return err(429, 'workshop_full', 'The workshop is full. Ask your instructor.');
+      rec = g;
+    }
     if (rec.revoked) return err(403, 'revoked', DENIED.revoked[2]);
 
     const geo = W.geoFrom(req.headers); // approximate place from Vercel's headers; the address itself is not used
@@ -90,11 +101,14 @@ export const studentHandler = (deps: Deps) => async (req: Req): Promise<Res> => 
 
     if (route === 'validate') return json(200, { ok: true, label: rec.label, remainingRequests: Math.max(0, c.maxPerStudent - rec.requests), maxOutputTokens: c.maxOutputTokens, endsAt: c.endAt, retentionDays: c.retentionDays });
 
-    const input = parseChat(req.body, c.maxOutputTokens);
+    const input = parseChat(req.body, c.maxOutputTokens || W.HARD_MAX_OUTPUT);
     if (typeof input === 'string') return err(400, 'bad_request', input);
     const estimate = Math.ceil(input.chars / 2.5) + input.maxTokens;
+    const addr = c.needCode ? null : W.addrTag(deps.env.authSecret, ip);
+    if (addr) { const d = await W.reserveAddress(deps.store, c, addr, now); if (d) { const [status, code, message] = DENIED[d]; return err(status, code, message); } }
     const slot = await W.reserve(deps.store, c, rec, estimate, now);
-    if (typeof slot === 'string') { const [status, code, message] = DENIED[slot]; return err(status, code, message); }
+    if (typeof slot === 'string') { if (addr) await deps.store.hincrby(W.k.addr(c.workshopId, addr), 'total', -1); const [status, code, message] = DENIED[slot]; return err(status, code, message); }
+    if (addr) slot.addr = addr;
 
     let upstream: Response | null = null, failure = '';
     try {
@@ -108,14 +122,14 @@ export const studentHandler = (deps: Deps) => async (req: Req): Promise<Res> => 
       } finally { clearTimeout(timer); }
     } catch (e) { failure = (e as Error).name === 'AbortError' ? 'timeout' : 'network'; }
 
-    const data = upstream && upstream.ok ? ((await upstream.json().catch(() => null)) as { choices?: { message?: { content?: string } }[]; usage?: { prompt_tokens?: number; completion_tokens?: number } } | null) : null;
+    const data = upstream && upstream.ok ? ((await upstream.json().catch(() => null)) as { choices?: { message?: { content?: string } }[]; usage?: { prompt_tokens?: number; completion_tokens?: number; prompt_cache_hit_tokens?: number } } | null) : null;
     if (!data?.choices?.length) {
       await W.release(deps.store, c, slot);
       await W.logError(deps.store, { t: now, workshopId: c.workshopId, code: rec.id, kind: failure || 'upstream', status: upstream?.status });
       return err(502, 'upstream_error', failure === 'timeout' ? 'The AI took too long to answer. Try again.' : 'The AI service could not answer. Your request was not counted. Try again shortly.');
     }
     const tin = data.usage?.prompt_tokens ?? Math.ceil(input.chars / 3), tout = data.usage?.completion_tokens ?? 0;
-    await W.finalize(deps.store, c, slot, tin, tout, deps.now());
+    await W.finalize(deps.store, c, slot, { prompt: tin, hit: data.usage?.prompt_cache_hit_tokens ?? 0, out: tout }, deps.now());
     return json(200, { choices: [{ message: { content: data.choices[0].message?.content ?? '' } }], usage: { prompt_tokens: tin, completion_tokens: tout }, workshop: { remainingRequests: Math.max(0, c.maxPerStudent - rec.requests - 1) } });
   }, true);
 };

@@ -9,6 +9,8 @@ const json = (status: number, body: unknown) => new Response(JSON.stringify(body
 const calls: { url: string; init?: RequestInit }[] = [];
 let route: (url: string, init?: RequestInit) => Response | Promise<Response>;
 const msgs = [{ role: 'user' as const, content: 'hi' }];
+const ON = (needCode: boolean) => json(200, { available: true, status: 'active', needCode, endsAt: 9 });
+const withStatus = (needCode: boolean, f: (u: string, i?: RequestInit) => Response) => (u: string, i?: RequestInit) => (u.endsWith('/api/public/status') ? ON(needCode) : f(u, i));
 
 beforeEach(() => {
   store.clear(); calls.length = 0; setWorkshopApi(API);
@@ -37,13 +39,22 @@ describe('student app: Workshop Mode', () => {
 
   it('with a saved code the AI call goes to the workshop backend, with the code and never a DeepSeek key', async () => {
     saveWorkshopCode('ABCDE-FGHJK');
-    route = (u) => (u.includes('/api/student/chat') ? json(200, { choices: [{ message: { content: 'hello' } }], usage: { prompt_tokens: 9, completion_tokens: 2 } }) : json(404, {}));
+    route = withStatus(true, (u) => (u.includes('/api/student/chat') ? json(200, { choices: [{ message: { content: 'hello' } }], usage: { prompt_tokens: 9, completion_tokens: 2 } }) : json(404, {})));
     const r = await chatDeepSeek(msgs, 300);
     expect(r).toMatchObject({ text: 'hello', promptTokens: 9, completionTokens: 2, via: 'workshop' });
     const call = calls.find((c) => c.url.includes('/api/student/chat'))!;
     expect((call.init!.headers as Record<string, string>)['X-Workshop-Code']).toBe('ABCDE-FGHJK');
     expect(JSON.stringify(call.init)).not.toMatch(/Authorization|Bearer|sk-/i);
     expect(JSON.parse(call.init!.body as string)).toMatchObject({ model: 'deepseek-v4-flash', max_tokens: 300 });
+  });
+
+  it('open access: no code is needed; the browser sends only an anonymous id', async () => {
+    route = withStatus(false, (u) => (u.includes('/api/student/chat') ? json(200, { choices: [{ message: { content: 'hi!' } }], usage: { prompt_tokens: 3, completion_tokens: 1 } }) : json(404, {})));
+    const r = await chatDeepSeek(msgs, 200);
+    expect(r).toMatchObject({ text: 'hi!', via: 'workshop' });
+    const h = calls.find((c) => c.url.includes('/api/student/chat'))!.init!.headers as Record<string, string>;
+    expect(h['X-Workshop-Code']).toBeUndefined(); expect(h['X-Workshop-Client']).toMatch(/^[A-Za-z0-9_-]{16,64}$/);
+    expect(JSON.stringify(calls.map((c) => c.init))).not.toMatch(/Authorization|Bearer|sk-/i);
   });
 
   it('a student’s own key still wins and goes straight to DeepSeek', async () => {
@@ -56,7 +67,7 @@ describe('student app: Workshop Mode', () => {
   it('shows clear messages for a wrong code, a revoked code and used-up quotas', async () => {
     saveWorkshopCode('ABCDE-FGHJK');
     for (const [status, code, text] of [[401, 'invalid_code', /not valid/], [403, 'revoked', /turned off/], [429, 'student_quota', /used all/], [429, 'total_quota', /overall/], [429, 'rate_limit', /too quickly/]] as const) {
-      route = (u) => (u.includes('/api/student/') ? json(status, { error: code }) : json(404, {}));
+      route = withStatus(true, (u) => (u.includes('/api/student/') ? json(status, { error: code }) : json(404, {})));
       await expect(chatDeepSeek(msgs)).rejects.toThrow(text);
     }
     route = (u) => (u.includes('/api/student/validate') ? json(401, { error: 'invalid_code' }) : json(404, {}));
@@ -78,7 +89,7 @@ describe('student app: Workshop Mode', () => {
 
   it('an unreachable backend gives a friendly message, not a crash', async () => {
     saveWorkshopCode('ABCDE-FGHJK');
-    route = (u) => { if (u.includes('/api/student/')) throw new Error('offline'); return json(404, {}); };
+    route = withStatus(true, (u) => { if (u.includes('/api/student/')) throw new Error('offline'); return json(404, {}); });
     await expect(chatDeepSeek(msgs)).rejects.toThrow(/Could not reach the workshop service/);
     expect(loadWorkshopCode()).toBe('ABCDE-FGHJK');
   });
