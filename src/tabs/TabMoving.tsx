@@ -4,7 +4,7 @@ import { AiAccess } from '../ui/AiAccess';
 import { noKeyMessage } from '../apps/workshop';
 import { Viewport } from '../ui/Viewport';
 import { TabFrame } from '../ui/TabFrame';
-import { Btn, Callout, Section, Seg, Slider } from '../ui/controls';
+import { Btn, Callout, Section, Seg, Slider, Toggle } from '../ui/controls';
 import { BoxOutline, CloudLayer, PolyLine, SceneLayer, SensorMarker, TextSprite } from '../ui/three';
 import { circularLayout } from '../graph/layout';
 import { Markdown } from '../ui/Markdown';
@@ -15,7 +15,7 @@ import { runTask } from '../engine/client';
 import { staticPose } from '../sensor/simulate';
 import { PointCloud } from '../core/pointcloud';
 import { chatDeepSeek, ChatMsg, DEEPSEEK_MODEL, loadOwnKey, NoKeyError, saveOwnKey } from '../apps/deepseek';
-import { DT, EGO, FrameSeg, N_FRAMES, Seg as SegT, Track, buildTemporal, sceneAt, segmentFrame, temporalText, trackName, trackObjects } from '../apps/moving';
+import { DT, EGO, FrameSeg, N_FRAMES, SEG_METHOD, Seg as SegT, Track, buildTemporal, sceneAt, segmentFrame, temporalText, trackName, trackObjects } from '../apps/moving';
 
 const CLS_COLOR: Record<string, string> = { person: '#ff9f0a', car: '#e5484d', 'large vehicle': '#8e4ec6', 'pole / tree': '#30a46c', 'building / structure': '#8d8d95', object: '#8d8d95' };
 const QUESTIONS = ['What is moving, and how fast?', 'Is anything approaching the vehicle?', 'Who crosses the vehicle’s path, and when?', 'Summarise what happened during the drive.'];
@@ -28,6 +28,7 @@ export default function TabMoving() {
   const [radius, setRadius] = useState(0.6), [range, setRange] = useState(24);
   const [frame, setFrame] = useState(0), [playing, setPlaying] = useState(false);
   const [trails, setTrails] = useState(true);
+  const [showSeg, setShowSeg] = useState(false); // run the segmentation on the point clouds and show it
   const [step, setStep] = useState<'drive' | 'clouds' | 'graphs' | 'temporal' | 'results' | 'ask'>('drive');
   const scenes = useMemo(() => Array.from({ length: N_FRAMES }, (_, k) => sceneAt(k * DT, true)), []);
   // asking the AI
@@ -127,14 +128,51 @@ export default function TabMoving() {
       {egoLine}{egoMark}
     </Viewport>
   ) : step === 'clouds' ? (
-    <Viewport id="mv-clouds" bgOverride="#ffffff" label={clouds ? `Point cloud ${frameLabel}` : progress ?? 'Scanning…'} labelPos="tl" labelTop={12} home={HOME} target={TARGET} gridSize={5}>
-      {clouds && <CloudLayer cloud={clouds[frame]} mode="height" size={Math.max(2, s.view.pointSize - 0.5)} budget={220000} pickable={false} />}
+    <Viewport id="mv-clouds" bgOverride="#ffffff" label={clouds ? (showSeg ? `Segmentation of ${frameLabel}` : `Point cloud ${frameLabel}`) : progress ?? 'Scanning…'} labelPos="tl" labelTop={12} home={HOME} target={TARGET} gridSize={5}>
+      {clouds && (showSeg
+        ? <CloudLayer cloud={clouds[frame]} mode="flat" colorOpts={{ flat: [208, 208, 214] }} size={Math.max(1.5, s.view.pointSize - 1)} budget={160000} pickable={false} />
+        : <CloudLayer cloud={clouds[frame]} mode="height" size={Math.max(2, s.view.pointSize - 0.5)} budget={220000} pickable={false} />)}
+      {showSeg && cur && (
+        <>
+          <CloudLayer cloud={cur.points} mode="cluster" colorOpts={{ clusterLabels: cur.labels }} size={Math.max(3, s.view.pointSize + 1)} budget={200000} pickable={false} />
+          {cur.segs.filter((q2) => q2.cls !== 'building / structure' && q2.cls !== 'object').map((q2) => (
+            <group key={q2.id}>
+              <BoxOutline bbox={{ min: q2.min, max: q2.max }} color={CLS_COLOR[q2.cls]} />
+              <TextSprite text={q2.cls} position={[q2.centre[0], q2.centre[1], q2.max[2] + 0.5]} height={0.02} bg={CLS_COLOR[q2.cls]} />
+            </group>
+          ))}
+        </>
+      )}
       {egoLine}{egoMark}
     </Viewport>
   ) : step === 'graphs' ? half(objectsView(`Segmented ${frameLabel}`), <FrameGraph segs={cur?.segs ?? []} ego={ego} frame={frame} tracks={shown} />)
   : step === 'temporal' ? half(objectsView(frameLabel), <Timeline tracks={shown} frame={frame} onFrame={setFrame} />)
   : step === 'results' ? half(objectsView(frameLabel), eventsList)
   : half(objectsView(frameLabel), <Timeline tracks={shown} frame={frame} onFrame={setFrame} />);
+
+
+  const segCard = step === 'clouds' && showSeg && cur && segs ? (
+    <div className="overlay glass card fade-in" style={{ right: 12, top: 12, width: 'min(330px, 40%)', display: 'grid', gap: 8, padding: '0.7rem 0.85rem' }} data-testid="seg-card">
+      <div><b style={{ fontSize: '0.9375rem' }}>{SEG_METHOD.name}</b><div className="caption">{SEG_METHOD.short} · frame {frame + 1} of {N_FRAMES}</div></div>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}><span style={{ fontSize: '1.5rem', fontWeight: 700, whiteSpace: 'nowrap' }} className="mono" data-testid="seg-ms">{cur.ms.toFixed(0)} ms</span><span className="caption">this frame · average {avgMs.toFixed(0)} ms (about {Math.max(1, Math.round(1000 / Math.max(1, avgMs)))} per second)</span></div>
+      <div style={{ display: 'grid', gap: 5 }}>
+        {cur.steps.map((st, i) => {
+          const label = ['Crop around the vehicle', 'Thin (voxel grid)', 'Ground plane (RANSAC)', 'Cluster (Euclidean)', 'Name by size'][i], out = [`${Math.round(cur.near / 1000)}k of ${Math.round(cur.input / 1000)}k pts`, `${Math.round(cur.thin / 1000 * 10) / 10}k pts`, `${cur.ground.toLocaleString('en-US')} ground · ${cur.kept.toLocaleString('en-US')} objects`, `${st.out} clusters`, `${st.out} objects`][i];
+          return (
+            <div key={i} style={{ display: 'grid', gap: 2 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8125rem' }}><span>{i + 1}. {label}</span><span className="mono">{st.ms.toFixed(1)} ms</span></div>
+              <div style={{ height: 5, background: '#ececf1', borderRadius: 3 }}><div style={{ width: `${Math.max(2, (st.ms / Math.max(1, cur.ms)) * 100)}%`, height: 5, borderRadius: 3, background: ['#8e8e93', '#64d2ff', '#ff9f0a', '#0a84ff', '#bf5af2'][i] }} /></div>
+              <span className="caption">{out}</span>
+            </div>
+          );
+        })}
+      </div>
+      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', fontSize: '0.8125rem' }} data-testid="seg-classes">
+        {Object.entries(cur.segs.reduce<Record<string, number>>((m, q2) => { m[q2.cls] = (m[q2.cls] ?? 0) + 1; return m; }, {})).map(([c, n]) => <span key={c}><i style={{ display: 'inline-block', width: 10, height: 10, borderRadius: 3, background: CLS_COLOR[c], marginRight: 5, verticalAlign: -1 }} />{n} {c}</span>)}
+      </div>
+      <span className="caption">The grey points are the whole scan; the coloured points are what is left after the ground is taken away, one colour per cluster. Measured in your browser.</span>
+    </div>
+  ) : null;
 
   const timeSection = (
     <Section title="Time">
@@ -160,6 +198,11 @@ export default function TabMoving() {
         <Section title="2 · The point clouds it generates">
           <p className="hint">Every {DT} s the LiDAR (64 channels) takes one scan: a <b>point cloud series</b> of {N_FRAMES} frames, coloured here by height. Play them: the scenery slides past while the moving objects change place.</p>
           {clouds && <span className="caption">{Math.round(clouds[frame].count / 1000)}k points in this frame</span>}
+          <Toggle label="Run segmentation" checked={showSeg} onChange={setShowSeg} hint="Splits each scan into ground and objects and names the objects. It is drawn on the point cloud and timed." />
+          {showSeg && (<>
+            <Slider label="Cluster distance" value={radius} min={0.3} max={1.2} step={0.05} unit=" m" format={(v) => v.toFixed(2)} onChange={setRadius} />
+            <Slider label="Look this far around the vehicle" value={range} min={10} max={40} step={1} unit=" m" onChange={setRange} />
+          </>)}
         </Section>
       )}
       {step === 'graphs' && (<>
@@ -215,7 +258,7 @@ export default function TabMoving() {
       </>)}
     </>
   );
-  return <TabFrame title="Moving Scene & Temporal Graph" tab={14} viewport={viewport} controls={controls} learn={null} noPanelTabs noEnv hideViewControls />;
+  return <TabFrame title="Moving Scene & Temporal Graph" tab={14} viewport={viewport} controls={controls} learn={null} noPanelTabs noEnv hideViewControls overlays={segCard} />;
 }
 
 /** The scene graph of one frame: the vehicle and the objects around it as nodes, relations as edges. */

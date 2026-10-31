@@ -561,3 +561,18 @@ test('scene graph: true objects to try it, and a clear choice when there are no 
   await expect(page.getByTestId('graph-view')).toContainText('Table 1');
   await page.getByTestId('graph-go-cluster').count();
 });
+
+test('moving scene: run segmentation on the point clouds, see its name, timing and classes on the canvas', async ({ page }) => {
+  await page.goto('/'); await page.getByTestId('nav-14').click();
+  await expect(page.getByTestId('mv-play')).toBeVisible({ timeout: 120000 });
+  await page.getByRole('button', { name: '2 Clouds' }).click();
+  await expect(page.getByTestId('seg-card')).toHaveCount(0);
+  await page.getByText('Run segmentation').click();
+  await expect(page.getByTestId('seg-card')).toContainText('Ground plane + Euclidean clustering');
+  await expect(page.getByTestId('seg-ms')).toContainText(/\d+ ms/);
+  await expect(page.getByTestId('seg-card')).toContainText('Ground plane (RANSAC)');
+  await expect(page.getByTestId('seg-classes')).toContainText(/car|person|pole/);
+  const first = await page.getByTestId('seg-card').innerText();
+  await page.getByTestId('mv-play').click();
+  await expect.poll(async () => (await page.getByTestId('seg-card').innerText()) !== first, { timeout: 15000 }).toBe(true);
+});

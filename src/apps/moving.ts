@@ -44,7 +44,10 @@ export function sceneAt(t: number, withEgo = false): SceneDef {
 
 // ------------------------------------------------------------------ fast segmentation of one frame
 export interface Seg { id: number; cls: 'person' | 'car' | 'large vehicle' | 'pole / tree' | 'building / structure' | 'object'; centre: Vec3; size: Vec3; min: Vec3; max: Vec3; count: number }
-export interface FrameSeg { points: PointCloud; labels: Int32Array; segs: Seg[]; ms: number; kept: number; ground: number }
+export interface StepTime { name: string; ms: number; out: number }
+export interface FrameSeg { points: PointCloud; labels: Int32Array; segs: Seg[]; ms: number; kept: number; ground: number; input: number; near: number; thin: number; steps: StepTime[] }
+/** The name of the method, so it can be shown and talked about. */
+export const SEG_METHOD = { name: 'Ground plane + Euclidean clustering', short: 'RANSAC ground removal, then clustering', steps: ['Crop to the area around the vehicle', 'Thin with a voxel grid', 'Find the ground plane (RANSAC)', 'Cluster the rest (Euclidean)', 'Name each cluster by its size'] };
 export interface SegOpts { voxel: number; radius: number; minPts: number; range: number; origin: [number, number] }
 
 /** Rule-based labels from the size of the box around a cluster: deliberately simple. */
@@ -60,17 +63,22 @@ export function classify(size: Vec3): Seg['cls'] {
 
 /** Ground out with a plane, thin the rest with a voxel grid, then cluster: about a few tens of milliseconds per frame. */
 export function segmentFrame(cloud: PointCloud, o: SegOpts): FrameSeg {
-  const t0 = performance.now();
+  const t0 = performance.now(); let tk = t0; const steps: StepTime[] = [];
+  const lap = (name: string, out: number) => { const n = performance.now(); steps.push({ name, ms: n - tk, out }); tk = n; };
   // only what is near the vehicle and below roof height: far away the rings of a spinning LiDAR are too far apart to cluster
   const near: number[] = [];
   for (let i = 0; i < cloud.count; i++) { const x = cloud.positions[i * 3] - o.origin[0], y = cloud.positions[i * 3 + 1] - o.origin[1], z = cloud.positions[i * 3 + 2]; if (x * x + y * y < o.range * o.range && z > 0.3 && z < 4.2) near.push(i); }
+  lap('Crop', near.length);
   const thin = voxelDownsample(selectPoints(cloud, near, 'near'), o.voxel);
+  lap('Thin', thin.count);
   const fit = ransacPlane(thin.positions, thin.count, { threshold: 0.15, iterations: 80, seed: 5, maxTiltDeg: 12 });
   const isGround = new Uint8Array(thin.count);
   if (fit) for (const i of fit.inliers) isGround[i] = 1;
   const keep: number[] = []; for (let i = 0; i < thin.count; i++) if (!isGround[i]) keep.push(i);
   const pts = selectPoints(thin, keep, 'objects');
+  lap('Ground', pts.count);
   const cl = euclideanClustering(pts.positions, pts.count, o.radius, o.minPts);
+  lap('Cluster', cl.clusters);
   const buckets: number[][] = Array.from({ length: cl.clusters }, () => []);
   cl.labels.forEach((g, i) => { if (g >= 0) buckets[g].push(i); });
   const segs: Seg[] = [];
@@ -83,7 +91,8 @@ export function segmentFrame(cloud: PointCloud, o: SegOpts): FrameSeg {
     segs.push({ id, cls: classify(size), centre: [(mn[0] + mx[0]) / 2, (mn[1] + mx[1]) / 2, (mn[2] + mx[2]) / 2], size, min: mn, max: mx, count: b.length });
     for (const i of b) cl.labels[i] = id;
   }
-  return { points: pts, labels: cl.labels, segs, ms: performance.now() - t0, kept: pts.count, ground: thin.count - pts.count };
+  lap('Name', segs.length);
+  return { points: pts, labels: cl.labels, segs, ms: performance.now() - t0, kept: pts.count, ground: thin.count - pts.count, input: cloud.count, near: near.length, thin: thin.count, steps };
 }
 
 // ------------------------------------------------------------------ tracking: the same object from frame to frame
