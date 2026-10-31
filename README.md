@@ -36,6 +36,7 @@ Go through the tabs in order, one idea at a time, about five minutes each. Each 
 | 13 | **Supervised Learning** (train your own model) | Build a small neural network by dragging blocks (Conv, Pool, Upsample, Dense...; the point-cloud versions work the same way) and train it on 10 labelled images and 10 labelled point clouds, side by side: classification, detection (2D box / 3D box) or segmentation (drawn as a U-Net). Three examples are held back to show whether the model really learned. |
 | 14 | **Scene Graphs & 3D AI** | Objects and relations, offline question answering, link to [local-llm-fit](https://maninka123.github.io/local-llm-fit/). |
 | 15 | **Moving Scene & Temporal Graph** | A vehicle drives through a street and scans every 0.8 s (a point cloud series). Each frame is segmented fast (ground out, cluster, name by size), objects are tracked from frame to frame, and the result is a **temporal scene graph** with events (approaching, crossing, passing). A language model answers questions from it. |
+| | **Applications (optional)** | |
 | 16 | **Scan to CAD** | Slice a classroom, find wall lines, square the corners, export a **DXF** floor plan. |
 | 17 | **Image to 3D** | Pick a scene (chair, crate, study desk, living corner, garden), three reconstruction methods, meshing, alignment with scale, error map. |
 

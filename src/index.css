@@ -318,3 +318,9 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 @keyframes bubIn { from { opacity: 0; transform: translateY(6px) scale(.98); } to { opacity: 1; transform: none; } }
 @keyframes typing { 0%, 60%, 100% { transform: translateY(0); opacity: .5; } 30% { transform: translateY(-4px); opacity: 1; } }
 @media (prefers-reduced-motion: reduce) { .bub, .typing i { animation: none; } }
+
+/* the applications are an optional group of their own at the end of the menu */
+.nav-sep { height: 1px; background: var(--line, #e5e5ea); margin: 10px 8px 4px; }
+.nav-group { display: flex; align-items: baseline; justify-content: space-between; padding: 4px 12px 2px; font-size: 0.6875rem; letter-spacing: 0.06em; text-transform: uppercase; color: #8e8e93; }
+.nav-group b { font-weight: 700; }
+.nav-group span { font-size: 0.625rem; text-transform: none; letter-spacing: 0; background: #f2f2f7; border-radius: 999px; padding: 1px 8px; color: #6e6e73; }

@@ -433,19 +433,27 @@ test('tab 13: drive, point clouds, scene graph per frame, temporal graph, result
   await expect(page.getByTestId('frame-graph')).toBeVisible();
   await page.getByRole('button', { name: '4 Over time', exact: true }).click();
   await expect(page.getByTestId('track-count')).toContainText(/\d+ tracked objects/);
+  await expect(page.getByTestId('temporal-story')).toBeVisible();
+  await expect(page.getByTestId('story-caption')).toContainText('A scene graph for every scan');
+  for (let i = 0; i < 4; i++) await page.getByTestId('story-next').click();
+  await expect(page.getByTestId('story-caption')).toContainText('Repeat for every scan');
   await expect(page.getByTestId('timeline')).toBeVisible();
   await page.getByRole('button', { name: '5 Results', exact: true }).click();
   await expect(page.getByTestId('events')).toContainText('f');
   await page.getByRole('button', { name: '6 Ask AI', exact: true }).click();
-  await page.getByTestId('mv-prompt').click();
-  await expect(page.getByTestId('mv-prompt-text')).toContainText('TEMPORAL SCENE GRAPH');
-  await page.getByTestId('mv-question').fill('What is moving?');
-  await page.getByTestId('mv-ask').click();
+  await page.getByTestId('mv-prompt').locator('summary').click();
+  await expect(page.getByTestId('mv-prompt')).toContainText(/person|car/);
+  await page.getByTestId('mv-input').fill('What is moving?');
+  await page.getByTestId('mv-input').press('Enter');
   await expect(page.getByTestId('mv-answer')).toContainText('crosses ahead');
-  await page.getByTestId('mv-question').fill('And who is closest?');
-  await page.getByTestId('mv-ask').click();
-  await expect(page.getByTestId('mv-chat').getByText('And who is closest?')).toBeVisible();
-  await expect(page.getByTestId('mv-chat').locator('.callout')).toHaveCount(2);
+  await page.getByTestId('mv-input').fill('And who is closest?');
+  await page.getByTestId('mv-send').click();
+  await expect(page.getByTestId('mv-ask')).toHaveCount(2);
+  await expect(page.getByTestId('mv-answer')).toHaveCount(2);
+  // the questions that need no AI
+  await page.getByRole('button', { name: 'What is moving, and how fast?' }).last().click();
+  await expect(page.getByTestId('mv-offline-answer')).toContainText('m/s');
+  await expect(page.getByTestId('mv-offline-answer')).toContainText('not an AI');
 });
 
 test.describe('corner cases', () => {

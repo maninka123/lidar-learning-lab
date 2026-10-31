@@ -1,4 +1,4 @@
-import { Suspense, lazy, useState, ReactNode } from 'react';
+import { Fragment, Suspense, lazy, useState, ReactNode } from 'react';
 import { Layers, PanelLeft, Radar, Info, Boxes, Route, GitMerge, Filter, Network, Camera, Share2, Ruler, Eye, Wand, Crosshair } from './ui/icons';
 import { useLab } from './state/store';
 import { Toast } from './ui/shared';
@@ -41,6 +41,9 @@ const TABS: { label: string; icon: ReactNode; el: ReactNode }[] = [
   { label: 'Image to 3D', icon: <Camera size={18} />, el: <Tab7 /> },
 ];
 
+/** From this tab on, the lessons are applications: optional extras that put the earlier ideas to work. */
+const APPS_FROM = TABS.findIndex((x) => x.label === 'Scan to CAD');
+
 export default function App() {
   const tab = useLab((s) => s.tab);
   const setTab = useLab((s) => s.setTab);
@@ -58,10 +61,13 @@ export default function App() {
           <button className="btn sm icon nav-toggle" onClick={() => useLab.setState({ navOpen: !navOpen })} aria-label={navOpen ? 'Collapse the menu' : 'Expand the menu'} aria-expanded={navOpen} title={navOpen ? 'Collapse menu' : 'Expand menu'} data-testid="nav-toggle"><PanelLeft size={17} /></button>
         </div>
         {TABS.map((t, i) => (
-          <button key={t.label} className="nav-item" aria-current={tab === i ? 'page' : undefined} onClick={() => setTab(i)} data-testid={`nav-${i}`} title={t.label}>
+          <Fragment key={t.label}>
+            {i === APPS_FROM && <><div className="nav-sep" /><div className="nav-group nav-label" data-testid="nav-apps"><b>Applications</b><span>optional</span></div></>}
+            <button className="nav-item" aria-current={tab === i ? 'page' : undefined} onClick={() => setTab(i)} data-testid={`nav-${i}`} title={t.label}>
             <span className="nav-num">{i + 1}</span>
             <span className="nav-label">{t.label}</span>
-          </button>
+            </button>
+          </Fragment>
         ))}
         <div className="side-foot nav-label">
           <a href="https://github.com/maninka123/lidar-learning-lab" target="_blank" rel="noreferrer noopener">GitHub</a> · <a href="https://github.com/maninka123/lidar-learning-lab/blob/main/LICENSE" target="_blank" rel="noreferrer noopener">MIT licence</a>

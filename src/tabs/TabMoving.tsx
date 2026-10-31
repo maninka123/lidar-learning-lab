@@ -8,8 +8,11 @@ import { Btn, Callout, Section, Seg, Slider, Toggle } from '../ui/controls';
 import { BoxOutline, CloudLayer, PolyLine, SceneLayer, SensorMarker, TextSprite } from '../ui/three';
 import { circularLayout } from '../graph/layout';
 import { Markdown } from '../ui/Markdown';
+import { Chat } from '../ui/Chat';
+import { answerOffline, OfflineAnswer, OFFLINE_QUESTIONS } from '../apps/movingQuery';
 import { PromptView } from '../ui/PromptView';
 import { Pause, Play } from '../ui/icons';
+import { TemporalStory } from '../ui/TemporalStory';
 import { PRESETS, presetToConfig } from '../sensor/presets';
 import { runTask } from '../engine/client';
 import { staticPose } from '../sensor/simulate';
@@ -18,7 +21,7 @@ import { chatDeepSeek, ChatMsg, DEEPSEEK_MODEL, loadOwnKey, NoKeyError, saveOwnK
 import { DT, EGO, FrameSeg, N_FRAMES, SEG_METHOD, Seg as SegT, Track, buildTemporal, sceneAt, segmentFrame, temporalText, trackName, trackObjects } from '../apps/moving';
 
 const CLS_COLOR: Record<string, string> = { person: '#ff9f0a', car: '#e5484d', 'large vehicle': '#8e4ec6', 'pole / tree': '#30a46c', 'building / structure': '#8d8d95', object: '#8d8d95' };
-const QUESTIONS = ['What is moving, and how fast?', 'Is anything approaching the vehicle?', 'Who crosses the vehicle’s path, and when?', 'Summarise what happened during the drive.'];
+const QUESTIONS = ['What is moving, and how fast?', 'Is anything approaching the vehicle?', 'Who crosses the vehicle’s path, and when?', 'Summarise what happened during the drive.', 'What is a temporal scene graph?'];
 
 export default function TabMoving() {
   const s = useLab();
@@ -32,13 +35,11 @@ export default function TabMoving() {
   const [step, setStep] = useState<'drive' | 'clouds' | 'graphs' | 'temporal' | 'results' | 'ask'>('drive');
   const scenes = useMemo(() => Array.from({ length: N_FRAMES }, (_, k) => sceneAt(k * DT, true)), []);
   // asking the AI
-  const [q, setQ] = useState(QUESTIONS[0]);
-  const [ownKey, setOwnKey] = useState(() => loadOwnKey()), [needKey, setNeedKey] = useState(false);
-  const [aiBusy, setAiBusy] = useState(false), [aiErr, setAiErr] = useState<string | null>(null);
-  const [chat, setChat] = useState<{ q: string; text: string; tokens: number; ms: number }[]>([]);
+  const [ownKey, setOwnKey] = useState(() => loadOwnKey());
+  const [oq, setOq] = useState(''), [oa, setOa] = useState<{ q: string; a: OfflineAnswer } | null>(null);
 
   async function drive() {
-    setClouds(null); setPlaying(false); setFrame(0); setChat([]);
+    setClouds(null); setPlaying(false); setFrame(0);
     try {
       const out: PointCloud[] = [];
       for (let k = 0; k < N_FRAMES; k++) {
@@ -67,17 +68,8 @@ export default function TabMoving() {
 
   const cur = segs?.[frame] ?? null, ego = EGO(frame * DT);
   const avgMs = segs ? segs.reduce((a, f) => a + f.ms, 0) / segs.length : 0;
-  const system = useMemo(() => `You answer questions about what happened during a drive, using ONLY the temporal scene graph below (tracked objects with their positions per frame, and events). Quote numbers and frame numbers from it. Be brief. If the graph does not say, say so.\n\nTEMPORAL SCENE GRAPH\n${text}`, [text]);
-  const history = useMemo<ChatMsg[]>(() => chat.flatMap((c) => [{ role: 'user' as const, content: c.q }, { role: 'assistant' as const, content: c.text }]), [chat]);
-  async function askAi(question = q) {
-    if (!question.trim() || aiBusy) return;
-    setAiBusy(true); setAiErr(null);
-    try {
-      const r = await chatDeepSeek([{ role: 'system', content: system }, ...history, { role: 'user', content: question }], 1500, ownKey);
-      setChat((c) => [...c, { q: question, text: r.text, tokens: r.promptTokens, ms: r.ms }]); setQ(''); setNeedKey(false);
-    } catch (e) { if (e instanceof NoKeyError) { setNeedKey(true); setAiErr(noKeyMessage('Ask')); } else setAiErr((e as Error).message); }
-    finally { setAiBusy(false); }
-  }
+  const chatSystem = useMemo(() => `You are a friendly, clear assistant inside a LiDAR teaching lab. You can answer any question, on LiDAR or anything else. Keep answers short, use Markdown, and use a table when comparing several things. The user has just watched a drive and has the temporal scene graph below (tracked objects with their positions per frame, and events). For questions about this drive use ONLY that graph, quote numbers and frame numbers from it, and say so if it does not tell. For other questions, ignore it.\n\nTEMPORAL SCENE GRAPH\n${text}`, [text]);
+  const askOffline = (t: string) => { if (!graph || !t.trim()) return; setOa({ q: t, a: answerOffline(t, graph) }); setOq(''); };
 
   const egoLine = <PolyLine pts={Array.from({ length: N_FRAMES }, (_, k) => [EGO(k * DT).x, EGO(k * DT).y, 0.05] as [number, number, number])} color="#0a84ff" width={2} dashed />;
   // a blue ring on the ground under our vehicle, so it is easy to find
@@ -106,8 +98,8 @@ export default function TabMoving() {
       })}
     </Viewport>
   );
-  const half = (left: React.ReactNode, right: React.ReactNode) => (
-    <div style={{ position: 'absolute', inset: 0, display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: 2, background: '#d9d9de' }}>
+  const half = (left: React.ReactNode, right: React.ReactNode, cols = '1.2fr 1fr') => (
+    <div style={{ position: 'absolute', inset: 0, display: 'grid', gridTemplateColumns: cols, gap: 2, background: '#d9d9de' }}>
       <div style={{ position: 'relative' }}>{left}</div>
       <div style={{ position: 'relative', minHeight: 0, minWidth: 0 }}>{right}</div>
     </div>
@@ -146,7 +138,7 @@ export default function TabMoving() {
       {egoLine}{egoMark}
     </Viewport>
   ) : step === 'graphs' ? half(objectsView(`Segmented ${frameLabel}`), <FrameGraph segs={cur?.segs ?? []} ego={ego} frame={frame} tracks={shown} />)
-  : step === 'temporal' ? half(objectsView(frameLabel), <Timeline tracks={shown} frame={frame} onFrame={setFrame} />)
+  : step === 'temporal' ? half(objectsView(frameLabel), <TemporalStory tracks={tracks} k={frame} colors={CLS_COLOR} timeline={<Timeline tracks={shown} frame={frame} onFrame={setFrame} />} />, '1.1fr 1fr')
   : step === 'results' ? half(objectsView(frameLabel), eventsList)
   : half(objectsView(frameLabel), <Timeline tracks={shown} frame={frame} onFrame={setFrame} />);
 
@@ -233,28 +225,20 @@ export default function TabMoving() {
         {timeSection}
       </>)}
       {step === 'ask' && (<>
-        <Section title="6 · Ask the scene">
-          <p className="hint">The temporal graph is given to DeepSeek Flash (<span className="mono">{DEEPSEEK_MODEL}</span>) as text. Keep asking: it remembers the conversation.</p>
-          <PromptView system={system} user={q || '(your next question)'} testId="mv-prompt" />
+        <Section title="6 · Chat with the AI">
+          <Chat id="mv" ownKey={ownKey} setOwnKey={setOwnKey} title="Ask anything" placeholder="Ask about the drive, or anything else…" system={chatSystem} suggestions={QUESTIONS}
+            disabledReason={!segs ? 'Waiting for the scans…' : undefined} />
+          <details className="caption" data-testid="mv-prompt"><summary>What the AI is given (about {Math.round(text.length / 3.5).toLocaleString('en-US')} tokens)</summary><pre className="mono" style={{ margin: '6px 0 0', fontSize: '0.75rem', whiteSpace: 'pre-wrap', maxHeight: 180, overflow: 'auto' }}>{text}</pre></details>
         </Section>
-        <div style={{ display: 'grid', gap: 8 }} data-testid="mv-chat">
-          {chat.map((c, i) => (
-            <div key={i} style={{ display: 'grid', gap: 6 }}>
-              <div style={{ justifySelf: 'end', maxWidth: '92%', background: '#0a84ff', color: '#fff', borderRadius: '14px 14px 4px 14px', padding: '6px 10px', fontSize: '0.9rem' }}>{c.q}</div>
-              <div className="callout good" style={{ gap: 4 }} data-testid={i === chat.length - 1 ? 'mv-answer' : undefined}><Markdown text={c.text} /><span className="caption">{c.tokens.toLocaleString()} tokens read · {(c.ms / 1000).toFixed(1)} s</span></div>
-            </div>
-          ))}
-          {aiBusy && <span className="caption">DeepSeek is thinking…</span>}
-          {!chat.length && <div className="chip-row">{QUESTIONS.map((t) => <button key={t} className="chip" onClick={() => void askAi(t)} disabled={!segs}>{t}</button>)}</div>}
-          {chat.length > 0 && <div className="chip-row">{QUESTIONS.filter((t) => !chat.some((c) => c.q === t)).map((t) => <button key={t} className="chip" onClick={() => void askAi(t)} disabled={aiBusy}>{t}</button>)}</div>}
-        </div>
-        {aiErr && <Callout kind="warn">{aiErr}</Callout>}
-        <AiAccess needKey={needKey} ownKey={ownKey} setOwnKey={setOwnKey} />
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 8, position: 'sticky', bottom: 0, background: 'var(--bg)', padding: '8px 0' }}>
-          <input type="text" value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && void askAi()} placeholder="Ask about this drive…" aria-label="Question" data-testid="mv-question" />
-          <Btn variant="primary" onClick={() => void askAi()} busy={aiBusy} disabled={!segs || !q.trim()} testId="mv-ask">Ask</Btn>
-        </div>
-        {chat.length > 0 && <Btn sm onClick={() => setChat([])}>Clear the conversation</Btn>}
+        <Section title="Or ask the graph directly (no AI)">
+          <p className="caption">These questions are answered by simple rules on the tracks and events. Every number comes from the graph.</p>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 8 }}>
+            <input type="text" value={oq} onChange={(e) => setOq(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && askOffline(oq)} placeholder="e.g. what is moving?" aria-label="Question without AI" data-testid="mv-offline-input" />
+            <Btn variant="primary" onClick={() => askOffline(oq)} disabled={!graph} testId="mv-offline-ask">Ask</Btn>
+          </div>
+          <div className="chip-row">{OFFLINE_QUESTIONS.map((t) => <button key={t} className="chip" onClick={() => askOffline(t)} disabled={!graph}>{t}</button>)}</div>
+          {oa && (<div className="callout good fade-in" data-testid="mv-offline-answer"><b>{oa.q}</b><Markdown text={oa.a.text} /><span className="caption">answered by rules ({oa.a.intent}), not an AI</span></div>)}
+        </Section>
       </>)}
     </>
   );
