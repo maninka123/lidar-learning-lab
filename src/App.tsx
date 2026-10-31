@@ -48,11 +48,13 @@ export default function App() {
   return (
     <div className={`app ${navOpen ? '' : 'nav-collapsed'}`}>
       <nav className="sidebar glass" aria-label="Lecture sections">
-        <div className="brand">
-          <div className="brand-mark"><Radar size={22} color="#fff" /></div>
-          <div className="brand-text"><b>LiDAR Learning Lab</b></div>
+        <div className="side-head">
+          <div className="brand">
+            <div className="brand-mark"><Radar size={22} color="#fff" /></div>
+            <div className="brand-text"><b>LiDAR Learning Lab</b></div>
+          </div>
+          <button className="btn sm icon nav-toggle" onClick={() => useLab.setState({ navOpen: !navOpen })} aria-label={navOpen ? 'Collapse the menu' : 'Expand the menu'} aria-expanded={navOpen} title={navOpen ? 'Collapse menu' : 'Expand menu'} data-testid="nav-toggle"><PanelLeft size={17} /></button>
         </div>
-        <button className="btn sm icon nav-toggle" onClick={() => useLab.setState({ navOpen: !navOpen })} aria-label={navOpen ? 'Collapse the menu' : 'Expand the menu'} aria-expanded={navOpen} title={navOpen ? 'Collapse menu' : 'Expand menu'} data-testid="nav-toggle"><PanelLeft size={17} /></button>
         {TABS.map((t, i) => (
           <button key={t.label} className="nav-item" aria-current={tab === i ? 'page' : undefined} onClick={() => setTab(i)} data-testid={`nav-${i}`} title={t.label}>
             <span className="nav-num">{i + 1}</span>
