@@ -343,10 +343,10 @@ export default function Tab3({ labSwitch }: { labSwitch?: React.ReactNode }) {
                 <p className="hint">{traj.length.toFixed(1)} m · {traj.duration.toFixed(1)} s · ~{fmtN(Math.round(pointsPerSecond(mlsSensor) * traj.duration))} nominal points</p>
                 <div className="callout" style={{ gap: 4 }} data-testid="points-calc">
                   <b>How that number comes about</b>
-                  <span className="mono" style={{ fontSize: '1rem', fontWeight: 600 }}>{fmtN(Math.round(pointsPerSecond(mlsSensor)))} points per second</span>
+                  <span className="mono" style={{ fontSize: '0.875rem', fontWeight: 600 }}>{fmtN(Math.round(pointsPerSecond(mlsSensor)))} points per second</span>
                   <span className="caption">{isSteered(mlsSensor.pattern) ? `${mlsSensor.frequency} sweeps per second` : `${mlsSensor.channels} channels · ${mlsSensor.frequency} turns per second`}</span>
                   <span className="mono" style={{ fontSize: '0.875rem' }}>× {traj.duration.toFixed(1)} s ({traj.length.toFixed(1)} m ÷ {s.mlsOpts.speed} m/s) = {fmtN(Math.round(pointsPerSecond(mlsSensor) * traj.duration))} points</span>
-                  <span className="caption">"Nominal" counts every beam fired. Beams that hit nothing (sky, beyond range) return no point, so the real cloud is smaller. A slower platform means a longer time on the path and so more points.</span>
+                  <span className="caption">Nominal = every beam fired. Beams that hit nothing return no point, so the real cloud is smaller.</span>
                 </div>
               </>
             )}
