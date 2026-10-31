@@ -320,7 +320,6 @@ test('tab 7: TLS stations are scanned, registered and compared with the truth', 
   await page.goto('/');
   await page.getByTestId('nav-7').click();
   await page.getByTestId('tls-preset-3').click();
-  await page.getByRole('button', { name: 'Coarse' }).click();
   await page.getByTestId('scan-stations').click();
   await expect(page.getByTestId('stats-card')).toContainText(/\d{2,3},\d{3} points scanned/, { timeout: 120000 });
   await expect(page.getByText(/they all pile up in one place/)).toBeVisible();
@@ -444,7 +443,6 @@ test.describe('corner cases', () => {
     await page.goto('/');
     await page.getByTestId('nav-7').click();
     await page.getByTestId('tls-preset-3').click();
-    await page.getByRole('button', { name: 'Fine' }).click();
     await page.getByTestId('scan-stations').click();
     await page.getByTestId('environment-menu').click();
     await page.getByTestId('env-B').click();
@@ -471,7 +469,6 @@ test.describe('corner cases', () => {
     await page.getByTestId('environment-menu').click();
     await page.getByTestId('env-A').click();
     await page.evaluate(() => (window as any).__lab.getState().patch({ pendingStation: [0, 0] }));
-    await page.getByRole('button', { name: 'Coarse' }).click();
     await page.getByTestId('scan-stations').click();
     await expect(page.getByTestId('stats-card')).toContainText(/\d{2,3},\d{3} points scanned/, { timeout: 120000 });
     await expect(page.getByTestId('stats-card')).toContainText(/Scene covered\s*\d+ %/, { timeout: 60000 });

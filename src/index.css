@@ -154,8 +154,8 @@ input[type="number"], input[type="text"], input[type="password"], select, textar
 select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' fill='none' stroke='%23999' stroke-width='1.8' stroke-linecap='round'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 0.75rem center; padding-right: 2rem; cursor: pointer; }
 select option { background: var(--bg-elev); color: var(--text); }
 input:focus, select:focus, textarea:focus { outline: none; border-color: var(--accent); background: var(--accent-soft); }
-.toggle { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; cursor: pointer; }
-.toggle input { position: absolute; opacity: 0; pointer-events: none; }
+.toggle { position: relative; display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; cursor: pointer; }
+.toggle input { position: absolute; left: 0; top: 0; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
 .toggle .sw { width: 2.9rem; height: 1.75rem; border-radius: 1rem; background: var(--fill-hover); position: relative; transition: background .25s var(--ease); flex: none; }
 .toggle .sw::after { content: ""; position: absolute; top: 0.15rem; left: 0.15rem; width: 1.45rem; height: 1.45rem; border-radius: 50%; background: #fff; box-shadow: 0 2px 6px rgba(0,0,0,.35); transition: transform .3s var(--ease); }
 .toggle input:checked + .sw { background: var(--green); }

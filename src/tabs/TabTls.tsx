@@ -7,14 +7,13 @@ import { Btn, Callout, Seg, Section, Slider, Toggle, fmtN } from '../ui/controls
 import { SceneFromStore } from './common';
 import { CloudLayer, Marker, PolyLine } from '../ui/three';
 import { Plan2D } from '../ui/Plan2D';
-import { Crosshair, Dots, Eye, Play, Trash2 } from '../ui/icons';
+import { Crosshair, Dots, Play, Trash2 } from '../ui/icons';
 import { getPreset, presetToConfig, SensorConfig } from '../sensor/presets';
 import { runTask } from '../engine/client';
 import { staticPose } from '../sensor/simulate';
 import { concatClouds, PointCloud, transformCloud } from '../core/pointcloud';
-import { makeRng } from '../core/rng';
 import { turbo } from '../core/colorize';
-import { D2R, R2D, Rigid, rigidApply, rigidCompose, rigidFromEuler, rigidInverse, rotationAngle } from '../core/math';
+import { R2D, Rigid, rigidApply, rigidCompose, rigidFromEuler, rigidInverse, rotationAngle } from '../core/math';
 
 type Method = 'point' | 'plane';
 type View = 'unreg' | 'reg' | 'truth';
@@ -23,7 +22,7 @@ interface Scanned { local: PointCloud; truth: Rigid /* local → frame of statio
 interface Reg { est: Rigid; errT: number; errDeg: number; ptErr: number; fitness: number; iters: number }
 
 const COLOURS: [number, number, number][] = [[230, 57, 70], [29, 120, 220], [40, 170, 90], [244, 162, 30], [140, 80, 200], [0, 180, 190]];
-const MAX_POINTS = 70000;
+const MAX_POINTS = 250000; // per station; the render budget thins it further on screen
 
 export default function TabTls() {
   const s = useLab();
@@ -31,10 +30,8 @@ export default function TabTls() {
   const [stations, setStations] = useState<Stn[]>([]);
   const [tool, setTool] = useState(false);
   const [tripod, setTripod] = useState(1.5);
-  const [step, setStep] = useState(0.5);
   const [scans, setScans] = useState<Scanned[] | null>(null);
   const [scannedFor, setScannedFor] = useState<string | null>(null); // the stations and settings the current scans were made with
-  const initErr = { t: 0.3, deg: 3 }; // how wrong the rough first guess for each station is: a medium, realistic value
   const [method, setMethod] = useState<Method>('plane');
   const [maxDist, setMaxDist] = useState(1.5);
   const [regs, setRegs] = useState<Reg[] | null>(null);
@@ -43,7 +40,6 @@ export default function TabTls() {
   const [byStation, setByStation] = useState(true), [cov, setCov] = useState<number | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [pointsOnly, setPointsOnly] = useState(false);
-  const [colourOn, setColourOn] = useState(true);
   const b = scene.bounds;
   const gen = useRef(0); // bumped whenever the environment changes, so a scan still running for the old one is thrown away
 
@@ -58,7 +54,8 @@ export default function TabTls() {
   useEffect(() => { s.patch({ interaction: tool ? 'add-station' : 'select' }); }, [tool]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (s.pendingStation) { add(s.pendingStation[0], s.pendingStation[1]); s.patch({ pendingStation: null }); } }, [s.pendingStation]); // eslint-disable-line react-hooks/exhaustive-deps
   const clearResults = () => { setScans(null); setScannedFor(null); setRegs(null); setInits(null); setCov(null); };
-  function add(x: number, y: number) { setStations((l) => (l.length >= 6 || l.some((q) => Math.hypot(q.x - x, q.y - y) < 0.5) ? l : [...l, { x: +x.toFixed(2), y: +y.toFixed(2) }])); }
+  const lastAdd = useRef(0);
+  function add(x: number, y: number) { const now = performance.now(); if (now - lastAdd.current < 400) return; lastAdd.current = now; setStations((l) => (l.length >= 6 || l.some((q) => Math.hypot(q.x - x, q.y - y) < 0.5) ? l : [...l, { x: +x.toFixed(2), y: +y.toFixed(2) }])); }
 
   const presets: { label: string; pts: Stn[] }[] = useMemo(() => {
     if (s.sceneId === 'D') return [{ label: 'Along the road (3)', pts: [{ x: -16, y: 0 }, { x: -6, y: 0 }, { x: 4, y: 0 }] }, { label: 'Along the road (4)', pts: [{ x: -20, y: 0 }, { x: -10, y: 0 }, { x: 0, y: 0 }, { x: 10, y: 0 }] }];
@@ -66,9 +63,10 @@ export default function TabTls() {
     return [{ label: 'In a line (3)', pts: [{ x: cx - w, y: cy }, { x: cx, y: cy }, { x: cx + w, y: cy }] }, { label: 'Four corners', pts: [{ x: cx - w, y: cy - h }, { x: cx + w, y: cy - h }, { x: cx + w, y: cy + h }, { x: cx - w, y: cy + h }] }];
   }, [s.sceneId, b]);
 
-  const tlsSensor: SensorConfig = useMemo(() => ({ ...presetToConfig(getPreset('tls')), hRes: step, channels: Math.round(150 / step) }), [step]);
-  const rays = Math.round(360 / step) * Math.round(150 / step);
-  const layoutKey = JSON.stringify([stations, tripod, step]);
+  // the same Leica RTC360 settings as the Scanner Simulator, so a station here has the same detail
+  const tlsSensor: SensorConfig = useMemo(() => presetToConfig(getPreset('tls')), []);
+  const rays = Math.round(tlsSensor.hFov / tlsSensor.hRes) * tlsSensor.channels;
+  const layoutKey = JSON.stringify([stations, tripod]);
   const stale = !!scans && scannedFor !== layoutKey;
   const pose = (st: Stn) => rigidFromEuler(st.x, st.y, tripod, 0, 0, 0);
 
@@ -98,12 +96,8 @@ export default function TabTls() {
     } catch (e) { s.notify((e as Error).message, 'error'); } finally { if (my === gen.current) setBusy(null); s.patch({ busy: null }); }
   }
 
-  /** What the operator would know: roughly where each scanner stood. */
-  const makeInits = (sc: Scanned[]) => sc.map((q, k) => {
-    if (k === 0) return q.truth;
-    const r = makeRng(900 + k);
-    return rigidCompose(q.truth, rigidFromEuler(initErr.t * r.gauss(), initErr.t * r.gauss(), initErr.t * 0.3 * r.gauss(), initErr.deg * D2R * r.gauss(), 0, 0));
-  });
+  /** The stations were placed on the plan, so their positions are known: ICP starts from them and only fine-tunes. */
+  const makeInits = (sc: Scanned[]) => sc.map((q) => q.truth);
 
   async function register() {
     if (!scans) return;
@@ -115,7 +109,7 @@ export default function TabTls() {
       const placed: PointCloud[] = [transformCloud(scans[0].local, init[0])];
       for (let k = 1; k < scans.length; k++) {
         const ref = concatClouds(placed, 'ref');
-        const r = await runTask('icp', { src: scans[k].local.positions, nSrc: scans[k].local.count, dst: ref.positions, nDst: ref.count, opts: { maxIterations: 120, tolerance: 1e-7, maxCorrDist: maxDist, sampleMax: 20000, init: init[k], method } });
+        const r = await runTask('icp', { src: scans[k].local.positions, nSrc: scans[k].local.count, dst: ref.positions, nDst: ref.count, opts: { maxIterations: 40, tolerance: 1e-6, maxCorrDist: maxDist, sampleMax: 8000, init: init[k], method } });
         if (my !== gen.current) return;
         est.push(r.T); placed.push(transformCloud(scans[k].local, r.T));
         // compare with the truth: pose difference and the average distance between where a point is and where it should be
@@ -152,11 +146,10 @@ export default function TabTls() {
   }, [placed, scene]);
   const coloured = useMemo(() => placed.map((c, i) => {
     const col = new Uint8Array(c.count * 3), z0 = b.min[2], dz = Math.max(0.5, b.max[2] - b.min[2]);
-    if (!colourOn) for (let k = 0; k < c.count; k++) { col[k * 3] = 205; col[k * 3 + 1] = 208; col[k * 3 + 2] = 214; }
-    else if (byStation && placed.length > 1) for (let k = 0; k < c.count; k++) col.set(COLOURS[i % 6], k * 3);
+    if (byStation && placed.length > 1) for (let k = 0; k < c.count; k++) col.set(COLOURS[i % 6], k * 3);
     else for (let k = 0; k < c.count; k++) { const t = turbo(Math.min(1, Math.max(0, (c.positions[k * 3 + 2] - z0) / dz))); col[k * 3] = t[0]; col[k * 3 + 1] = t[1]; col[k * 3 + 2] = t[2]; }
     return { ...c, colors: col } as PointCloud;
-  }), [placed, byStation, colourOn, b]);
+  }), [placed, byStation, b]);
 
   const worst = regs ? Math.max(...regs.map((r) => r.ptErr)) : null;
   const stats = [
@@ -188,7 +181,6 @@ export default function TabTls() {
         <p className="hint">One station is enough to get a point cloud. Add more to see the places the first one cannot see; up to 6. Keep neighbouring stations in sight of each other: the scans need to overlap to be registered.</p>
       </Section>
       <Section title="2 · Scan">
-        <Seg value={String(step)} onChange={(v) => setStep(parseFloat(v))} label="Detail" options={[{ value: '0.7', label: 'Coarse' }, { value: '0.5', label: 'Medium' }, { value: '0.35', label: 'Fine' }]} />
         <Slider label="Tripod height" value={tripod} min={0.8} max={Math.max(1.8, b.max[2] - 0.3)} step={0.05} unit=" m" format={(v) => v.toFixed(2)} onChange={setTripod} />
         <span className="caption">{fmtN(rays)} beams per station, 360° × 150° (Leica RTC360 style)</span>
         <Btn variant="primary" icon={<Play size={16} />} onClick={scanAll} busy={busy === 'scan'} disabled={stations.length < 1} testId="scan-stations">{stations.length === 1 ? 'Scan' : 'Scan all stations'}</Btn>
@@ -196,7 +188,7 @@ export default function TabTls() {
       </Section>
       {stations.length > 1 && (
       <Section title="3 · Register the scans">
-        <p className="hint">Each scan sits in its own frame. We start from a rough guess of where each station stood (about 0.3 m and 3° off, like a careful sketch or a phone GPS) and let ICP fit the scans together.</p>
+        <p className="hint">Each scan sits in its own frame. You placed the stations, so their positions are known. ICP starts from them and only fine-tunes the fit.</p>
         <Seg value={method} onChange={setMethod} label="ICP type" options={[{ value: 'point', label: 'Point-to-point' }, { value: 'plane', label: 'Point-to-plane' }]} />
         <p className="hint">Point-to-plane usually fits walls and roads faster and more exactly.</p>
         <Slider label="Match distance" value={maxDist} min={0.2} max={5} step={0.1} unit=" m" format={(v) => v.toFixed(1)} onChange={setMaxDist} hint="ICP only pairs points closer than this." />
@@ -224,6 +216,5 @@ export default function TabTls() {
     viewExtras={<>
       <Btn sm variant="primary" icon={<Play size={15} />} onClick={scanAll} busy={busy === 'scan'} disabled={stations.length < 1} testId="scan-toolbar">Scan</Btn>
       <Btn sm icon={<Dots size={15} />} variant={pointsOnly ? 'primary' : ''} onClick={() => setPointsOnly(!pointsOnly)} testId="points-only">{pointsOnly ? 'Show scene' : 'Point cloud'}</Btn>
-      <Btn sm icon={<Eye size={15} />} variant={colourOn ? '' : 'primary'} onClick={() => setColourOn(!colourOn)} testId="tls-colour">{colourOn ? 'Colour on' : 'Colour off'}</Btn>
     </>} />;
 }
