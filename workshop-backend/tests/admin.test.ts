@@ -7,7 +7,7 @@ import { sydneyToEpoch, epochToSydneyInput, fmtDuration } from '../public/admin/
 describe('admin authentication', () => {
   it('every admin endpoint needs a session', async () => {
     const ctx = setup(); const a = admin(ctx);
-    for (const [m, p] of [['GET', 'workshop'], ['PUT', 'config'], ['POST', 'workshop/start'], ['POST', 'workshop/disable'], ['POST', 'workshop/extend'], ['POST', 'workshop/end'], ['GET', 'codes'], ['POST', 'codes'], ['POST', 'codes/revoke'], ['POST', 'logout']] as const)
+    for (const [m, p] of [['GET', 'workshop'], ['PUT', 'config'], ['POST', 'workshop-start'], ['POST', 'workshop-disable'], ['POST', 'workshop-extend'], ['POST', 'workshop-end'], ['GET', 'codes'], ['POST', 'codes'], ['POST', 'codes-revoke'], ['POST', 'logout']] as const)
       expect((await a.call(m, p, {})).status, `${m} ${p}`).toBe(401);
     expect((await a.call('GET', 'session')).body).toEqual({ authenticated: false });
   });
@@ -28,10 +28,10 @@ describe('admin authentication', () => {
   it('requires the CSRF token and a same-site origin for changes', async () => {
     const ctx = setup(); const a = admin(ctx); await a.login();
     const good = a.csrf; a.csrf = '';
-    expect((await a.call('POST', 'workshop/disable')).status).toBe(403);
-    a.csrf = 'forged'; expect((await a.call('POST', 'workshop/disable')).status).toBe(403);
-    a.csrf = good; expect((await a.call('POST', 'workshop/disable', {}, { origin: 'https://evil.example' })).status).toBe(403);
-    expect((await a.call('POST', 'workshop/disable', {}, { origin: 'https://admin.example' })).status).toBe(200);
+    expect((await a.call('POST', 'workshop-disable')).status).toBe(403);
+    a.csrf = 'forged'; expect((await a.call('POST', 'workshop-disable')).status).toBe(403);
+    a.csrf = good; expect((await a.call('POST', 'workshop-disable', {}, { origin: 'https://evil.example' })).status).toBe(403);
+    expect((await a.call('POST', 'workshop-disable', {}, { origin: 'https://admin.example' })).status).toBe(200);
   });
   it('a forged or tampered cookie is not a session', async () => {
     const ctx = setup(); const a = admin(ctx); await a.login();
@@ -59,6 +59,20 @@ describe('admin authentication', () => {
     const ctx = setup(); const a = admin(ctx); await a.login();
     expect((await a.call('PUT', 'config', { maxPerStudent: 12, rpm: 3 })).status).toBe(200);
     for (const bad of [{ rpm: 0 }, { maxOutputTokens: 100000 }, { maxPerStudent: 'x' }, { tokenBudget: -1 }]) expect((await a.call('PUT', 'config', bad)).status).toBe(400);
+  });
+});
+
+describe('routing on Vercel', () => {
+  it('every admin and student route is a single path segment (nested paths are not routed by the [...route] files)', async () => {
+    const { readFileSync } = await import('node:fs');
+    const src = readFileSync('lib/handlers.ts', 'utf8'); // tests run from the backend folder
+    const routes = [...src.matchAll(/case '(?:GET|POST|PUT) ([^']+)'/g)].map((m) => m[1]);
+    expect(routes.length).toBeGreaterThan(10);
+    for (const r of routes) expect(r, r).not.toContain('/');
+  });
+  it('codes cannot be made before a workshop exists', async () => {
+    const ctx = setup(); const a = admin(ctx); await a.login();
+    expect((await a.call('POST', 'codes', { count: 1 })).status).toBe(400);
   });
 });
 

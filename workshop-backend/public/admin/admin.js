@@ -64,17 +64,17 @@ function render() {
 
 document.addEventListener('click', (e) => {
   const b = e.target.closest('button'); if (!b) return;
-  if (b.dataset.start) run(async () => { await api('POST', 'workshop/start', { durationMinutes: Number(b.dataset.start) }); toast('Workshop started'); await refresh(); });
-  if (b.dataset.extend) run(async () => { await api('POST', 'workshop/extend', { minutes: Number(b.dataset.extend) }); toast('End time updated'); await refresh(); });
-  if (b.dataset.revoke && confirm('Revoke this code?')) run(async () => { await api('POST', 'codes/revoke', { id: b.dataset.revoke }); await refresh(); });
+  if (b.dataset.start) run(async () => { await api('POST', 'workshop-start', { durationMinutes: Number(b.dataset.start) }); toast('Workshop started'); await refresh(); });
+  if (b.dataset.extend) run(async () => { await api('POST', 'workshop-extend', { minutes: Number(b.dataset.extend) }); toast('End time updated'); await refresh(); });
+  if (b.dataset.revoke && confirm('Revoke this code?')) run(async () => { await api('POST', 'codes-revoke', { id: b.dataset.revoke }); await refresh(); });
 });
-$('disable').addEventListener('click', () => confirm('Turn the workshop off now? Every code stops working immediately.') && run(async () => { await api('POST', 'workshop/disable'); toast('Workshop is off'); await refresh(); }));
-$('applyEnd').addEventListener('click', () => run(async () => { await api('POST', 'workshop/end', { endAt: sydneyToEpoch($('endExact').value) }); toast('End time updated'); await refresh(); }));
+$('disable').addEventListener('click', () => confirm('Turn the workshop off now? Every code stops working immediately.') && run(async () => { await api('POST', 'workshop-disable'); toast('Workshop is off'); await refresh(); }));
+$('applyEnd').addEventListener('click', () => run(async () => { await api('POST', 'workshop-end', { endAt: sydneyToEpoch($('endExact').value) }); toast('End time updated'); await refresh(); }));
 $('schedule').addEventListener('click', () => run(async () => {
   if (!$('startAt').value || !$('endAt').value) throw new Error('Choose a start and an end');
-  await api('POST', 'workshop/start', { startAt: sydneyToEpoch($('startAt').value), endAt: sydneyToEpoch($('endAt').value) }); toast('Workshop scheduled'); await refresh();
+  await api('POST', 'workshop-start', { startAt: sydneyToEpoch($('startAt').value), endAt: sydneyToEpoch($('endAt').value) }); toast('Workshop scheduled'); await refresh();
 }));
-$('deleteData').addEventListener('click', () => confirm('Delete every student record for this workshop (codes, names, places, usage)? This cannot be undone.') && run(async () => { await api('POST', 'data/delete'); toast('Student records deleted'); await refresh(); }));
+$('deleteData').addEventListener('click', () => confirm('Delete every student record for this workshop (codes, names, places, usage)? This cannot be undone.') && run(async () => { await api('POST', 'data-delete'); toast('Student records deleted'); await refresh(); }));
 $('saveLimits').addEventListener('click', () => run(async () => {
   const v = {}; for (const f of $('limitsForm').elements) if (f.name) v[f.name] = Number(f.value);
   await api('PUT', 'config', v); toast('Limits saved'); await refresh();

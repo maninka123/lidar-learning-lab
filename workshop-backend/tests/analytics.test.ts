@@ -83,11 +83,11 @@ describe('retention and deletion', () => {
     const ctx = setup(); const a = await startWorkshop(ctx); const [c] = await makeCodes(a, 2); await student(ctx)('validate', c.code, { name: 'Lee' }, { headers: SYD });
     for (const bad of [0, 400, 'x']) expect((await a.call('PUT', 'config', { retentionDays: bad })).status).toBe(400);
     expect((await a.call('PUT', 'config', { retentionDays: 7 })).status).toBe(200);
-    expect((await a.call('POST', 'data/delete')).status).toBe(200);
+    expect((await a.call('POST', 'data-delete')).status).toBe(200);
     expect(dump(ctx)).not.toContain('Lee'); expect((await view(a)).perStudent).toHaveLength(0);
     expect((await student(ctx)('validate', c.code)).body).toMatchObject({ error: 'invalid_code' }); // the codes went with the records
   });
   it('purging needs an administrator', async () => {
-    const ctx = setup(); expect((await admin(ctx).call('POST', 'data/delete')).status).toBe(401);
+    const ctx = setup(); expect((await admin(ctx).call('POST', 'data-delete')).status).toBe(401);
   });
 });

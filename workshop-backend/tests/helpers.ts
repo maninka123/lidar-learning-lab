@@ -50,7 +50,7 @@ export function admin(ctx: Ctx, ip = '9.9.9.9') {
 export async function startWorkshop(ctx: Ctx, hours = 3, limits: Record<string, number> = {}) {
   const a = admin(ctx); await a.login();
   if (Object.keys(limits).length) { const r = await a.call('PUT', 'config', limits); if (r.status !== 200) throw new Error(JSON.stringify(r.body)); }
-  const r = await a.call('POST', 'workshop/start', { durationMinutes: hours * 60 });
+  const r = await a.call('POST', 'workshop-start', { durationMinutes: hours * 60 });
   if (r.status !== 200) throw new Error(JSON.stringify(r.body));
   return a;
 }

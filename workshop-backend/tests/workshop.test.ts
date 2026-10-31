@@ -17,7 +17,7 @@ describe('workshop on/off, schedule, expiry, extend', () => {
 
   it('a future workshop is scheduled, becomes active at its start and rejects students before that', async () => {
     const ctx = setup(); const a = admin(ctx); await a.login();
-    await a.call('POST', 'workshop/start', { startAt: T0 + 2 * HOUR, endAt: T0 + 5 * HOUR });
+    await a.call('POST', 'workshop-start', { startAt: T0 + 2 * HOUR, endAt: T0 + 5 * HOUR });
     expect((await publicStatus(ctx)).body).toMatchObject({ available: false, status: 'scheduled', startsAt: T0 + 2 * HOUR });
     const [c] = await makeCodes(a, 1);
     expect((await student(ctx)('chat', c.code)).status).toBe(403);
@@ -27,24 +27,24 @@ describe('workshop on/off, schedule, expiry, extend', () => {
 
   it('extending and shortening move the end; the dashboard can also switch it off immediately', async () => {
     const ctx = setup(); const a = await startWorkshop(ctx, 3); const [c] = await makeCodes(a, 1);
-    await a.call('POST', 'workshop/extend', { minutes: 120 });
+    await a.call('POST', 'workshop-extend', { minutes: 120 });
     ctx.clock.t = T0 + 4 * HOUR; expect((await student(ctx)('chat', c.code)).status).toBe(200);
     ctx.clock.t = T0;
-    await a.call('POST', 'workshop/extend', { minutes: -60 });
+    await a.call('POST', 'workshop-extend', { minutes: -60 });
     expect(((await a.call('GET', 'workshop')).body as { endAt: number }).endAt).toBe(T0 + 4 * HOUR);
     ctx.clock.t = T0 + 4 * HOUR; expect((await student(ctx)('chat', c.code)).status).toBe(403);
     ctx.clock.t = T0 + HOUR; expect((await student(ctx)('chat', c.code)).status).toBe(200);
-    await a.call('POST', 'workshop/disable');
+    await a.call('POST', 'workshop-disable');
     expect((await student(ctx)('chat', c.code)).body).toMatchObject({ error: 'workshop_inactive' });
   });
 
   it('rejects impossible windows and refuses to extend an expired workshop', async () => {
     const ctx = setup(); const a = admin(ctx); await a.login();
-    expect((await a.call('POST', 'workshop/start', { startAt: T0, endAt: T0 - 1 })).status).toBe(400);
-    expect((await a.call('POST', 'workshop/start', { durationMinutes: 60 * 24 * 30 })).status).toBe(400);
-    await a.call('POST', 'workshop/start', { durationMinutes: 60 });
+    expect((await a.call('POST', 'workshop-start', { startAt: T0, endAt: T0 - 1 })).status).toBe(400);
+    expect((await a.call('POST', 'workshop-start', { durationMinutes: 60 * 24 * 30 })).status).toBe(400);
+    await a.call('POST', 'workshop-start', { durationMinutes: 60 });
     ctx.clock.t = T0 + 2 * HOUR;
-    expect((await a.call('POST', 'workshop/extend', { minutes: 60 })).status).toBe(400);
+    expect((await a.call('POST', 'workshop-extend', { minutes: 60 })).status).toBe(400);
   });
 
   it('codes die with the workshop: after expiry nothing works, and a new workshop starts clean', async () => {
@@ -53,7 +53,7 @@ describe('workshop on/off, schedule, expiry, extend', () => {
     ctx.clock.t = T0 + 2 * HOUR;
     expect((await student(ctx)('chat', c.code)).body).toMatchObject({ error: 'expired' });
     expect((await student(ctx)('validate', c.code)).status).toBe(403);
-    await a.call('POST', 'workshop/start', { durationMinutes: 60 });
+    await a.call('POST', 'workshop-start', { durationMinutes: 60 });
     expect((await student(ctx)('chat', c.code)).body).toMatchObject({ error: 'invalid_code' }); // old code does not carry over
     expect(((await a.call('GET', 'workshop')).body as { requests: number }).requests).toBe(0);
   });
@@ -66,7 +66,7 @@ describe('access codes', () => {
     expect((await student(ctx)('validate', c1.code.toLowerCase().replace('-', ' '))).status).toBe(200); // typed loosely
     expect((await student(ctx)('chat', 'AAAAA-AAAAA')).body).toMatchObject({ error: 'invalid_code' });
     expect((await student(ctx)('chat', '')).status).toBe(401);
-    await a.call('POST', 'codes/revoke', { id: c1.id });
+    await a.call('POST', 'codes-revoke', { id: c1.id });
     expect((await student(ctx)('chat', c1.code)).body).toMatchObject({ error: 'revoked' });
     expect((await student(ctx)('chat', c2.code)).status).toBe(200);
     // the plaintext is nowhere in storage

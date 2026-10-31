@@ -152,21 +152,22 @@ export const adminHandler = (deps: Deps) => async (req: Req): Promise<Res> => {
         const p = W.parseLimits(body);
         return p.ok ? save({ ...c, ...p.values }) : err(400, 'bad_request', p.message);
       }
-      case 'POST workshop/start': {
+      case 'POST workshop-start': {
         const dur = num(body.durationMinutes), startAt = body.startAt === undefined ? now : num(body.startAt), endAt = Number.isNaN(dur) ? num(body.endAt) : startAt + dur * 60000;
         const bad = W.checkWindow({ startAt, endAt }, now);
         return bad ? err(400, 'bad_request', bad) : save(W.planWorkshop(c, { startAt, endAt }, now));
       }
-      case 'POST workshop/disable': return save(W.disableWorkshop(c));
-      case 'POST workshop/extend': { const d = num(body.minutes); if (!Number.isFinite(d) || d === 0) return err(400, 'bad_request', 'Give a number of minutes'); const r = W.shiftEnd(c, d * 60000, now); return typeof r === 'string' ? err(400, 'bad_request', r) : save(r); }
-      case 'POST workshop/end': { const r = W.setEnd(c, num(body.endAt), now); return typeof r === 'string' ? err(400, 'bad_request', r) : save(r); }
+      case 'POST workshop-disable': return save(W.disableWorkshop(c));
+      case 'POST workshop-extend': { const d = num(body.minutes); if (!Number.isFinite(d) || d === 0) return err(400, 'bad_request', 'Give a number of minutes'); const r = W.shiftEnd(c, d * 60000, now); return typeof r === 'string' ? err(400, 'bad_request', r) : save(r); }
+      case 'POST workshop-end': { const r = W.setEnd(c, num(body.endAt), now); return typeof r === 'string' ? err(400, 'bad_request', r) : save(r); }
       case 'GET codes': return json(200, { codes: await W.listCodes(deps.store, c.workshopId) });
       case 'POST codes': {
+        if (c.workshopId === W.DEFAULTS.workshopId) return err(400, 'bad_request', 'Start or schedule a workshop first, then generate codes.');
         const r = await W.createCodes(deps.store, c, deps.env.authSecret, num(body.count), String(body.prefix ?? ''), now);
         return 'error' in r ? err(400, 'bad_request', r.error) : json(200, { ok: true, codes: r.codes, note: 'Copy these now. They cannot be shown again.' });
       }
-      case 'POST data/delete': await W.purgeWorkshop(deps.store, c.workshopId); return ok();
-      case 'POST codes/revoke': return (await W.revokeCode(deps.store, c.workshopId, String(body.id ?? ''))) ? ok() : err(404, 'not_found');
+      case 'POST data-delete': await W.purgeWorkshop(deps.store, c.workshopId); return ok();
+      case 'POST codes-revoke': return (await W.revokeCode(deps.store, c.workshopId, String(body.id ?? ''))) ? ok() : err(404, 'not_found');
       default: return err(404, 'not_found');
     }
   });
