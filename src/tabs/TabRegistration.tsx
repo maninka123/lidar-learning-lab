@@ -191,7 +191,7 @@ export default function TabRegistration() {
         </Section>
       ) : (
         <Section title="Let ICP do it">
-          <p className="hint">ICP starts from where B is now. Use Manual to give it a start, or press Random move below.</p>
+          <p className="hint">ICP starts from where B is now. Press Random move to knock B out of place, then run ICP to pull it back.</p>
         <Seg value={method} onChange={setMethod} label="Algorithm" options={[{ value: 'point', label: 'Point-to-point' }, { value: 'plane', label: 'Point-to-plane' }]} />
         <p className="hint">{method === 'point' ? 'Pulls each B point towards its nearest A point. Simple and robust.' : 'Only slides B along the surface direction of A (uses surface normals). Converges faster on flat walls and floors.'}</p>
         <Slider label="Match distance" value={reg.icp.maxCorrDist} min={0.1} max={5} step={0.1} unit=" m" format={(v) => v.toFixed(1)} onChange={(maxCorrDist) => setReg({ icp: { ...reg.icp, maxCorrDist } })} hint="Only pairs closer than this count. Too small: ICP sees nothing. Too large: wrong pairs pull it off." />
@@ -234,7 +234,7 @@ export default function TabRegistration() {
       noPanelTabs
       noEnv
       stats={stats}
-      overlays={<><KindLegend items={[{ color: '#0a84ff', label: 'Cloud A (reference)' }, { color: '#ff9f0a', label: 'Cloud B (to move)' }, { color: '#30d158', label: 'B after ICP' }]} />{matrixBox}</>}
+      overlays={<><KindLegend items={[{ color: '#0a84ff', label: 'Cloud A (reference)' }, { color: '#ff9f0a', label: !auto ? 'Cloud B (to move)' : reg.result ? 'Cloud B (before ICP)' : 'Cloud B (start)' }, ...(auto && reg.result ? [{ color: '#30d158', label: 'B after ICP' }] : [])]} />{matrixBox}</>}
     />
   );
 }
