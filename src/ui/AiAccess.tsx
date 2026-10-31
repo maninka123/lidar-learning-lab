@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { loadWorkshopCode, saveWorkshopCode, useWorkshopStatus, validateWorkshopCode, WorkshopError } from '../apps/workshop';
+import { loadWorkshopCode, loadWorkshopName, saveWorkshopCode, saveWorkshopName, useWorkshopStatus, validateWorkshopCode, WorkshopError } from '../apps/workshop';
 import { saveOwnKey } from '../apps/deepseek';
 
 const fmtEnd = (t?: number) => (t ? new Date(t).toLocaleString(undefined, { weekday: 'short', hour: '2-digit', minute: '2-digit' }) : '');
@@ -11,6 +11,7 @@ const fmtEnd = (t?: number) => (t ? new Date(t).toLocaleString(undefined, { week
 export function AiAccess({ needKey, ownKey, setOwnKey, testId }: { needKey: boolean; ownKey: string; setOwnKey: (k: string) => void; testId?: string }) {
   const w = useWorkshopStatus();
   const [code, setCode] = useState(() => loadWorkshopCode());
+  const [name, setName] = useState(() => loadWorkshopName());
   const [useOwn, setUseOwn] = useState(false);
   const [state, setState] = useState<{ kind: 'idle' | 'checking' | 'ok' | 'bad'; text?: string }>({ kind: 'idle' });
 
@@ -25,7 +26,7 @@ export function AiAccess({ needKey, ownKey, setOwnKey, testId }: { needKey: bool
   const check = async () => {
     const c = code.trim(); if (!c) return;
     setState({ kind: 'checking' });
-    try { const r = await validateWorkshopCode(c); saveWorkshopCode(c); setState({ kind: 'ok', text: `Code accepted. ${r.remainingRequests} AI requests left.` }); }
+    try { const r = await validateWorkshopCode(c, name); saveWorkshopCode(c); saveWorkshopName(name.trim()); setState({ kind: 'ok', text: `Code accepted. ${r.remainingRequests} AI requests left.` }); }
     catch (e) { saveWorkshopCode(''); setState({ kind: 'bad', text: e instanceof WorkshopError ? e.message : 'Could not check the code.' }); }
   };
   return (
@@ -35,6 +36,8 @@ export function AiAccess({ needKey, ownKey, setOwnKey, testId }: { needKey: bool
         <input type="text" value={code} onChange={(e) => { setCode(e.target.value); setState({ kind: 'idle' }); }} onKeyDown={(e) => e.key === 'Enter' && void check()} placeholder="ABCDE-FGHJK" autoComplete="off" spellCheck={false} data-testid="ws-code" style={{ flex: 1 }} />
         <button className="btn sm" onClick={() => void check()} disabled={state.kind === 'checking'} data-testid="ws-check">{state.kind === 'checking' ? 'Checking…' : 'Use code'}</button>
       </div>
+      <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="Your name (optional)" maxLength={30} autoComplete="off" data-testid="ws-name" />
+      <span className="caption" data-testid="ws-privacy">With a code, your instructor can see your name (if you add one), your approximate city and country, when you were last active and how much AI you used. That is all, it is only recorded when you use a code{w.retentionDays ? `, and it is deleted ${w.retentionDays} days after the workshop` : ''}.</span>
       {state.text && <span className="caption" role="status" style={{ color: state.kind === 'bad' ? '#c4271c' : undefined }} data-testid="ws-msg">{state.text}</span>}
       <button className="btn sm" onClick={() => setUseOwn(true)} style={{ justifySelf: 'start' }}>Use my own DeepSeek key instead</button>
     </div>

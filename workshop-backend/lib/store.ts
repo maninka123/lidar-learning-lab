@@ -15,6 +15,7 @@ export interface Store {
   hget(key: string, field: string): Promise<string | null>;
   hgetall(key: string): Promise<Record<string, string> | null>;
   sadd(key: string, member: string): Promise<void>;
+  srem(key: string, member: string): Promise<void>;
   smembers(key: string): Promise<string[]>;
   lpush(key: string, value: string): Promise<void>;
   ltrim(key: string, start: number, stop: number): Promise<void>;
@@ -37,6 +38,7 @@ export function upstashStore(url: string, token: string): Store {
     hget: (k, f) => wrap(async () => (await r.hget<string | null>(k, f)) ?? null),
     hgetall: (k) => wrap(async () => { const o = await r.hgetall<Record<string, string>>(k); return o && Object.keys(o).length ? o : null; }),
     sadd: (k, m) => wrap(async () => { await r.sadd(k, m); }),
+    srem: (k, m) => wrap(async () => { await r.srem(k, m); }),
     smembers: (k) => wrap(() => r.smembers(k) as Promise<string[]>),
     lpush: (k, v) => wrap(async () => { await r.lpush(k, v); }),
     ltrim: (k, a, b) => wrap(async () => { await r.ltrim(k, a, b); }),
@@ -62,6 +64,7 @@ export class MemoryStore implements Store {
   async hget(k: string, f: string) { this.chk(); return this.h.get(k)?.get(f) ?? null; }
   async hgetall(k: string) { this.chk(); const m = this.h.get(k); return m ? Object.fromEntries(m) : null; }
   async sadd(k: string, m: string) { this.chk(); const s = this.s.get(k) ?? new Set(); this.s.set(k, s); s.add(m); }
+  async srem(k: string, m: string) { this.chk(); this.s.get(k)?.delete(m); }
   async smembers(k: string) { this.chk(); return [...(this.s.get(k) ?? [])]; }
   async lpush(k: string, v: string) { this.chk(); const l = this.l.get(k) ?? []; this.l.set(k, l); l.unshift(v); }
   async ltrim(k: string, a: number, b: number) { this.chk(); const l = this.l.get(k); if (l) this.l.set(k, l.slice(a, b + 1)); }

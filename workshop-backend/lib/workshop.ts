@@ -14,12 +14,13 @@ export interface WorkshopConfig {
   maxStudents: number;
   priceInPerM: number; // USD per million tokens; 0 = unknown, so no spend estimate is shown
   priceOutPerM: number;
+  retentionDays: number; // participation records are deleted this long after the workshop ends
   updatedAt: number;
 }
 export type Status = 'off' | 'scheduled' | 'active' | 'expired';
 
-export const DEFAULTS: WorkshopConfig = { workshopId: 'w0', enabled: false, startAt: 0, endAt: 0, maxPerStudent: 40, maxTotal: 1500, maxOutputTokens: 1500, rpm: 6, tokenBudget: 0, maxStudents: 40, priceInPerM: 0, priceOutPerM: 0, updatedAt: 0 };
-export const LIMITS = { maxPerStudent: [1, 1000], maxTotal: [1, 100000], maxOutputTokens: [50, 4000], rpm: [1, 60], tokenBudget: [0, 1e9], maxStudents: [1, 500], priceInPerM: [0, 1000], priceOutPerM: [0, 1000] } as const;
+export const DEFAULTS: WorkshopConfig = { workshopId: 'w0', enabled: false, startAt: 0, endAt: 0, maxPerStudent: 40, maxTotal: 1500, maxOutputTokens: 1500, rpm: 6, tokenBudget: 0, maxStudents: 40, priceInPerM: 0, priceOutPerM: 0, retentionDays: 30, updatedAt: 0 };
+export const LIMITS = { maxPerStudent: [1, 1000], maxTotal: [1, 100000], maxOutputTokens: [50, 4000], rpm: [1, 60], tokenBudget: [0, 1e9], maxStudents: [1, 500], priceInPerM: [0, 1000], priceOutPerM: [0, 1000], retentionDays: [1, 365] } as const;
 export const MODELS = ['deepseek-v4-flash'] as const; // allowlist: the cheap model the app already uses
 export const MAX_DURATION_MS = 14 * 864e5;
 
@@ -28,6 +29,9 @@ export const k = {
   errors: 'ws:errors',
   totals: (id: string) => `ws:${id}:totals`,
   codes: (id: string) => `ws:${id}:codes`,
+  meta: (id: string) => `ws:${id}:meta`,
+  history: 'ws:history',
+  lastPurge: 'ws:lastPurge',
   code: (id: string, cid: string) => `ws:${id}:code:${cid}`,
   lookup: (id: string, h: string) => `ws:${id}:lookup:${h}`,
   rate: (id: string, cid: string, minute: number) => `ws:${id}:rate:${cid}:${minute}`,
@@ -96,9 +100,12 @@ export function randomCode(): string {
   return `${s.slice(0, 5)}-${s.slice(5)}`; // 50 bits
 }
 
-export interface CodeRecord { id: string; label: string; createdAt: number; revoked: boolean; requests: number; tokensIn: number; tokensOut: number; lastUsed: number }
+export interface CodeRecord {
+  id: string; label: string; createdAt: number; revoked: boolean; requests: number; tokensIn: number; tokensOut: number; lastUsed: number;
+  name: string; city: string; country: string; firstSeen: number; lastSeen: number;
+}
 const num = (v: string | undefined) => Number(v ?? 0) || 0;
-const toRecord = (id: string, h: Record<string, string>): CodeRecord => ({ id, label: h.label ?? '', createdAt: num(h.createdAt), revoked: h.revoked === '1', requests: num(h.requests), tokensIn: num(h.tokensIn), tokensOut: num(h.tokensOut), lastUsed: num(h.lastUsed) });
+const toRecord = (id: string, h: Record<string, string>): CodeRecord => ({ id, label: h.label ?? '', createdAt: num(h.createdAt), revoked: h.revoked === '1', requests: num(h.requests), tokensIn: num(h.tokensIn), tokensOut: num(h.tokensOut), lastUsed: num(h.lastUsed), name: h.name ?? '', city: h.city ?? '', country: h.country ?? '', firstSeen: num(h.firstSeen), lastSeen: num(h.lastSeen) });
 
 export async function listCodes(s: Store, workshopId: string): Promise<CodeRecord[]> {
   const ids = await s.smembers(k.codes(workshopId));
@@ -115,8 +122,9 @@ export async function createCodes(s: Store, c: WorkshopConfig, secret: string, c
   const base = existing;
   for (let i = 0; i < count; i++) {
     const code = randomCode(), id = randomBytes(4).toString('hex'), label = `${labelPrefix.trim().slice(0, 30) || 'Student'} ${base + i + 1}`;
-    await s.hset(k.code(c.workshopId, id), { label, createdAt: String(now), revoked: '0', requests: '0', tokensIn: '0', tokensOut: '0', lastUsed: '0' });
-    await s.set(k.lookup(c.workshopId, codeHash(secret, code)), id);
+    const hash = codeHash(secret, code); // a keyed one-way hash: kept so the record can be deleted later, useless for guessing the code
+    await s.hset(k.code(c.workshopId, id), { label, createdAt: String(now), revoked: '0', requests: '0', tokensIn: '0', tokensOut: '0', lastUsed: '0', hash, firstSeen: '0', lastSeen: '0' });
+    await s.set(k.lookup(c.workshopId, hash), id);
     await s.sadd(k.codes(c.workshopId), id);
     out.push({ id, label, code });
   }
@@ -186,6 +194,63 @@ export async function recentErrors(s: Store): Promise<ErrorEntry[]> {
   return (await s.lrange(k.errors, 0, 19)).map((x) => { try { return JSON.parse(x) as ErrorEntry; } catch { return null; } }).filter((x): x is ErrorEntry => !!x);
 }
 
+// ------------------------------------------------------------------ participant analytics
+export const ACTIVE_WINDOW_MS = 10 * 60e3;
+
+/** A display name typed by the student: short, plain text. */
+export function cleanName(v: unknown): string {
+  if (typeof v !== 'string') return '';
+  return v.replace(/[\u0000-\u001f\u007f<>"'`&]/g, '').replace(/\s+/g, ' ').trim().slice(0, 30);
+}
+/** Approximate place from Vercel's edge headers: city and country only. The IP address itself is never read here or stored. */
+export function geoFrom(headers: Record<string, string>): { city: string; country: string } {
+  let city = headers['x-vercel-ip-city'] ?? '';
+  try { city = decodeURIComponent(city); } catch { /* keep as is */ }
+  city = city.replace(/[\u0000-\u001f\u007f<>"'`&]/g, '').trim().slice(0, 60);
+  const c = (headers['x-vercel-ip-country'] ?? '').toUpperCase();
+  return { city, country: /^[A-Z]{2}$/.test(c) ? c : '' };
+}
+
+/** Record that this participant was active now. The first time sets "joined". */
+export async function touchParticipant(s: Store, workshopId: string, rec: CodeRecord, now: number, geo: { city: string; country: string }, name?: string) {
+  const v: Record<string, string> = { lastSeen: String(now) };
+  if (!rec.firstSeen) v.firstSeen = String(now);
+  if (geo.country || geo.city) { v.city = geo.city; v.country = geo.country; }
+  if (name) v.name = name;
+  await s.hset(k.code(workshopId, rec.id), v);
+}
+
+/** Remember that this workshop exists and when it ends, so its participant records can be deleted after the retention period. */
+export async function registerWorkshop(s: Store, c: WorkshopConfig) {
+  if (c.workshopId === DEFAULTS.workshopId) return;
+  await s.sadd(k.history, c.workshopId);
+  await s.set(k.meta(c.workshopId), JSON.stringify({ startAt: c.startAt, endAt: c.endAt }));
+}
+
+/** Delete everything about the participants of one workshop: codes, names, places and usage. */
+export async function purgeWorkshop(s: Store, workshopId: string) {
+  for (const cid of await s.smembers(k.codes(workshopId))) {
+    const h = await s.hgetall(k.code(workshopId, cid));
+    if (h?.hash) await s.del(k.lookup(workshopId, h.hash));
+    await s.del(k.code(workshopId, cid));
+  }
+  await s.del(k.codes(workshopId)); await s.del(k.totals(workshopId)); await s.del(k.meta(workshopId)); await s.srem(k.history, workshopId);
+}
+
+/** Delete the records of workshops that ended more than `retentionDays` ago. Runs at most every 10 minutes. */
+export async function purgeExpired(s: Store, c: WorkshopConfig, now: number): Promise<number> {
+  const last = Number((await s.get(k.lastPurge)) ?? 0);
+  if (now - last < 600e3) return 0;
+  await s.set(k.lastPurge, String(now));
+  let n = 0;
+  for (const id of await s.smembers(k.history)) {
+    const raw = await s.get(k.meta(id));
+    let endAt = 0; try { endAt = raw ? (JSON.parse(raw) as { endAt: number }).endAt : 0; } catch { /* treat as unknown */ }
+    if (!endAt || endAt + c.retentionDays * 864e5 < now) { await purgeWorkshop(s, id); n++; }
+  }
+  return n;
+}
+
 // ------------------------------------------------------------------ statistics
 export async function stats(s: Store, c: WorkshopConfig, now: number) {
   const t = (await s.hgetall(k.totals(c.workshopId))) ?? {}, codes = await listCodes(s, c.workshopId);
@@ -196,7 +261,8 @@ export async function stats(s: Store, c: WorkshopConfig, now: number) {
     requests, requestsRemaining: Math.max(0, c.maxTotal - requests), tokensIn, tokensOut,
     tokenBudget: c.tokenBudget, tokensRemaining: c.tokenBudget > 0 ? Math.max(0, c.tokenBudget - tokensIn - tokensOut - num(t.reserved)) : null,
     estimatedSpendUsd: priced ? (tokensIn * c.priceInPerM + tokensOut * c.priceOutPerM) / 1e6 : null,
-    codes: codes.length, activeStudents: codes.filter((r) => r.requests > 0).length, perStudent: codes.map((r) => ({ ...r, remaining: Math.max(0, c.maxPerStudent - r.requests) })),
+    codes: codes.length, activeStudents: codes.filter((r) => r.requests > 0).length, retentionDays: c.retentionDays, joined: codes.filter((r) => r.firstSeen > 0).length, activeNow: codes.filter((r) => r.lastSeen > now - ACTIVE_WINDOW_MS).length, activeWindowMin: ACTIVE_WINDOW_MS / 60e3,
+    perStudent: codes.map((r) => ({ ...r, remaining: Math.max(0, c.maxPerStudent - r.requests), costUsd: priced ? (r.tokensIn * c.priceInPerM + r.tokensOut * c.priceOutPerM) / 1e6 : null })),
     errors: (await recentErrors(s)).filter((e) => e.workshopId === c.workshopId || e.workshopId === '-'),
   };
 }

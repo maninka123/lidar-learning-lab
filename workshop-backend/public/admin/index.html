@@ -46,6 +46,7 @@
         <label>Requests per minute (each student)<input name="rpm" type="number" min="1" max="60"></label>
         <label>Token budget (0 = none)<input name="tokenBudget" type="number" min="0"></label>
         <label>Max students<input name="maxStudents" type="number" min="1" max="500"></label>
+        <label>Keep student records (days)<input name="retentionDays" type="number" min="1" max="365"></label>
         <label>Price in, USD per 1M tokens<input name="priceInPerM" type="number" min="0" step="0.001"></label>
         <label>Price out, USD per 1M tokens<input name="priceOutPerM" type="number" min="0" step="0.001"></label>
       </form>
@@ -61,10 +62,16 @@
     </section>
 
     <section class="card">
-      <h2>Usage</h2>
+      <h2>Students</h2>
+      <div class="grid g4" id="studentTiles"></div>
+      <div style="overflow:auto;margin-top:12px"><table><thead><tr><th>Student</th><th>Where (approx.)</th><th>Joined</th><th>Last active</th><th>Requests</th><th>Tokens</th><th>Est. cost</th><th></th></tr></thead><tbody id="students"></tbody></table></div>
+      <p class="muted" id="privacy">What is kept: an optional name, approximate city and country (from the connection, never the IP address), join and last-activity times, and AI usage. Only people who enter a workshop code are recorded.</p>
+      <div class="row"><button id="deleteData" class="danger">Delete all student records now</button></div>
+    </section>
+
+    <section class="card">
+      <h2>Workshop usage</h2>
       <div class="grid g4" id="tiles"></div>
-      <h2 style="margin-top:20px">Students</h2>
-      <div style="overflow:auto"><table><thead><tr><th>Label</th><th>Requests</th><th>Left</th><th>Tokens</th><th>Last used</th><th></th></tr></thead><tbody id="students"></tbody></table></div>
       <h2 style="margin-top:20px">Recent errors</h2>
       <div style="overflow:auto"><table><thead><tr><th>Time</th><th>Kind</th><th>Status</th><th>Student</th></tr></thead><tbody id="errors"></tbody></table></div>
     </section>

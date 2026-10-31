@@ -79,6 +79,25 @@ Go to `https://<your-project>.vercel.app/admin` and log in. Anyone can open that
 * **Revoke the dedicated DeepSeek key** in the DeepSeek platform, and optionally delete `DEEPSEEK_API_KEY` from Vercel.
 * **Check normal behaviour**: open the lab, go to *Scene Graphs & 3D AI*. No code box should appear, and the AI step should ask for your own key as before. Everything offline works throughout.
 
+## Student analytics (privacy-conscious)
+
+The dashboard's **Students** section shows who has joined and what they have used:
+
+* totals: students joined (of the codes issued), students active now (activity in the last 10 minutes), AI requests, estimated cost;
+* a table with each student's name (or code label), approximate city and country, first joined, last active, requests (and how many are left), tokens and estimated cost. Cost appears only if you entered DeepSeek's prices under *Limits*.
+
+What is collected, and only for people who enter a workshop code (nothing about visitors who just use the lab):
+
+| Kept | How |
+|---|---|
+| Optional display name | typed by the student when entering the code (30 characters) |
+| Approximate city and country | from Vercel's edge geolocation headers; no coordinates |
+| Joined / last-active times, request and token counts | counted by the backend |
+
+**Not kept:** IP addresses (they are never stored; a short-lived one-way tag is used only for rate limiting and expires within minutes), prompts, answers, or browser identifiers. Students see a notice next to the code box describing exactly this and the retention period.
+
+**Retention:** *Keep student records (days)* under *Limits* (default 30). After that many days past the workshop's end, the backend deletes the codes, names, places and usage for that workshop automatically (checked as the dashboard or students use the service, at most every 10 minutes). *Delete all student records now* removes them immediately.
+
 ## What protects your key and budget
 
 * The DeepSeek key exists only in Vercel's environment. The student app never receives it, and it is not in Git, the build, responses, errors or logs. The backend only forwards chat requests with a fixed model (`deepseek-v4-flash`), message-shape checks, a size limit (about 450 KB), a capped `max_tokens`, and a 55 s timeout. It is not an open proxy.

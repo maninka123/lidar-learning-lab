@@ -13,9 +13,12 @@ export const setWorkshopApi = (url: string) => { api = url.replace(/\/+$/, ''); 
 
 const CODE_KEY = 'lidar-lab-workshop-code';
 export const loadWorkshopCode = (): string => { try { return localStorage.getItem(CODE_KEY) ?? ''; } catch { return ''; } };
+const NAME_KEY = 'lidar-lab-workshop-name';
+export const loadWorkshopName = (): string => { try { return localStorage.getItem(NAME_KEY) ?? ''; } catch { return ''; } };
+export const saveWorkshopName = (n: string): void => { try { if (n) localStorage.setItem(NAME_KEY, n); else localStorage.removeItem(NAME_KEY); } catch { /* ignore */ } };
 export const saveWorkshopCode = (c: string): void => { try { if (c) localStorage.setItem(CODE_KEY, c); else localStorage.removeItem(CODE_KEY); } catch { /* ignore */ } };
 
-export interface WorkshopStatus { available: boolean; status: 'active' | 'scheduled' | 'inactive'; endsAt?: number; startsAt?: number; maxOutputTokens?: number }
+export interface WorkshopStatus { available: boolean; status: 'active' | 'scheduled' | 'inactive'; endsAt?: number; startsAt?: number; maxOutputTokens?: number; retentionDays?: number }
 let status: WorkshopStatus = { available: false, status: 'inactive' };
 let fetchedAt = 0;
 const listeners = new Set<() => void>();
@@ -29,7 +32,7 @@ export async function refreshWorkshopStatus(timeoutMs = 4000): Promise<WorkshopS
     try {
       const r = await fetch(`${api}/api/public/status`, { signal: ctl.signal, cache: 'no-store' });
       const j = r.ok ? ((await r.json()) as Partial<WorkshopStatus>) : null;
-      if (j && typeof j.available === 'boolean') next = { available: j.available, status: j.status === 'active' || j.status === 'scheduled' ? j.status : 'inactive', endsAt: j.endsAt, startsAt: j.startsAt, maxOutputTokens: j.maxOutputTokens };
+      if (j && typeof j.available === 'boolean') next = { available: j.available, status: j.status === 'active' || j.status === 'scheduled' ? j.status : 'inactive', endsAt: j.endsAt, startsAt: j.startsAt, maxOutputTokens: j.maxOutputTokens, retentionDays: j.retentionDays };
     } catch { /* unreachable: behave as if there is no workshop */ } finally { clearTimeout(timer); }
   }
   fetchedAt = Date.now();
@@ -80,8 +83,8 @@ async function post(route: 'chat' | 'validate', code: string, body: unknown): Pr
 }
 
 /** Check a code and return what is left of it. */
-export async function validateWorkshopCode(code: string): Promise<{ remainingRequests: number; endsAt: number }> {
-  const { j } = await post('validate', code, {});
+export async function validateWorkshopCode(code: string, name = ''): Promise<{ remainingRequests: number; endsAt: number }> {
+  const { j } = await post('validate', code, name.trim() ? { name: name.trim().slice(0, 30) } : {});
   return { remainingRequests: j?.remainingRequests ?? 0, endsAt: j?.endsAt ?? 0 };
 }
 

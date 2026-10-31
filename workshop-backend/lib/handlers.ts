@@ -28,7 +28,7 @@ export const publicHandler = (deps: Deps) => async (req: Req): Promise<Res> => {
   // Fail closed: if anything is wrong the student app simply sees "no workshop" and keeps its normal behaviour.
   const res = await guarded(req, deps, async () => {
     const c = await W.loadConfig(deps.store), st = W.statusOf(c, deps.now());
-    const body = st === 'active' ? { available: true, status: 'active', endsAt: c.endAt, maxOutputTokens: c.maxOutputTokens } : st === 'scheduled' ? { available: false, status: 'scheduled', startsAt: c.startAt } : { available: false, status: 'inactive' };
+    const body = st === 'active' ? { available: true, status: 'active', endsAt: c.endAt, maxOutputTokens: c.maxOutputTokens, retentionDays: c.retentionDays } : st === 'scheduled' ? { available: false, status: 'scheduled', startsAt: c.startAt } : { available: false, status: 'inactive' };
     return json(200, body);
   }, true);
   return res.status >= 500 ? { ...json(200, { available: false, status: 'inactive' }), headers: res.headers } : res;
@@ -82,7 +82,11 @@ export const studentHandler = (deps: Deps) => async (req: Req): Promise<Res> => 
     if (!rec) { await deps.store.incr(failKey); await deps.store.expire(failKey, 120); return err(401, 'invalid_code', 'That access code is not valid.'); }
     if (rec.revoked) return err(403, 'revoked', DENIED.revoked[2]);
 
-    if (route === 'validate') return json(200, { ok: true, label: rec.label, remainingRequests: Math.max(0, c.maxPerStudent - rec.requests), maxOutputTokens: c.maxOutputTokens, endsAt: c.endAt });
+    const geo = W.geoFrom(req.headers); // approximate place from Vercel's headers; the address itself is not used
+    await W.touchParticipant(deps.store, c.workshopId, rec, now, geo, route === 'validate' ? W.cleanName((req.body as { name?: unknown } | null)?.name) : undefined);
+    await W.purgeExpired(deps.store, c, now).catch(() => 0);
+
+    if (route === 'validate') return json(200, { ok: true, label: rec.label, remainingRequests: Math.max(0, c.maxPerStudent - rec.requests), maxOutputTokens: c.maxOutputTokens, endsAt: c.endAt, retentionDays: c.retentionDays });
 
     const input = parseChat(req.body, c.maxOutputTokens);
     if (typeof input === 'string') return err(400, 'bad_request', input);
@@ -139,11 +143,11 @@ export const adminHandler = (deps: Deps) => async (req: Req): Promise<Res> => {
 
     const body = (req.body && typeof req.body === 'object' ? req.body : {}) as Record<string, unknown>;
     const c = await W.loadConfig(deps.store);
-    const save = async (n: W.WorkshopConfig) => { await W.saveConfig(deps.store, n, now); return ok({ config: await W.loadConfig(deps.store), status: W.statusOf(n, now) }); };
+    const save = async (n: W.WorkshopConfig) => { await W.saveConfig(deps.store, n, now); await W.registerWorkshop(deps.store, n); return ok({ config: await W.loadConfig(deps.store), status: W.statusOf(n, now) }); };
 
     switch (`${req.method} ${route}`) {
       case 'POST logout': await destroySession(deps, session); return json(200, { ok: true }, { cookies: [clearCookie()] });
-      case 'GET workshop': return json(200, { config: c, ...(await W.stats(deps.store, c, now)) });
+      case 'GET workshop': await W.purgeExpired(deps.store, c, now); return json(200, { config: c, ...(await W.stats(deps.store, c, now)) });
       case 'PUT config': {
         const p = W.parseLimits(body);
         return p.ok ? save({ ...c, ...p.values }) : err(400, 'bad_request', p.message);
@@ -161,6 +165,7 @@ export const adminHandler = (deps: Deps) => async (req: Req): Promise<Res> => {
         const r = await W.createCodes(deps.store, c, deps.env.authSecret, num(body.count), String(body.prefix ?? ''), now);
         return 'error' in r ? err(400, 'bad_request', r.error) : json(200, { ok: true, codes: r.codes, note: 'Copy these now. They cannot be shown again.' });
       }
+      case 'POST data/delete': await W.purgeWorkshop(deps.store, c.workshopId); return ok();
       case 'POST codes/revoke': return (await W.revokeCode(deps.store, c.workshopId, String(body.id ?? ''))) ? ok() : err(404, 'not_found');
       default: return err(404, 'not_found');
     }

@@ -58,7 +58,7 @@ export async function makeCodes(a: ReturnType<typeof admin>, count = 3) { return
 
 export const student = (ctx: Ctx) => {
   const h = studentHandler(ctx.deps);
-  return (route: 'chat' | 'validate', code: string, body?: unknown, o: { ip?: string; origin?: string | null; tooLarge?: boolean } = {}) =>
-    h(mk('POST', '/api/student/' + route, { body: body ?? { messages: [{ role: 'user', content: 'hi' }], max_tokens: 100 }, ip: o.ip, tooLarge: o.tooLarge, headers: { 'x-workshop-code': code, ...(o.origin === null ? {} : { origin: o.origin ?? ORIGIN }) } }));
+  return (route: 'chat' | 'validate', code: string, body?: unknown, o: { ip?: string; origin?: string | null; tooLarge?: boolean; headers?: Record<string, string> } = {}) =>
+    h(mk('POST', '/api/student/' + route, { body: body ?? { messages: [{ role: 'user', content: 'hi' }], max_tokens: 100 }, ip: o.ip, tooLarge: o.tooLarge, headers: { 'x-workshop-code': code, ...(o.origin === null ? {} : { origin: o.origin ?? ORIGIN }), ...(o.headers ?? {}) } }));
 };
 export const publicStatus = (ctx: Ctx, origin: string | null = ORIGIN) => publicHandler(ctx.deps)(mk('GET', '/api/public/status', { headers: origin ? { origin } : {} }));

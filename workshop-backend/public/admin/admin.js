@@ -47,13 +47,17 @@ function render() {
   $('disable').disabled = !live; document.querySelectorAll('[data-extend]').forEach((b) => (b.disabled = !live)); $('applyEnd').disabled = !live;
   if (live && document.activeElement !== $('endExact')) $('endExact').value = epochToSydneyInput(c.endAt);
   for (const f of $('limitsForm').elements) if (f.name && document.activeElement !== f) f.value = c[f.name];
-  const usd = data.estimatedSpendUsd;
+  const usd = data.estimatedSpendUsd, money = (v) => (v === null ? '—' : '$' + v.toFixed(4));
+  $('studentTiles').innerHTML = [['Joined', `${data.joined} / ${data.codes}`], [`Active now (${data.activeWindowMin} min)`, data.activeNow], ['AI requests', data.requests], ['Est. cost', money(usd)]]
+    .map(([k, v]) => `<div class="tile"><b>${esc(v)}</b><span>${esc(k)}</span></div>`).join('');
   $('tiles').innerHTML = [
-    ['Active students', `${data.activeStudents} / ${data.codes}`], ['Requests', data.requests], ['Requests left', data.requestsRemaining],
-    ['Tokens in', data.tokensIn.toLocaleString()], ['Tokens out', data.tokensOut.toLocaleString()],
-    ['Tokens left', data.tokensRemaining === null ? 'no budget' : data.tokensRemaining.toLocaleString()], ['Est. spend', usd === null ? 'set prices' : '$' + usd.toFixed(4)],
+    ['Requests left', data.requestsRemaining], ['Tokens in', data.tokensIn.toLocaleString()], ['Tokens out', data.tokensOut.toLocaleString()],
+    ['Tokens left', data.tokensRemaining === null ? 'no budget' : data.tokensRemaining.toLocaleString()],
   ].map(([k, v]) => `<div class="tile"><b>${esc(v)}</b><span>${esc(k)}</span></div>`).join('');
-  $('students').innerHTML = data.perStudent.map((r) => `<tr><td>${esc(r.label)}${r.revoked ? ' <span class="muted">(revoked)</span>' : ''}</td><td>${r.requests}</td><td>${r.remaining}</td><td>${(r.tokensIn + r.tokensOut).toLocaleString()}</td><td>${r.lastUsed ? fmtSydney(r.lastUsed) : '—'}</td><td>${r.revoked ? '' : `<button class="danger" data-revoke="${esc(r.id)}">Revoke</button>`}</td></tr>`).join('') || '<tr><td colspan="6" class="muted">No codes yet.</td></tr>';
+  const place = (r) => [r.city, r.country].filter(Boolean).join(', ') || '—';
+  const active = (r) => r.lastSeen > data.now - data.activeWindowMin * 60000;
+  $('students').innerHTML = data.perStudent.map((r) => `<tr><td>${esc(r.name ? `${r.name} (${r.label})` : r.label)}${r.revoked ? ' <span class="muted">(revoked)</span>' : active(r) ? ' <span class="pill active">active</span>' : ''}</td><td>${esc(place(r))}</td><td>${r.firstSeen ? fmtSydney(r.firstSeen) : '<span class="muted">not joined</span>'}</td><td>${r.lastSeen ? fmtSydney(r.lastSeen) : '—'}</td><td>${r.requests} <span class="muted">(${r.remaining} left)</span></td><td>${(r.tokensIn + r.tokensOut).toLocaleString()}</td><td>${money(r.costUsd)}</td><td>${r.revoked ? '' : `<button class="danger" data-revoke="${esc(r.id)}">Revoke</button>`}</td></tr>`).join('') || '<tr><td colspan="8" class="muted">No codes yet.</td></tr>';
+  $('privacy').textContent = `What is kept: an optional name, approximate city and country (from the connection, never the IP address), join and last-activity times, and AI usage. Only people who enter a workshop code are recorded. Deleted ${data.retentionDays} days after the workshop ends.`;
   $('errors').innerHTML = data.errors.map((e) => `<tr><td>${fmtSydney(e.t)}</td><td>${esc(e.kind)}</td><td>${e.status ?? ''}</td><td>${esc(e.code)}</td></tr>`).join('') || '<tr><td colspan="4" class="muted">None.</td></tr>';
   tick();
 }
@@ -70,6 +74,7 @@ $('schedule').addEventListener('click', () => run(async () => {
   if (!$('startAt').value || !$('endAt').value) throw new Error('Choose a start and an end');
   await api('POST', 'workshop/start', { startAt: sydneyToEpoch($('startAt').value), endAt: sydneyToEpoch($('endAt').value) }); toast('Workshop scheduled'); await refresh();
 }));
+$('deleteData').addEventListener('click', () => confirm('Delete every student record for this workshop (codes, names, places, usage)? This cannot be undone.') && run(async () => { await api('POST', 'data/delete'); toast('Student records deleted'); await refresh(); }));
 $('saveLimits').addEventListener('click', () => run(async () => {
   const v = {}; for (const f of $('limitsForm').elements) if (f.name) v[f.name] = Number(f.value);
   await api('PUT', 'config', v); toast('Limits saved'); await refresh();

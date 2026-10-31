@@ -61,6 +61,11 @@ describe('student app: Workshop Mode', () => {
     }
     route = (u) => (u.includes('/api/student/validate') ? json(401, { error: 'invalid_code' }) : json(404, {}));
     await expect(validateWorkshopCode('NOPE')).rejects.toBeInstanceOf(WorkshopError);
+    route = (u) => (u.includes('/api/student/validate') ? json(200, { ok: true, remainingRequests: 3, endsAt: 9 }) : json(404, {}));
+    await validateWorkshopCode('ABCDE-FGHJK', '  Ana  ');
+    expect(JSON.parse(calls[calls.length - 1].init!.body as string)).toEqual({ name: 'Ana' }); // optional name only; nothing else is sent
+    await validateWorkshopCode('ABCDE-FGHJK');
+    expect(JSON.parse(calls[calls.length - 1].init!.body as string)).toEqual({});
   });
 
   it('when the workshop has ended the app falls back to the bring-your-own-key behaviour', async () => {
