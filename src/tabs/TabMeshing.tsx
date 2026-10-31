@@ -133,5 +133,5 @@ export default function TabMeshing() {
       </Section>
     </>
   );
-  return <TabFrame title="Meshing & Surface Reconstruction" tab={9} viewport={viewport} controls={controls} learn={null} noPanelTabs noEnv statsRow stats={stats} />;
+  return <TabFrame title="Meshing & Surface Reconstruction" tab={10} viewport={viewport} controls={controls} learn={null} noPanelTabs noEnv statsRow stats={stats} />;
 }

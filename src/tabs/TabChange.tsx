@@ -176,5 +176,5 @@ export default function TabChange() {
       <Section title="Tutorial"><Credit keys={['change']} title="" /></Section>
     </>
   );
-  return <TabFrame title="Change Detection" tab={14} viewport={viewport} controls={controls} learn={null} noPanelTabs noEnv statsRow stats={stats} />;
+  return <TabFrame title="Change Detection" tab={6} viewport={viewport} controls={controls} learn={null} noPanelTabs noEnv statsRow stats={stats} />;
 }

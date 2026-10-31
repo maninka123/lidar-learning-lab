@@ -17,6 +17,7 @@ import { makeRng } from '../core/rng';
 type Method = 'point' | 'plane';
 interface Source { id: string; label: string; file: string; note: string }
 const SOURCES: Source[] = [
+  { id: 'room', label: 'Classroom (indoor scan)', file: 'classroom_scene.ply', note: 'A dense indoor scan with flat walls, floor and desks: the kind of scene ICP does well on.' },
   { id: 'vlp16', label: 'Street scan (Velodyne VLP-16)', file: 'velodyne_vlp16_f0.ply', note: 'A sparse real scan with 16 rings: few points, long distances.' },
   { id: 'os1', label: 'Street scan (Ouster OS1-128)', file: 'ouster_os1128_f0.ply', note: 'A denser real scan with 128 rings.' },
   { id: 'tree', label: 'Tree (RIEGL VZ-400, TLS)', file: 'riegl_vz400_tree.ply', note: 'A very dense scan of one tree: lots of detail, few flat surfaces.' },
@@ -27,16 +28,34 @@ async function loadSource(src: Source): Promise<PointCloud> {
   if (hit) return hit;
   const res = await fetch(`${import.meta.env.BASE_URL}data/${src.file}`);
   if (!res.ok) throw new Error(`Could not load ${src.file}`);
-  const c = parsePointCloud(await res.arrayBuffer(), src.file);
+  let c = parsePointCloud(await res.arrayBuffer(), src.file);
+  if (src.id === 'room') { // cut the ceiling away so the room can be seen into
+    let zmax = -Infinity; for (let i = 0; i < c.count; i++) zmax = Math.max(zmax, c.positions[i * 3 + 2]);
+    const keep: number[] = []; for (let i = 0; i < c.count; i++) if (c.positions[i * 3 + 2] < zmax - 0.45) keep.push(i);
+    const p = new Float32Array(keep.length * 3); keep.forEach((j, q) => p.set(c.positions.subarray(j * 3, j * 3 + 3), q * 3));
+    c = { ...c, count: keep.length, positions: p, colors: undefined, intensity: undefined, labels: undefined, instances: undefined, normals: undefined, times: undefined, scanIds: undefined } as PointCloud;
+  }
   BASE_CLOUD.set(src.id, c);
   return c;
 }
 
+/** Give a cloud one hue, shaded by height so floors, walls and furniture read as different things. */
+function tint(c: PointCloud, rgb: [number, number, number]): PointCloud {
+  let lo = Infinity, hi = -Infinity;
+  for (let i = 0; i < c.count; i++) { const z = c.positions[i * 3 + 2]; if (z < lo) lo = z; if (z > hi) hi = z; }
+  const span = Math.max(0.5, (hi - lo) * 0.8), col = new Uint8Array(c.count * 3);
+  for (let i = 0; i < c.count; i++) {
+    const t = Math.min(1, Math.max(0, (c.positions[i * 3 + 2] - lo) / span)), k = 0.38 + 0.62 * t;
+    col[i * 3] = Math.round(rgb[0] * k + 255 * (1 - k) * 0.12); col[i * 3 + 1] = Math.round(rgb[1] * k + 255 * (1 - k) * 0.12); col[i * 3 + 2] = Math.round(rgb[2] * k + 255 * (1 - k) * 0.12);
+  }
+  return { ...c, colors: col } as PointCloud;
+}
+const BLUE: [number, number, number] = [10, 132, 255], ORANGE: [number, number, number] = [255, 149, 0], GREEN: [number, number, number] = [40, 200, 80];
 const mkCloud = (id: string, name: string, pts: number[]): PointCloud => ({ id, name, count: pts.length / 3, positions: new Float32Array(pts), meta: { source: 'generated' } as PointCloud['meta'] });
 
 /** Split one real scan into two clouds that sample the same surfaces: A (reference) and B (partly overlapping, noisy). */
 function makePair(base: PointCloud, overlap: number, noise: number, seed: number): { A: PointCloud; B: PointCloud } {
-  const n = base.count, step = Math.max(1, Math.floor(n / 40000));
+  const n = base.count, step = Math.max(1, Math.floor(n / (base.count > 400000 ? 45000 : 40000)));
   const idx: number[] = [];
   for (let i = 0; i < n; i += step) { const x = base.positions[i * 3], y = base.positions[i * 3 + 1], z = base.positions[i * 3 + 2]; if (Number.isFinite(x + y + z)) idx.push(i); }
   // centre on the median so sliders (metres) behave the same for every cloud
@@ -53,7 +72,7 @@ function makePair(base: PointCloud, overlap: number, noise: number, seed: number
     if (j % 2 === 0) a.push(x, y, z);
     else if (x >= cut) b.push(x + rng.gauss() * noise, y + rng.gauss() * noise, z + rng.gauss() * noise);
   });
-  return { A: mkCloud('reg-a', 'Cloud A (reference)', a), B: mkCloud('reg-b', 'Cloud B', b) };
+  return { A: tint(mkCloud('reg-a', 'Cloud A (reference)', a), BLUE), B: tint(mkCloud('reg-b', 'Cloud B', b), ORANGE) };
 }
 
 const errOf = (r: ReturnType<typeof useLab.getState>['reg']): Rigid => rigidFromEuler(r.errT[0], r.errT[1], r.errT[2], r.errYawDeg * D2R, r.errPitchDeg * D2R, r.errRollDeg * D2R);
@@ -63,13 +82,13 @@ export default function TabRegistration() {
   const s = useLab();
   const reg = s.reg;
   const setReg = (patch: Partial<typeof reg>) => s.patch({ reg: { ...useLab.getState().reg, ...patch } });
-  const [srcId, setSrcId] = useState('vlp16');
+  const [srcId, setSrcId] = useState('room');
   const overlap = 0.8, noise = 0.02; // fixed: partial overlap and a little sensor noise
   const [mode, setMode] = useState<'manual' | 'auto'>('manual');
   const [calc, setCalc] = useState<{ rmse: number; fitness: number; t: number; deg: number } | null>(null);
   const [method, setMethod] = useState<Method>('point');
   const [trim, setTrim] = useState(1);
-  const [view, setView] = useState<'before' | 'both' | 'after'>('both');
+  const [view, setView] = useState<'before' | 'after'>('after');
   const [busy, setBusy] = useState(false);
   const [runs, setRuns] = useState<Run[]>([]);
   const source = SOURCES.find((x) => x.id === srcId)!;
@@ -109,25 +128,25 @@ export default function TabRegistration() {
       const c: Vec3 = [reg.B!.positions[0], reg.B!.positions[1], reg.B!.positions[2]];
       const pc = rigidApply(total, c);
       const rec = { t: Math.hypot(pc[0] - c[0], pc[1] - c[1], pc[2] - c[2]), deg: rotationAngle(total.R) * R2D };
-      setReg({ result: r, before, after, iter: r.history.length - 1, recoveredErr: rec });
+      setView('after'); setReg({ result: r, before, after, iter: r.history.length - 1, recoveredErr: rec });
       setRuns((l) => [{ label: `${method === 'point' ? 'Point-to-point' : 'Point-to-plane'}${trim < 1 ? `, best ${Math.round(trim * 100)} %` : ''}, dist ${reg.icp.maxCorrDist.toFixed(1)} m`, before: before.rmse, after: after.rmse, err: `${(rec.t * 100).toFixed(1)} cm · ${rec.deg.toFixed(2)}°`, iters: r.history.length }, ...l].slice(0, 6));
     } catch (e) { s.notify((e as Error).message, 'error'); } finally { setBusy(false); }
   }
 
   const iterIdx = reg.result ? Math.min(reg.iter, reg.result.history.length - 1) : 0;
-  const Bafter = useMemo(() => (mode === 'auto' && reg.result && Bmis ? transformCloud(Bmis, reg.result.history[iterIdx].T, 'Cloud B (aligned)') : null), [mode, reg.result, Bmis, iterIdx]);
+  const Bafter = useMemo(() => (mode === 'auto' && reg.result && Bmis ? tint(transformCloud(Bmis, reg.result.history[iterIdx].T, 'Cloud B (aligned)'), GREEN) : null), [mode, reg.result, Bmis, iterIdx]);
 
   const bounds = useMemo(() => (reg.A ? cloudBounds(reg.A) : null), [reg.A]);
   const size = bounds ? Math.max(bounds.max[0] - bounds.min[0], bounds.max[1] - bounds.min[1], bounds.max[2] - bounds.min[2], 1) : 10;
   const cen: [number, number, number] = bounds ? [(bounds.min[0] + bounds.max[0]) / 2, (bounds.min[1] + bounds.max[1]) / 2, (bounds.min[2] + bounds.max[2]) / 2] : [0, 0, 0];
-  const flat = (rgb: [number, number, number]) => ({ flat: rgb });
   const ps = Math.max(2, s.view.pointSize);
 
+  const k = srcId === 'room' ? 0.75 : 0.45;
   const viewport = (
-    <Viewport home={[cen[0] + size * 0.45, cen[1] - size * 0.45, cen[2] + size * 0.35]} target={cen} gridSize={Math.max(1, size / 10)} bgOverride="#ffffff" threshold={0.05}>
-      {reg.A && <CloudLayer cloud={reg.A} mode="flat" colorOpts={flat([10, 132, 255])} size={ps} budget={200000} pickable={false} />}
-      {Bmis && (view !== 'after' || !Bafter) && <CloudLayer cloud={Bmis} mode="flat" colorOpts={flat([255, 159, 10])} size={ps} budget={200000} pickable={false} />}
-      {Bafter && view !== 'before' && <CloudLayer cloud={Bafter} mode="flat" colorOpts={flat([48, 209, 88])} size={ps} budget={200000} pickable={false} />}
+    <Viewport home={[cen[0] + size * k, cen[1] - size * k, cen[2] + size * (srcId === 'room' ? 0.5 : 0.35)]} target={cen} gridSize={Math.max(1, size / 10)} bgOverride="#ffffff" threshold={0.05}>
+      {reg.A && <CloudLayer cloud={reg.A} mode="rgb" size={ps} budget={200000} pickable={false} />}
+      {Bmis && (view === 'before' || !Bafter) && <CloudLayer cloud={Bmis} mode="rgb" size={ps} budget={200000} pickable={false} />}
+      {Bafter && view !== 'before' && <CloudLayer cloud={Bafter} mode="rgb" size={ps} budget={200000} pickable={false} />}
     </Viewport>
   );
 
@@ -179,11 +198,11 @@ export default function TabRegistration() {
         {slide(0, 'Shift X')}
         {slide(1, 'Shift Y')}
         {slide(2, 'Shift Z')}
-        <Slider label="Turn (yaw)" value={reg.errYawDeg} min={-45} max={45} step={0.5} unit="°" onChange={(v) => setReg({ errYawDeg: v, ...reset })} />
-        <Slider label="Tilt (pitch)" value={reg.errPitchDeg} min={-15} max={15} step={0.25} unit="°" onChange={(v) => setReg({ errPitchDeg: v, ...reset })} />
-        <Slider label="Tilt (roll)" value={reg.errRollDeg} min={-15} max={15} step={0.25} unit="°" onChange={(v) => setReg({ errRollDeg: v, ...reset })} />
+        <Slider label="Turn (yaw)" value={reg.errYawDeg} min={-45} max={45} step={0.5} unit="°" format={(v) => v.toFixed(1)} onChange={(v) => setReg({ errYawDeg: v, ...reset })} />
+        <Slider label="Tilt (pitch)" value={reg.errPitchDeg} min={-15} max={15} step={0.25} unit="°" format={(v) => v.toFixed(2)} onChange={(v) => setReg({ errPitchDeg: v, ...reset })} />
+        <Slider label="Tilt (roll)" value={reg.errRollDeg} min={-15} max={15} step={0.25} unit="°" format={(v) => v.toFixed(2)} onChange={(v) => setReg({ errRollDeg: v, ...reset })} />
         <div className="btn-row">
-          <Btn sm icon={<Wand size={15} />} onClick={() => { const r = makeRng(Date.now() & 0xffff); setReg({ errT: [r.range(-1, 1), r.range(-1, 1), r.range(-0.2, 0.2)], errYawDeg: r.range(-15, 15), errPitchDeg: r.range(-3, 3), errRollDeg: r.range(-3, 3), ...reset }); }}>Random move</Btn>
+          <Btn sm icon={<Wand size={15} />} onClick={() => { const r = makeRng(Date.now() & 0xffff); setReg({ errT: [r.range(-1, 1), r.range(-1, 1), r.range(-0.2, 0.2)], errYawDeg: Math.round(r.range(-15, 15) * 10) / 10, errPitchDeg: Math.round(r.range(-3, 3) * 100) / 100, errRollDeg: Math.round(r.range(-3, 3) * 100) / 100, ...reset }); }}>Random move</Btn>
           <Btn sm onClick={() => setReg({ errT: [0, 0, 0], errYawDeg: 0, errPitchDeg: 0, errRollDeg: 0, ...reset })}>Put back</Btn>
         </div>
           <Btn variant="primary" onClick={calculate} disabled={!reg.A} testId="calculate">Calculate</Btn>
@@ -200,14 +219,14 @@ export default function TabRegistration() {
         <Slider label="Points used" value={reg.icp.sample} min={500} max={8000} step={500} format={fmtN} onChange={(sample) => setReg({ icp: { ...reg.icp, sample } })} />
         <Btn variant="primary" icon={<Play size={16} />} onClick={runIcp} busy={busy} disabled={!reg.A} testId="run-icp">Run ICP</Btn>
           <div className="btn-row">
-            <Btn sm icon={<Wand size={15} />} onClick={() => { const r = makeRng(Date.now() & 0xffff); setReg({ errT: [r.range(-1, 1), r.range(-1, 1), r.range(-0.2, 0.2)], errYawDeg: r.range(-15, 15), errPitchDeg: r.range(-3, 3), errRollDeg: r.range(-3, 3), ...reset }); }}>Random move</Btn>
+            <Btn sm icon={<Wand size={15} />} onClick={() => { const r = makeRng(Date.now() & 0xffff); setReg({ errT: [r.range(-1, 1), r.range(-1, 1), r.range(-0.2, 0.2)], errYawDeg: Math.round(r.range(-15, 15) * 10) / 10, errPitchDeg: Math.round(r.range(-3, 3) * 100) / 100, errRollDeg: Math.round(r.range(-3, 3) * 100) / 100, ...reset }); }}>Random move</Btn>
             <Btn sm onClick={() => setReg({ errT: [0, 0, 0], errYawDeg: 0, errPitchDeg: 0, errRollDeg: 0, ...reset })}>Put back</Btn>
           </div>
         </Section>
       )}
       {auto && reg.result && (
         <Section title="Result">
-          <Seg value={view} onChange={setView} options={[{ value: 'before', label: 'Before' }, { value: 'both', label: 'Overlay' }, { value: 'after', label: 'After' }]} />
+          <Seg value={view} onChange={setView} options={[{ value: 'before', label: 'Before ICP' }, { value: 'after', label: 'After ICP' }]} />
           <Slider label="Iteration" value={iterIdx} min={0} max={reg.result.history.length - 1} step={1} onChange={(iter) => setReg({ iter })} format={(v) => `${v + 1} / ${reg.result!.history.length}`} />
           <MiniChart series={[{ name: 'RMSE (cm)', color: '#ff9f0a', values: reg.result.history.map((h) => h.rmse * 100) }]} yLabel="gap between matched points (cm)" xLabel="iteration" />
           <p className="hint">{reg.result.converged ? 'Stopped: the error stopped improving.' : 'Stopped at the iteration limit.'}</p>
@@ -234,7 +253,7 @@ export default function TabRegistration() {
       noPanelTabs
       noEnv
       stats={stats}
-      overlays={<><KindLegend items={[{ color: '#0a84ff', label: 'Cloud A (reference)' }, { color: '#ff9f0a', label: !auto ? 'Cloud B (to move)' : reg.result ? 'Cloud B (before ICP)' : 'Cloud B (start)' }, ...(auto && reg.result ? [{ color: '#30d158', label: 'B after ICP' }] : [])]} />{matrixBox}</>}
+      overlays={<><KindLegend items={[{ color: '#0a84ff', label: 'Cloud A (reference)' }, ...(auto && reg.result && view === 'after' ? [{ color: '#30d158', label: 'Cloud B (moved by ICP)' }] : [{ color: '#ff9f0a', label: !auto ? 'Cloud B (to move)' : reg.result ? 'Cloud B (before ICP)' : 'Cloud B (start)' }])]} />{matrixBox}</>}
     />
   );
 }

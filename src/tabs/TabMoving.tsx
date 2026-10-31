@@ -215,7 +215,7 @@ export default function TabMoving() {
       </>)}
     </>
   );
-  return <TabFrame title="Moving Scene & Temporal Graph" tab={12} viewport={viewport} controls={controls} learn={null} noPanelTabs noEnv hideViewControls />;
+  return <TabFrame title="Moving Scene & Temporal Graph" tab={13} viewport={viewport} controls={controls} learn={null} noPanelTabs noEnv hideViewControls />;
 }
 
 /** The scene graph of one frame: the vehicle and the objects around it as nodes, relations as edges. */

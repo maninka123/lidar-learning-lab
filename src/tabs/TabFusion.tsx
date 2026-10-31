@@ -281,7 +281,7 @@ export default function TabFusion() {
   );
   return (
     <>
-      <TabFrame title="LiDAR + Camera Fusion" tab={8} viewport={viewport} controls={controls} learn={null} noPanelTabs noEnv hideViewControls />
+      <TabFrame title="LiDAR + Camera Fusion" tab={9} viewport={viewport} controls={controls} learn={null} noPanelTabs noEnv hideViewControls />
       {mapOpen && saved && <FusionMapping calib={saved} onClose={() => setMapOpen(false)} />}
     </>
   );

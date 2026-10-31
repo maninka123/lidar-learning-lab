@@ -27,6 +27,7 @@ const TABS: { label: string; icon: ReactNode; el: ReactNode }[] = [
   { label: 'Point Cloud Gallery', icon: <Boxes size={18} />, el: <Tab2 /> },
   { label: 'Point Cloud Processing', icon: <Filter size={18} />, el: <Tab5 /> },
   { label: 'Point Cloud Registration', icon: <GitMerge size={18} />, el: <TabReg /> },
+  { label: 'Change Detection', icon: <Eye size={18} />, el: <TabChange /> },
   { label: 'TLS Scanning', icon: <Crosshair size={18} />, el: <TabTls /> },
   { label: 'SLAM & Mobile Scanning', icon: <Route size={18} />, el: <TabMap /> },
   { label: 'LiDAR + Camera Fusion', icon: <Camera size={18} />, el: <TabFusion /> },
@@ -35,7 +36,6 @@ const TABS: { label: string; icon: ReactNode; el: ReactNode }[] = [
   { label: 'Scene Graphs & 3D AI', icon: <Share2 size={18} />, el: <Tab8 /> },
   { label: 'Moving Scene & Temporal Graph', icon: <Route size={18} />, el: <TabMoving /> },
   { label: 'Scan to CAD', icon: <Ruler size={18} />, el: <TabCad /> },
-  { label: 'Change Detection', icon: <Eye size={18} />, el: <TabChange /> },
   { label: 'Image to 3D', icon: <Camera size={18} />, el: <Tab7 /> },
 ];
 

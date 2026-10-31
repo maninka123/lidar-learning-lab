@@ -319,6 +319,6 @@ export default function Tab8() {
     </>
   );
 
-  return <TabFrame title="Scene Graphs & 3D AI" tab={11} noEnv viewport={viewport} controls={controls} learn={null} noPanelTabs statsRow stats={pane === 'direct' ? undefined : stats} hideViewControls />;
+  return <TabFrame title="Scene Graphs & 3D AI" tab={12} noEnv viewport={viewport} controls={controls} learn={null} noPanelTabs statsRow stats={pane === 'direct' ? undefined : stats} hideViewControls />;
   void Badge; void fmtN; void ({} as GraphNode);
 }

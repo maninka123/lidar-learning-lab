@@ -247,7 +247,7 @@ export default function Tab6() {
   const rawText = useMemo(() => (rawOpen && cloud ? new TextDecoder().decode(writePCD({ id: 'raw', name: 'segmented', count: cloud.count, positions: cloud.positions, meta: cloud.meta, ...(res ? { labels: res.display } : {}) } as PointCloud, false)) : ''), [rawOpen, cloud, res]);
 
   return (
-    <TabFrame title="Clustering & Segmentation" tab={10} noEnv viewport={viewport} controls={controls} learn={null} noPanelTabs statsRow stats={stats}
+    <TabFrame title="Clustering & Segmentation" tab={11} noEnv viewport={viewport} controls={controls} learn={null} noPanelTabs statsRow stats={stats}
       viewExtras={<><Btn sm variant="primary" icon={<Play size={15} />} onClick={runMain} busy={busy} disabled={!cloud} testId="run-seg">Segment</Btn><Btn sm icon={<FileText size={15} />} variant={rawOpen ? 'primary' : ''} onClick={() => setRawOpen(!rawOpen)} disabled={!cloud} testId="raw-toggle">Raw</Btn></>}
       overlays={picked ? <PickedCard p={picked} id={sel!} index={res!.clusters.findIndex((c) => c.id === sel)} name={seg.names[sel!] ?? ''} onName={(v) => useLab.setState({ seg: { ...useLab.getState().seg, names: { ...useLab.getState().seg.names, [sel!]: v } } })} onClose={() => setSel(null)} /> : rawOpen && cloud ? <RawViewer text={rawText} filename="segmented.pcd" onClose={() => setRawOpen(false)} /> : null} />
   );
