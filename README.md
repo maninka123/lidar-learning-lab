@@ -2,9 +2,7 @@
 
 **Welcome, and thanks for stopping by.** 👋
 
-This is a small, friendly place to *play* with LiDAR. You don't need a scanner, a licence or any installed software: open the page and start. Fire laser beams into a room and watch the dots appear. Look at real scans from real sensors. Line two scans up, follow a robot as it drifts and corrects itself, turn a classroom scan into a CAD floor plan, spot what changed between two visits, give a point cloud its colours from a camera.
-
-Everything is a simulation you can poke, break and fix, with plain-English explanations next to every control. If something is confusing, that is a bug in the lab, not in you.
+A small, friendly place to *play* with LiDAR. No scanner, licence or install: open the page and start. Fire laser beams into a room, line two scans up, turn a classroom into a floor plan, spot what changed. Everything is a simulation you can poke, break and fix, with plain-English notes beside every control. If something is confusing, that is a bug in the lab, not in you.
 
 **Start here: https://maninka123.github.io/lidar-learning-lab/**
 
