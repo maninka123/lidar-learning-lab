@@ -138,7 +138,8 @@ function PersonModel({ px }: { px: number }) {
       {[0.28, -0.28].map((y) => <mesh key={y} position={[px, y, 0.86]} raycast={() => null}><sphereGeometry args={[0.055, 14, 10]} /><meshStandardMaterial color={skin} /></mesh>)}
       <mesh position={[px, 0, 1.55]} rotation={[Math.PI / 2, 0, 0]} raycast={() => null}><cylinderGeometry args={[0.05, 0.055, 0.1, 14]} /><meshStandardMaterial color={skin} /></mesh>
       <mesh position={[px, 0, 1.66]} raycast={() => null}><sphereGeometry args={[0.12, 22, 16]} /><meshStandardMaterial color={skin} roughness={0.7} /></mesh>
-      <mesh position={[px + 0.02, 0, 1.72]} scale={[1, 1.02, 0.8]} raycast={() => null}><sphereGeometry args={[0.125, 22, 16, 0, Math.PI * 2, 0, Math.PI / 2]} /><meshStandardMaterial color={hair} roughness={0.9} /></mesh>
+      {/* the cap's pole is the geometry's y axis, so it is turned to point up (world z); otherwise it covers only one side of the head */}
+      <mesh position={[px + 0.012, 0, 1.7]} rotation={[Math.PI / 2, 0, 0]} scale={[1, 0.85, 1.02]} raycast={() => null}><sphereGeometry args={[0.13, 24, 16, 0, Math.PI * 2, 0, Math.PI / 2]} /><meshStandardMaterial color={hair} roughness={0.9} /></mesh>
       <mesh position={[px - 0.12, 0, 1.65]} rotation={[0, 0, Math.PI / 2]} raycast={() => null}><coneGeometry args={[0.025, 0.05, 10]} /><meshStandardMaterial color={skin} /></mesh>
     </group>
   );

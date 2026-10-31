@@ -118,13 +118,21 @@ export default function Tab7() {
 
   async function genLidar() {
     setBusy('Scanning the object with LiDAR…');
-    try { const c = await runTask('reconLidar', { object: r.object, seed: r.seed, stations: 2 }); setR({ lidar: c, align: null, cmp: null }); } finally { setBusy(null); }
+    const obj = useLab.getState().recon.object; // the scene may change while the scan runs: never attach a scan to the wrong scene
+    try { const c = await runTask('reconLidar', { object: obj, seed: r.seed, stations: 2 }); if (useLab.getState().recon.object === obj) setR({ lidar: c, align: null, cmp: null }); }
+    finally {
+      setBusy(null);
+      const now = useLab.getState().recon;
+      if (now.object !== obj && !now.lidar) void genLidar(); // switched scene meanwhile: scan the new one
+    }
   }
   async function genRecon() {
     if (method === 'external') { fileRef.current?.click(); return; }
     setBusy('Reconstructing from images…');
     try { const used = caps.length >= (method === 'monocular' ? 1 : 2) ? caps.map((c) => c.cam) : undefined;
-      const o = await runTask('recon', { params: { object: r.object, method, views: r.views, seed: r.seed, cams: used } }); setR({ out: o, method, align: null, cmp: null, layer: 'recon', layout: 'single' }); } catch (e) { s.notify((e as Error).message, 'error'); } finally { setBusy(null); }
+      const obj = r.object;
+      const o = await runTask('recon', { params: { object: obj, method, views: r.views, seed: r.seed, cams: used } });
+      if (useLab.getState().recon.object === obj) setR({ out: o, method, align: null, cmp: null, layer: 'recon', layout: 'single' }); } catch (e) { s.notify((e as Error).message, 'error'); } finally { setBusy(null); }
   }
   async function align() {
     if (!r.lidar || !recon) return;
