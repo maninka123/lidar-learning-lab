@@ -10,6 +10,7 @@ import { FileText } from '../ui/icons';
 import { MiniChart } from './common';
 import { Credit } from '../ui/VideoCard';
 import { CloudLayer, BoxOutline } from '../ui/three';
+import { ClusterExplainer } from '../ui/ClusterExplainer';
 import { selectPoints } from '../core/pointcloud';
 import { Play, RotateCcw, Plus } from '../ui/icons';
 import { runTask } from '../engine/client';
@@ -54,6 +55,7 @@ export default function Tab6() {
   const [boxes, setBoxes] = useState(true);
   const [sel, setSel] = useState<number | null>(null); // the cluster or plane that was clicked (its id in the result)
   const [hideCeiling, setHideCeiling] = useState(true);
+  const [showHow, setShowHow] = useState(true);
   const [pane, setPane] = useState<'setup' | 'results'>('setup');
   const [rawOpen, setRawOpen] = useState(false);
   const [sweep, setSweep] = useState<{ x: number[]; clusters: number[]; over: number[]; under: number[]; recovered: number[]; label: string } | null>(null);
@@ -136,7 +138,7 @@ export default function Tab6() {
   const viewport = (
     <Viewport home={[8, -10, 6.5]} target={[0, 0, 1.2]} hideGrid hideAxes bgOverride="#ffffff" threshold={0.09}>
       {cloud && (show === 'result' && resultLabels && !stale
-        ? <CloudLayer cloud={cloud} mode="cluster" colorOpts={{ clusterLabels: resultLabels }} size={s.view.pointSize} budget={Math.max(s.view.renderBudget, 150000)} pickable={false} onPick={(i) => { const id = resultLabels[i]; setSel(id >= 0 ? id : null); }} clip={{ on: hideCeiling, min: -1, max: 2.28 }} />
+        ? <CloudLayer cloud={cloud} mode="cluster" colorOpts={{ clusterLabels: resultLabels }} size={s.view.pointSize} budget={Math.max(s.view.renderBudget, 150000)} pickable={false} onPick={(i) => { const id = resultLabels[i]; setSel(id >= 0 ? id : null); }} pickFilter={(i) => resultLabels[i] >= 0} clip={{ on: hideCeiling, min: -1, max: 2.28 }} />
         : show === 'instances' && instLabels
           ? <CloudLayer cloud={cloud} mode="cluster" colorOpts={{ clusterLabels: instLabels }} size={s.view.pointSize} budget={s.view.renderBudget} pickable={false} clip={{ on: hideCeiling, min: -1, max: 2.28 }} />
           : <CloudLayer cloud={show === 'semantic' && classCloud ? classCloud : cloud} mode={show === 'semantic' || show === 'rgb' ? 'rgb' : 'height'} size={s.view.pointSize} budget={Math.max(s.view.renderBudget, 150000)} pickable={false} clip={{ on: hideCeiling, min: -1, max: 2.28 }} />)}
@@ -248,7 +250,12 @@ export default function Tab6() {
 
   return (
     <TabFrame title="Clustering & Segmentation" tab={11} noEnv viewport={viewport} controls={controls} learn={null} noPanelTabs statsRow stats={stats}
-      viewExtras={<><Btn sm variant="primary" icon={<Play size={15} />} onClick={runMain} busy={busy} disabled={!cloud} testId="run-seg">Segment</Btn><Btn sm icon={<FileText size={15} />} variant={rawOpen ? 'primary' : ''} onClick={() => setRawOpen(!rawOpen)} disabled={!cloud} testId="raw-toggle">Raw</Btn></>}
-      overlays={picked ? <PickedCard p={picked} id={sel!} index={res!.clusters.findIndex((c) => c.id === sel)} name={seg.names[sel!] ?? ''} onName={(v) => useLab.setState({ seg: { ...useLab.getState().seg, names: { ...useLab.getState().seg.names, [sel!]: v } } })} onClose={() => setSel(null)} /> : rawOpen && cloud ? <RawViewer text={rawText} filename="segmented.pcd" onClose={() => setRawOpen(false)} /> : null} />
+      viewExtras={<>{p.algo !== 'none' && <Btn sm variant={showHow ? 'primary' : ''} onClick={() => setShowHow(!showHow)} testId="how-toggle">How it works</Btn>}<Btn sm variant="primary" icon={<Play size={15} />} onClick={runMain} busy={busy} disabled={!cloud} testId="run-seg">Segment</Btn><Btn sm icon={<FileText size={15} />} variant={rawOpen ? 'primary' : ''} onClick={() => setRawOpen(!rawOpen)} disabled={!cloud} testId="raw-toggle">Raw</Btn></>}
+      overlays={<>{picked ? <PickedCard p={picked} id={sel!} index={res!.clusters.findIndex((c) => c.id === sel)} name={seg.names[sel!] ?? ''} onName={(v) => useLab.setState({ seg: { ...useLab.getState().seg, names: { ...useLab.getState().seg.names, [sel!]: v } } })} onClose={() => setSel(null)} /> : rawOpen && cloud ? <RawViewer text={rawText} filename="segmented.pcd" onClose={() => setRawOpen(false)} /> : null}{showHow && p.algo !== 'none' && (
+        <div className="overlay glass card fade-in" style={{ right: 12, top: 66, width: 'min(470px, 46%)', padding: 14, display: 'grid', gap: 8 }} data-testid="how-card">
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}><b>How {p.algo === 'dbscan' ? 'DBSCAN' : 'Euclidean clustering'} works</b><button className="btn sm icon" onClick={() => setShowHow(false)} aria-label="Hide" data-testid="how-close">×</button></div>
+          <ClusterExplainer algo={p.algo} eps={p.algo === 'dbscan' ? p.eps : p.radius} minPts={p.minPts} />
+        </div>
+      )}</>} />
   );
 }

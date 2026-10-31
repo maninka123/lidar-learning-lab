@@ -140,6 +140,8 @@ export function CorridorVolume({ scene, color = '#30d158' }: { scene: SceneDef; 
 // ------------------------------------------------------------------ point clouds
 export interface CloudLayerProps {
   cloud: PointCloud;
+  /** With onPick: only points for which this returns true can be picked (the click goes through the others). */
+  pickFilter?: (index: number) => boolean;
   mode: ColorMode;
   size: number;
   budget: number;
@@ -163,7 +165,7 @@ export function useRenderSubset(cloud: PointCloud, budget: number) {
   }, [cloud, budget]);
 }
 
-export function CloudLayer({ cloud, mode, size, budget, colorOpts, opacity = 1, clip, pickable = true, onPick, visible = true }: CloudLayerProps) {
+export function CloudLayer({ cloud, mode, size, budget, colorOpts, opacity = 1, clip, pickable = true, onPick, pickFilter, visible = true }: CloudLayerProps) {
   const subset = useRenderSubset(cloud, budget);
   const geom = useMemo(() => {
     const colors = colorize(cloud, mode, colorOpts);
@@ -192,7 +194,17 @@ export function CloudLayer({ cloud, mode, size, budget, colorOpts, opacity = 1, 
     <points
       geometry={geom}
       frustumCulled={false}
-      onClick={onPick ? (e) => { if (e.index === undefined) return; e.stopPropagation(); onPick(subset ? subset[e.index] : e.index); } : pickable ? (e) => {
+      onClick={onPick ? (e) => {
+        // walk through everything the click ray touched, nearest first, and take the first point that may be picked and is not clipped away
+        const hits = ((e as unknown as { intersections?: { object: unknown; index?: number }[] }).intersections ?? []).filter((h) => h.object === e.object && h.index !== undefined);
+        for (const h of hits.length ? hits : [{ index: e.index }]) {
+          if (h.index === undefined) continue;
+          const o = subset ? subset[h.index] : h.index;
+          if (clip?.on) { const z = cloud.positions[o * 3 + 2]; if (z < clip.min || z > clip.max) continue; }
+          if (pickFilter && !pickFilter(o)) continue;
+          e.stopPropagation(); onPick(o); return;
+        }
+      } : pickable ? (e) => {
         const s = useLab.getState();
         if (s.interaction !== 'pick-points' || e.index === undefined) return;
         e.stopPropagation();
