@@ -124,6 +124,15 @@ describe('quotas', () => {
   });
 });
 
+describe('Upstash replies', () => {
+  it('turns the raw HGETALL list (what the real service returns) into a record, so flags like "revoked" are read correctly', async () => {
+    const { hashFromReply } = await import('../lib/store');
+    expect(hashFromReply(['label', 'Student 1', 'revoked', '1', 'requests', '3'])).toEqual({ label: 'Student 1', revoked: '1', requests: '3' });
+    expect(hashFromReply({ label: 'A', requests: 2 })).toEqual({ label: 'A', requests: '2' });
+    expect(hashFromReply([])).toBeNull(); expect(hashFromReply(null)).toBeNull();
+  });
+});
+
 describe('bad input, upstream failures, backend down', () => {
   it('rejects malformed, empty, oversized and extra-roled requests', async () => {
     const ctx = setup(); const a = await startWorkshop(ctx); const [c] = await makeCodes(a, 1); const ask = student(ctx);

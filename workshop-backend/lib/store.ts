@@ -24,6 +24,14 @@ export interface Store {
 
 export class StoreUnavailable extends Error { constructor(cause?: unknown) { super('store_unavailable'); this.cause = cause; } }
 
+/** Upstash (with automatic JSON parsing off) answers HGETALL with a flat [field, value, ...] list; make it an object of strings. */
+export function hashFromReply(raw: unknown): Record<string, string> | null {
+  const o: Record<string, string> = {};
+  if (Array.isArray(raw)) for (let i = 0; i + 1 < raw.length; i += 2) o[String(raw[i])] = String(raw[i + 1]);
+  else if (raw && typeof raw === 'object') for (const [a, b] of Object.entries(raw as Record<string, unknown>)) o[a] = String(b);
+  return Object.keys(o).length ? o : null;
+}
+
 export function upstashStore(url: string, token: string): Store {
   const r = new Redis({ url, token, automaticDeserialization: false, retry: { retries: 1, backoff: () => 100 } });
   const wrap = async <T>(f: () => Promise<T>): Promise<T> => { try { return await f(); } catch (e) { throw new StoreUnavailable(e); } };
@@ -36,7 +44,7 @@ export function upstashStore(url: string, token: string): Store {
     hincrby: (k, f, n) => wrap(() => r.hincrby(k, f, n)),
     hset: (k, v) => wrap(async () => { await r.hset(k, v); }),
     hget: (k, f) => wrap(async () => (await r.hget<string | null>(k, f)) ?? null),
-    hgetall: (k) => wrap(async () => { const o = await r.hgetall<Record<string, string>>(k); return o && Object.keys(o).length ? o : null; }),
+    hgetall: (k) => wrap(async () => hashFromReply(await r.hgetall(k))),
     sadd: (k, m) => wrap(async () => { await r.sadd(k, m); }),
     srem: (k, m) => wrap(async () => { await r.srem(k, m); }),
     smembers: (k) => wrap(() => r.smembers(k) as Promise<string[]>),
