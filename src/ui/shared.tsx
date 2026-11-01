@@ -111,7 +111,7 @@ export function ViewControls({ simple, extra }: { simple?: boolean; extra?: Reac
   const setView = useLab((s) => s.setView);
   const interaction = useLab((s) => s.interaction);
   return (
-    <div className="overlay glass card" style={{ top: 12, right: 12, maxWidth: 'calc(100% - 24px)', display: 'flex', gap: 6, padding: '0.35rem', alignItems: 'center' }} role="toolbar" aria-label="View controls">
+    <div className="overlay glass card" style={{ top: 12, right: 12, maxWidth: 'calc(100% - 24px)', display: 'flex', flexWrap: 'wrap', justifyContent: 'flex-end', gap: 6, padding: '0.35rem', alignItems: 'center' }} role="toolbar" aria-label="View controls">
       {extra}
       <Btn sm icon={<Home size={15} />} onClick={() => viewBus.emit('home')} testId="view-home">Home</Btn>
       <Btn sm variant={v.panMode ? 'primary' : ''} icon={<Move size={15} />} onClick={() => setView({ panMode: !v.panMode })} title={v.panMode ? 'Pan is on: drag to move the view, right-drag to rotate' : 'Pan: drag to move the point cloud (or right-drag / Shift + drag)'} testId="view-pan">Pan</Btn>
