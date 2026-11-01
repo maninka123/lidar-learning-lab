@@ -4,4 +4,4 @@
 
 When the deck changes, run `./presentation/update.sh` from the repository root to copy the latest version in, then commit it.
 
-`LiDAR_Workshop_Learning_Slides.pptx` holds only the three learning slides (unsupervised, supervised, build your own) as a separate file.
+`LiDAR_Workshop_Learning_Slides.pptx` holds only the learning slides (unsupervised, supervised, scene graphs) (unsupervised, supervised, build your own) as a separate file.
