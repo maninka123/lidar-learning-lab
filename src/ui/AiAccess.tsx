@@ -12,7 +12,6 @@ export function AiAccess({ needKey, ownKey, setOwnKey, testId }: { needKey: bool
   const w = useWorkshopStatus();
   const [code, setCode] = useState(() => loadWorkshopCode());
   const [name, setName] = useState(() => loadWorkshopName());
-  const [useOwn, setUseOwn] = useState(false);
   const [state, setState] = useState<{ kind: 'idle' | 'checking' | 'ok' | 'bad'; text?: string }>({ kind: 'idle' });
 
   const keyField = (
@@ -32,7 +31,7 @@ export function AiAccess({ needKey, ownKey, setOwnKey, testId }: { needKey: bool
     catch (e) { saveWorkshopCode(''); setState({ kind: 'bad', text: e instanceof WorkshopError ? e.message : 'Could not check the code.' }); }
   };
   if (!w.available) return needKey ? keyField : null;
-  if (!w.needCode && !useOwn) return (
+  if (!w.needCode) return (
     <div className="field" data-testid="ws-open">
       <span>Workshop AI is on{w.endsAt ? ` until ${fmtEnd(w.endsAt)}` : ''}: no key or code needed.</span>
       <div style={{ display: 'flex', gap: 8 }}>
@@ -40,10 +39,8 @@ export function AiAccess({ needKey, ownKey, setOwnKey, testId }: { needKey: bool
         <button className="btn sm" onClick={() => void joinOpen()} data-testid="ws-save-name">Save</button>
       </div>
       {state.text && <span className="caption" role="status" style={{ color: state.kind === 'bad' ? '#c4271c' : undefined }}>{state.text}</span>}
-      <button className="btn sm" onClick={() => setUseOwn(true)} style={{ justifySelf: 'start' }}>Use my own DeepSeek key instead</button>
     </div>
   );
-  if (useOwn) return (<>{keyField}<button className="btn sm" onClick={() => setUseOwn(false)}>Use the workshop access code instead</button></>);
   if (w.needCode && !needKey && state.kind !== 'ok' && (loadWorkshopCode() || ownKey)) return null; // already set up: stay out of the way
 
   return (
@@ -55,7 +52,6 @@ export function AiAccess({ needKey, ownKey, setOwnKey, testId }: { needKey: bool
       </div>
       <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="Your name (optional)" maxLength={30} autoComplete="off" data-testid="ws-name" />
       {state.text && <span className="caption" role="status" style={{ color: state.kind === 'bad' ? '#c4271c' : undefined }} data-testid="ws-msg">{state.text}</span>}
-      <button className="btn sm" onClick={() => setUseOwn(true)} style={{ justifySelf: 'start' }}>Use my own DeepSeek key instead</button>
     </div>
   );
 }
