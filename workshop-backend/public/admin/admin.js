@@ -24,7 +24,7 @@ const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&
 function toast(text, bad) { const t = $('toast'); t.textContent = text; t.className = 'msg ' + (bad ? 'bad' : 'good'); clearTimeout(toast.h); toast.h = setTimeout(() => t.classList.add('hidden'), 5000); }
 const run = async (f) => { try { await f(); } catch (e) { toast(e.message, true); } };
 
-function showLogin() { $('login').classList.remove('hidden'); $('app').classList.add('hidden'); $('logout').classList.add('hidden'); clearInterval(timer); clearInterval(poll); }
+function showLogin() { $('login').classList.remove('hidden'); $('app').classList.add('hidden'); $('logout').classList.add('hidden'); clearInterval(timer); clearInterval(poll); mon = null; }
 // ---- Passkeys (WebAuthn): Touch ID, Face ID, Windows Hello, a phone or a security key. Binary fields travel as base64url text.
 const b64 = { enc: (buf) => btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''),
   dec: (s) => Uint8Array.from(atob(s.replace(/-/g, '+').replace(/_/g, '/').padEnd(Math.ceil(s.length / 4) * 4, '=')), (c) => c.charCodeAt(0)).buffer };
@@ -54,7 +54,7 @@ async function boot() {
   $('touchCard').classList.toggle('hidden', !touch || s.passkeys > 0); // offered until a passkey has been set up
   $('touchText').textContent = 'Sign in faster next time with a passkey: Touch ID, Face ID, Windows Hello or a security key.';
   csrf = s.csrf; $('login').classList.add('hidden'); $('app').classList.remove('hidden'); $('logout').classList.remove('hidden');
-  await refresh(); clearInterval(timer); clearInterval(poll); timer = setInterval(tick, 1000); poll = setInterval(() => run(refresh), 5000); // live: refreshed every few seconds
+  await refresh(); refreshLive(); clearInterval(timer); clearInterval(poll); timer = setInterval(tick, 1000); poll = setInterval(() => { run(refresh); if (!document.hidden) refreshLive(); }, 5000); // live: refreshed every few seconds
 }
 $('loginForm').addEventListener('submit', async (e) => {
   e.preventDefault(); const m = $('loginMsg'); m.classList.add('hidden');
@@ -63,7 +63,66 @@ $('loginForm').addEventListener('submit', async (e) => {
 });
 $('logout').addEventListener('click', () => run(async () => { await api('POST', 'logout'); csrf = ''; showLogin(); }));
 
+let mon = null, monAt = 0, monErr = '';
 async function refresh() { data = await api('GET', 'workshop'); skew = data.now - Date.now(); render(); }
+// the live monitor reads counters kept by the server: nobody using the lab has to do anything for it to fill in
+async function refreshLive() {
+  try { mon = await api('GET', 'live'); monAt = Date.now(); monErr = ''; } catch (e) { monErr = e.message; }
+  renderMonitor(); renderTiles();
+}
+const LED = (cls) => `<span class="led ${cls}"></span>`;
+const REASON = { rate_limit: 'a user asked too fast', address_rate: 'one network asked too fast', address_quota: 'a network used its share', student_quota: 'a user used all theirs', total_quota: 'workshop limit reached', token_budget: 'usage budget reached', revoked: 'blocked user' };
+function meter(label, used, max, text) {
+  const pct = max > 0 ? Math.min(100, (used / max) * 100) : 0, cls = pct > 90 ? 'bad' : pct > 70 ? 'warn' : '';
+  return `<div class="meter"><div class="row"><span>${esc(label)}</span><span class="mono">${esc(text)}</span></div><div class="bar"><i class="${cls}" style="width:${pct}%"></i></div></div>`;
+}
+function chart(ser) {
+  const W = 320, H = 92, n = ser.length, bw = W / n, mx = Math.max(4, ...ser.map((m) => m.req)), y = (v) => (v / mx) * (H - 14);
+  const bars = ser.map((m, i) => { let yy = H; const seg = (v, col) => { if (!v) return ''; const hh = y(v); yy -= hh; return `<rect x="${(i * bw + 1).toFixed(1)}" y="${yy.toFixed(1)}" width="${(bw - 2).toFixed(1)}" height="${hh.toFixed(1)}" rx="1.5" fill="${col}"/>`; }; return seg(m.ok, 'var(--accent)') + seg(m.denied, 'var(--orange)') + seg(m.fail, 'var(--red)'); }).join('');
+  return `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Requests in each of the last 30 minutes"><line x1="0" x2="${W}" y1="${H - 0.5}" y2="${H - 0.5}" stroke="var(--sep)"/>${bars}<text x="2" y="9" font-size="11" fill="var(--text3)">${mx} / min</text></svg>`;
+}
+function renderMonitor() {
+  const el = $('monitor'); if (!el) return;
+  if (!mon) { el.innerHTML = `<section class="card"><div class="livehead"><span class="pulse stale"></span><h2>Live monitor</h2></div><p class="faint">${monErr ? esc(monErr) : 'Loading…'}</p></section>`; return; }
+  const m = mon, stale = Date.now() - monAt > 15000 || !!monErr, t = m.totals30, cap = m.capacity, bal = m.balance, running = m.status === 'active';
+  const ms = m.avgMs ? `${Math.round(m.avgMs)} ms` : '—';
+  const reasons = Object.entries(t.reasons).sort((a, b) => b[1] - a[1]);
+  const errRows = m.errors.map((e) => `<tr><td>${fmtSydney(e.t).split(',').pop().trim()}</td><td>${esc(e.kind)}</td><td>${e.status ?? ''}</td></tr>`).join('');
+  const cur = bal.currency === 'CNY' ? '¥' : '$';
+  el.innerHTML = `
+  <section class="card">
+    <div class="livehead"><span class="pulse ${monErr ? 'bad' : stale ? 'stale' : ''}"></span><h2>Live monitor</h2><span class="faint" style="margin-left:auto">${monErr ? 'connection lost' : stale ? 'paused' : 'updates every 5 s'}</span></div>
+    <div class="pair">
+      <div class="tile hero-tile"><span>Using the AI now</span><b>${m.usersNow}</b><small>of ${m.usersJoined} joined · seen in the last ${m.activeWindowMin} min</small></div>
+      <div class="tile"><span>Requests / min</span><b>${m.rpmNow}</b><small>last full minute: ${m.rpm}</small></div>
+    </div>
+    ${running ? '' : `<p class="faint">The workshop is ${esc(m.status)}, so nobody can use the AI right now.</p>`}
+    <div class="chartbox">${chart(m.series)}<div class="legend"><span><i style="background:var(--accent)"></i>answered ${t.ok}</span><span><i style="background:var(--orange)"></i>held back ${t.denied}</span><span><i style="background:var(--red)"></i>failed ${t.fail}</span><span>last 30 min</span></div></div>
+    <div class="pair"><div class="tile"><span>Answer time</span><b style="font-size:1.4rem">${ms}</b><small>average, last 5 min</small></div><div class="tile"><span>Problems, 30 min</span><b style="font-size:1.4rem;color:${t.fail || t.denied ? 'var(--orange)' : 'var(--green)'}">${t.fail + t.denied}</b><small>${t.req ? Math.round(((t.fail + t.denied) / t.req) * 100) : 0} % of requests</small></div></div>
+  </section>
+  <section class="card">
+    <h3>Health</h3>
+    <div class="lights">
+      <div class="light">${LED(m.health.store.ok ? 'ok' : 'bad')}<span>Database</span><small>${m.health.store.ms} ms</small></div>
+      <div class="light">${LED(m.health.deepseek.ok ? 'ok' : 'bad')}<span>DeepSeek</span><small>${esc(m.health.deepseek.detail || '')}${m.health.deepseek.ok ? ` · ${m.balance.ms} ms` : ''}</small></div>
+      <div class="light">${LED(running ? 'ok' : m.status === 'scheduled' ? 'warn' : 'bad')}<span>Workshop</span><small>${esc(LABEL[m.status] || m.status)}</small></div>
+      <div class="light">${LED(t.fail === 0 ? 'ok' : t.fail < 3 ? 'warn' : 'bad')}<span>AI failures</span><small>${t.fail} in 30 min</small></div>
+    </div>
+  </section>
+  <section class="card">
+    <h3>Capacity left</h3>
+    ${bal.ok && m.left ? `<div class="credit"><span>DeepSeek credit</span><b>${cur}${bal.total.toFixed(2)}</b><span>≈ ${big(m.left.requests)} more requests at about ${usdTiny(m.left.perRequestUsd)} each</span></div>` : `<p class="faint">DeepSeek credit unknown${bal.error ? ' (' + esc(bal.error) + ')' : ''}.</p>`}
+    ${meter('Requests', cap.requests, cap.maxTotal, `${cap.requests} / ${cap.maxTotal}`)}
+    ${meter('Users', m.usersJoined, m.maxStudents, m.maxStudents ? `${m.usersJoined} / ${m.maxStudents}` : `${m.usersJoined} (no limit)`)}
+    <p class="faint">Per user: ${cap.perUserLimit} requests, ${cap.rpmPerUser} a minute. Per network: ${cap.rpmPerAddress} a minute.</p>
+  </section>
+  <section class="card">
+    <h3>Held back and failed</h3>
+    ${reasons.length ? `<table class="mini"><tbody>${reasons.map(([r, n]) => `<tr><td>${esc(REASON[r] || r)}</td><td class="num">${n}</td></tr>`).join('')}</tbody></table>` : '<p class="faint">Nothing was held back in the last 30 minutes.</p>'}
+    ${t.fail ? `<p class="faint">${t.fail} request${t.fail === 1 ? '' : 's'} could not be answered by DeepSeek. Those were not counted against anyone.</p>` : ''}
+    ${errRows ? `<table class="mini"><thead><tr><th>Time</th><th>Kind</th><th>Status</th></tr></thead><tbody>${errRows}</tbody></table>` : ''}
+  </section>`;
+}
 const LABEL = { active: 'Running', scheduled: 'Scheduled', expired: 'Ended', off: 'Off' };
 function tick() {
   if (!data) return;
@@ -75,7 +134,21 @@ function tick() {
     const left = data.startAt - now; $('countdown').textContent = 'Starts in ' + fmtDuration(left); $('barFill').style.width = '0%'; if (left <= 0) run(refresh);
   }
 }
+function renderTiles() {
+  if (!data) return; const c = data.config, l = mon?.left, bal = mon?.balance;
+  $('liveTiles').innerHTML = [
+    tile('Users', `${data.joined}`, `${data.activeNow} active now`),
+    tile('AI requests', `${data.requests}`, `${data.requestsRemaining} left of ${c.maxTotal}`),
+    tile('Tokens', (data.tokensIn + data.tokensOut).toLocaleString(), `${data.tokensIn.toLocaleString()} in · ${data.tokensOut.toLocaleString()} out`),
+    tile('Spend so far', usdTiny(data.spendUsd), 'at DeepSeek’s advertised prices', 'accent'),
+    tile('DeepSeek balance', bal ? (bal.ok ? `${bal.currency === 'CNY' ? '¥' : '$'}${bal.total.toFixed(2)}` : 'unknown') : '…', bal ? (bal.ok ? 'credit left on the account' : `could not read it (${bal.error})`) : 'checking', bal?.ok ? 'accent' : ''),
+    tile('Requests left to pay for', l ? `≈ ${big(l.requests)}` : bal ? '—' : '…', l ? `about ${usdTiny(l.perRequestUsd)} each · ${l.basis === 'measured' ? 'from real requests' : 'a typical request'}${l.approxCurrency ? ' · yuan converted roughly' : ''}` : 'needs the balance'),
+  ].join('');
+}
 const usd = (v) => (v < 0.01 ? '$' + v.toFixed(4) : '$' + v.toFixed(2));
+/** a very small price per request, with enough digits to mean something: $0.000031 */
+const usdTiny = (v) => (v >= 0.01 ? usd(v) : v <= 0 ? '$0' : '$' + v.toFixed(Math.min(7, Math.max(4, 1 - Math.floor(Math.log10(v)) + 1))));
+const big = (n) => (n >= 1e6 ? (n / 1e6).toFixed(n >= 1e7 ? 0 : 1) + ' M' : n >= 1e4 ? Math.round(n / 1e3) + ' k' : n.toLocaleString());
 const tile = (k, v, sub, cls = '') => `<div class="tile ${cls}"><span>${esc(k)}</span><b>${esc(v)}</b>${sub ? `<small>${esc(sub)}</small>` : ''}</div>`;
 function render() {
   const c = data.config, live = data.status === 'active' || data.status === 'scheduled';
@@ -94,12 +167,7 @@ function render() {
 
   const p = data.pricing;
   $('pricingNote').textContent = `${p.model} · ${p.peak ? 'peak' : 'off-peak'} price now · $${p.miss} in · $${p.out} out per 1M tokens`;
-  $('liveTiles').innerHTML = [
-    tile('Users', `${data.joined}`, `${data.activeNow} active now`),
-    tile('AI requests', `${data.requests}`, `${data.requestsRemaining} left of ${c.maxTotal}`),
-    tile('Tokens', (data.tokensIn + data.tokensOut).toLocaleString(), `${data.tokensIn.toLocaleString()} in · ${data.tokensOut.toLocaleString()} out`),
-    tile('Spend so far', usd(data.spendUsd), 'at DeepSeek’s advertised prices', 'accent'),
-  ].join('');
+  renderTiles();
 
   $('activeNote').textContent = `active = seen in the last ${data.activeWindowMin} min`;
   const place = (r) => [r.city, r.country].filter(Boolean).join(', ') || '—', active = (r) => r.lastSeen > data.now - data.activeWindowMin * 60000;

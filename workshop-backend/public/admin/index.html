@@ -29,7 +29,8 @@
     </form>
   </section>
 
-  <div id="app" class="hidden stack">
+  <div id="app" class="hidden layout">
+  <div class="stack">
     <div id="toast" class="msg hidden"></div>
     <section class="card hidden" id="touchCard"><div class="row between"><span class="muted" id="touchText"></span><button id="touchSetup" class="btn sm">Set up a passkey</button></div></section>
 
@@ -89,6 +90,8 @@
     </div>
 
     <section class="card"><details><summary>Recent errors</summary><div class="scroll"><table><thead><tr><th>Time</th><th>Kind</th><th>Status</th><th>User</th></tr></thead><tbody id="errors"></tbody></table></div></details></section>
+  </div>
+  <aside class="stack side" id="monitor" aria-label="Live monitor"></aside>
   </div>
 </main>
 <script type="module" src="/admin/admin.js"></script>

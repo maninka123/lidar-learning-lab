@@ -4,6 +4,7 @@ import { Req, Res, json, err, corsHeaders, originAllowed, ipTag, clientIp, MAX_B
 import { StoreUnavailable } from './store';
 import { clearCookie, createSession, csrfOk, destroySession, getSession, loginAllowed, sameOrigin, underLimit, verifyPassword } from './auth';
 import * as W from './workshop';
+import * as L from './live';
 import * as P from './passkeys';
 import { createHash, timingSafeEqual } from 'node:crypto';
 
@@ -104,12 +105,12 @@ export const studentHandler = (deps: Deps) => async (req: Req): Promise<Res> => 
     if (typeof input === 'string') return err(400, 'bad_request', input);
     const estimate = Math.ceil(input.chars / 2.5) + input.maxTokens;
     const addr = c.needCode ? null : W.addrTag(deps.env.authSecret, ip);
-    if (addr) { const d = await W.reserveAddress(deps.store, c, addr, now); if (d) { const [status, code, message] = DENIED[d]; return err(status, code, message); } }
+    if (addr) { const d = await W.reserveAddress(deps.store, c, addr, now); if (d) { await L.bump(deps.store, c.workshopId, now, 'denied', { reason: d }); const [status, code, message] = DENIED[d]; return err(status, code, message); } }
     const slot = await W.reserve(deps.store, c, rec, estimate, now);
-    if (typeof slot === 'string') { if (addr) await deps.store.hincrby(W.k.addr(c.workshopId, addr), 'total', -1); const [status, code, message] = DENIED[slot]; return err(status, code, message); }
+    if (typeof slot === 'string') { await L.bump(deps.store, c.workshopId, now, 'denied', { reason: slot }); if (addr) await deps.store.hincrby(W.k.addr(c.workshopId, addr), 'total', -1); const [status, code, message] = DENIED[slot]; return err(status, code, message); }
     if (addr) slot.addr = addr;
 
-    let upstream: Response | null = null, failure = '';
+    let upstream: Response | null = null, failure = ''; const callT0 = Date.now();
     try {
       const ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), UPSTREAM_TIMEOUT_MS);
       try {
@@ -124,11 +125,13 @@ export const studentHandler = (deps: Deps) => async (req: Req): Promise<Res> => 
     const data = upstream && upstream.ok ? ((await upstream.json().catch(() => null)) as { choices?: { message?: { content?: string } }[]; usage?: { prompt_tokens?: number; completion_tokens?: number; prompt_cache_hit_tokens?: number } } | null) : null;
     if (!data?.choices?.length) {
       await W.release(deps.store, c, slot);
+      await L.bump(deps.store, c.workshopId, now, 'fail');
       await W.logError(deps.store, { t: now, workshopId: c.workshopId, code: rec.id, kind: failure || 'upstream', status: upstream?.status });
       return err(502, 'upstream_error', failure === 'timeout' ? 'The AI took too long to answer. Try again.' : 'The AI service could not answer. Your request was not counted. Try again shortly.');
     }
     const tin = data.usage?.prompt_tokens ?? Math.ceil(input.chars / 3), tout = data.usage?.completion_tokens ?? 0;
     await W.finalize(deps.store, c, slot, { prompt: tin, hit: data.usage?.prompt_cache_hit_tokens ?? 0, out: tout }, deps.now());
+    await L.bump(deps.store, c.workshopId, now, 'ok', { ms: Date.now() - callT0 });
     return json(200, { choices: [{ message: { content: data.choices[0].message?.content ?? '' } }], usage: { prompt_tokens: tin, completion_tokens: tout }, workshop: { remainingRequests: Math.max(0, c.maxPerStudent - rec.requests - 1) } });
   }, true);
 };
@@ -177,6 +180,7 @@ export const adminHandler = (deps: Deps) => async (req: Req): Promise<Res> => {
       case 'POST passkey-register-options': return json(200, await P.registrationOptions(req, deps));
       case 'POST passkey-register': return (await P.registerPasskey(req, deps, body as never)) ? ok({ passkeys: await P.passkeyCount(deps) }) : err(400, 'bad_request', 'The passkey could not be set up.');
       case 'POST logout': await destroySession(deps, session); return json(200, { ok: true }, { cookies: [clearCookie()] });
+      case 'GET live': return json(200, await L.liveView(deps, c, now));
       case 'GET workshop': return json(200, { config: c, ...(await W.stats(deps.store, c, now)) });
       case 'PUT config': {
         const p = W.parseLimits(body);

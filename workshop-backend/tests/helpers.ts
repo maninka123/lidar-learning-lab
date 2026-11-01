@@ -12,12 +12,15 @@ export const ORIGIN = 'https://students.example';
 export const T0 = Date.UTC(2026, 10, 5, 0, 0, 0);
 export const HOUR = 3600e3;
 
-export interface Ctx { deps: Deps; store: MemoryStore; clock: { t: number }; fetchCalls: { url: string; init: RequestInit }[]; upstream: { mode: 'ok' | 'http500' | 'throw' | 'abort' | 'empty'; tokens: [number, number]; hit?: number } }
+export interface Ctx { deps: Deps; store: MemoryStore; clock: { t: number }; fetchCalls: { url: string; init: RequestInit }[]; upstream: { balance?: 'ok' | 'down' | 'http401' | 'none' | 'empty'; currency?: string; mode: 'ok' | 'http500' | 'throw' | 'abort' | 'empty'; tokens: [number, number]; hit?: number } }
 
+export const balanceCalls: { url: string; init: RequestInit }[] = [];
 export function setup(): Ctx {
+  balanceCalls.length = 0;
   const store = new MemoryStore(), clock = { t: T0 }, fetchCalls: Ctx['fetchCalls'] = [], upstream: Ctx['upstream'] = { mode: 'ok', tokens: [100, 50] };
   const env = readEnv({ DEEPSEEK_API_KEY: DS_KEY, ADMIN_USERNAME: USER, ADMIN_PASSWORD_HASH: hashPassword(PASSWORD), ADMIN_AUTH_SECRET: SECRET, FRONTEND_ORIGIN: ORIGIN, UPSTASH_REDIS_REST_URL: 'x', UPSTASH_REDIS_REST_TOKEN: 'x' });
   const fetchMock = (async (url: string, init: RequestInit) => {
+    if (String(url).endsWith('/user/balance')) { balanceCalls.push({ url, init }); if (upstream.balance === 'down') throw new Error('network down'); if (upstream.balance === 'http401') return new Response('{}', { status: 401 }); return new Response(JSON.stringify({ is_available: upstream.balance !== 'empty', balance_infos: upstream.balance === 'none' ? [] : [{ currency: upstream.currency ?? 'USD', total_balance: '4.20', granted_balance: '1.00', topped_up_balance: '3.20' }] }), { status: 200, headers: { 'content-type': 'application/json' } }); }
     fetchCalls.push({ url, init });
     if (upstream.mode === 'throw') throw new Error('network down');
     if (upstream.mode === 'abort') { const e = new Error('aborted'); e.name = 'AbortError'; throw e; }
