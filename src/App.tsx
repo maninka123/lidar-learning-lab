@@ -2,6 +2,7 @@ import { Fragment, Suspense, lazy, useState, ReactNode } from 'react';
 import { Layers, PanelLeft, Radar, Info, Boxes, Route, GitMerge, Filter, Network, Camera, Share2, Ruler, Eye, Wand, Crosshair } from './ui/icons';
 import { useLab } from './state/store';
 import { Toast } from './ui/shared';
+import { ReadySignal } from './intro/ready';
 
 const Tab0 = lazy(() => import('./tabs/Tab0Concepts'));
 const Tab1 = lazy(() => import('./tabs/Tab1Fundamentals'));
@@ -75,7 +76,7 @@ export default function App() {
         </div>
       </nav>
       <main className="main">
-        <Suspense fallback={<div style={{ padding: 24 }} className="hint">Loading…</div>}>{TABS[tab].el}</Suspense>
+        <Suspense fallback={<div style={{ padding: 24 }} className="hint">Loading…</div>}>{TABS[tab].el}<ReadySignal /></Suspense>
         <Toast />
         {phone && !hideNote && <div className="glass card" role="note" style={{ position: 'fixed', left: 8, right: 8, bottom: 8, zIndex: 50, padding: '0.6rem 0.8rem', display: 'flex', gap: 10, alignItems: 'center', fontSize: '0.875rem' }}><span style={{ flex: 1 }}>This lab has 3D views and many controls: it works best on a laptop or tablet.</span><button className="btn sm" onClick={() => setHideNote(true)}>OK</button></div>}
       </main>

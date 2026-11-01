@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import * as THREE from 'three';
 import './index.css';
 import App from './App';
+import { IntroGate } from './intro/IntroScreen';
 import { useLab } from './state/store';
 
 // Test/debug hook (used by the Playwright suite)
@@ -13,6 +14,7 @@ THREE.Object3D.DEFAULT_UP.set(0, 0, 1);
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
+    <IntroGate />
     <App />
   </StrictMode>,
 );

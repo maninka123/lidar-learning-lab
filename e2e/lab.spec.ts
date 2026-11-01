@@ -1,4 +1,7 @@
-import { test, expect, Page } from '@playwright/test';
+import { test as base, expect, Page } from '@playwright/test';
+
+// The welcome intro would sit on top of every test, so each test starts as if it had just been shown (the intro has its own tests below).
+const test = base.extend({ page: async ({ page }, use) => { await page.addInitScript(() => { try { if (!localStorage.getItem('lidar-lab-intro-last')) localStorage.setItem('lidar-lab-intro-last', String(Date.now())); } catch { /* ignore */ } }); await use(page); } });
 
 declare global { interface Window { __lab: { getState: () => any; setState: (p: any) => void } } }
 
@@ -583,4 +586,54 @@ test('moving scene: run segmentation on the point clouds, see its name, timing a
   const first = await page.getByTestId('seg-card').innerText();
   await page.getByTestId('mv-play').click();
   await expect.poll(async () => (await page.getByTestId('seg-card').innerText()) !== first, { timeout: 15000 }).toBe(true);
+});
+
+test.describe('welcome intro', () => {
+  const KEY = 'lidar-lab-intro-last', setLast = (page: Page, agoMs: number | null) => page.addInitScript(([k, ago]) => { // only on the first load of a tab, so a reload keeps what the page itself wrote
+    try { if (!sessionStorage.getItem('e2e-set')) { sessionStorage.setItem('e2e-set', '1'); if (ago === null) localStorage.removeItem(k as string); else localStorage.setItem(k as string, String(Date.now() - (ago as number))); } } catch { /* ignore */ }
+  }, [KEY, agoMs] as const);
+  const stored = (page: Page) => page.evaluate((k) => Number(localStorage.getItem(k)), KEY);
+
+  test('first visit: shows at once, the app loads underneath, it stays a minimum time, records the time, and a refresh skips it', async ({ page }) => {
+    await setLast(page, null); const t0 = Date.now(); await page.goto('/');
+    await expect(page.getByTestId('intro')).toBeVisible();
+    await expect(page.getByTestId('intro')).toContainText('LiDAR Learning Lab'); await expect(page.getByTestId('intro')).toContainText('Explore the world in 3D');
+    await expect(page.getByTestId('nav-0')).toBeAttached(); // the app is already there underneath
+    const shownAt = await stored(page); expect(Math.abs(shownAt - Date.now())).toBeLessThan(5000); // the time is written as soon as it appears
+    await expect(page.getByTestId('intro')).toHaveCount(0, { timeout: 15000 });
+    expect(Date.now() - t0).toBeGreaterThan(2500); // never shorter than the minimum
+    await page.reload(); await expect(page.getByTestId('nav-0')).toBeVisible(); await expect(page.getByTestId('intro')).toHaveCount(0);
+    expect(await stored(page)).toBe(shownAt); // the visit that skipped the intro did not move the timer
+  });
+
+  test('within two hours it is skipped and the timer is untouched; after two hours or the next day it shows again', async ({ page, browser }) => {
+    await setLast(page, 119 * 60e3); const before = Date.now() - 119 * 60e3; await page.goto('/');
+    await expect(page.getByTestId('nav-0')).toBeVisible(); await expect(page.getByTestId('intro')).toHaveCount(0); expect(Math.abs((await stored(page)) - before)).toBeLessThan(5000);
+    for (const ago of [2 * 3600e3 + 60e3, 26 * 3600e3]) {
+      const ctx = await browser.newContext(); const p = await ctx.newPage(); await setLast(p, ago); await p.goto('/'); await expect(p.getByTestId('intro')).toBeVisible(); await ctx.close();
+    }
+  });
+
+  test('another tab opened while it is showing skips it, and skipping still records the time', async ({ page, context }) => {
+    await setLast(page, null); await page.goto('/'); await expect(page.getByTestId('intro')).toBeVisible();
+    const other = await context.newPage(); await other.goto('/'); await expect(other.getByTestId('nav-0')).toBeVisible(); await expect(other.getByTestId('intro')).toHaveCount(0);
+    await page.getByTestId('intro-skip').click(); await expect(page.getByTestId('intro')).toHaveCount(0, { timeout: 5000 }); await expect(page.getByTestId('nav-0')).toBeVisible();
+    expect(Date.now() - (await stored(page))).toBeLessThan(8000);
+  });
+
+  test('Escape skips it too', async ({ page }) => {
+    await setLast(page, null); await page.goto('/'); await expect(page.getByTestId('intro')).toBeVisible(); await page.keyboard.press('Escape'); await expect(page.getByTestId('intro')).toHaveCount(0, { timeout: 5000 });
+  });
+
+  test('with blocked storage it still works (shown once per page load, nothing breaks)', async ({ page }) => {
+    const errs: string[] = []; page.on('pageerror', (e) => errs.push(e.message));
+    await page.addInitScript(() => { Object.defineProperty(window, 'localStorage', { get() { throw new Error('blocked'); } }); });
+    await page.goto('/'); await expect(page.getByTestId('intro')).toBeVisible(); await page.getByTestId('intro-skip').click(); await expect(page.getByTestId('nav-0')).toBeVisible(); expect(errs).toEqual([]);
+  });
+
+  test('with reduced motion it is shorter and calmer', async ({ page }) => {
+    await setLast(page, null); await page.emulateMedia({ reducedMotion: 'reduce' }); const t0 = Date.now(); await page.goto('/');
+    await expect(page.getByTestId('intro')).toHaveClass(/calm/); await expect(page.getByTestId('intro')).toHaveCount(0, { timeout: 8000 });
+    expect(Date.now() - t0).toBeLessThan(2800);
+  });
 });
