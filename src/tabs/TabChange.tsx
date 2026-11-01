@@ -10,7 +10,7 @@ import { PointCloud } from '../core/pointcloud';
 import { turbo } from '../core/colorize';
 import { Credit } from '../ui/VideoCard';
 
-type View = 'heat' | 'kind' | 'from' | 'to';
+type View = 'heat' | 'kind';
 const QUIET: [number, number, number] = [205, 209, 218];
 const START = ['2026-03-02T09:00', '2026-03-09T09:00', '2026-03-16T14:30', '2026-03-30T09:00', '2026-04-13T09:00'];
 const GRADIENT = `linear-gradient(90deg, ${Array.from({ length: 9 }, (_, i) => { const c = turbo(i / 8); return `rgb(${c[0]},${c[1]},${c[2]})`; }).join(',')})`;
@@ -26,7 +26,7 @@ export default function TabChange() {
   const [stamps, setStamps] = useState(START);
   const [from, setFrom] = useState(0), [to, setTo] = useState(4);
   const [thr, setThr] = useState(0.06), [minPts, setMinPts] = useState(40), [maxCm, setMaxCm] = useState(40);
-  const [view, setView] = useState<View>('heat');
+  const [view, setView] = useState<View>('kind');
   const [hideCeiling, setHideCeiling] = useState(true);
   const dist = useRef(new Map<string, { dOld: Float32Array; dNew: Float32Array }>());
   const [ready, setReady] = useState(0); // bumps whenever more distances are measured
@@ -75,8 +75,6 @@ export default function TabChange() {
   const layers = useMemo(() => {
     if (!series) return { base: null as PointCloud | null, extra: null as PointCloud | null };
     const A = series[lo].cloud, B = series[hi].cloud;
-    if (view === 'from') return { base: A, extra: null };
-    if (view === 'to') return { base: B, extra: null };
     if (!res) return { base: B, extra: null };
     const d = dist.current.get(`${lo}-${hi}`)!, max = maxCm / 100;
     const paint = (c: PointCloud, f: (i: number) => [number, number, number]) => { const col = new Uint8Array(c.count * 3); for (let i = 0; i < c.count; i++) col.set(f(i), i * 3); return { ...c, colors: col } as PointCloud; };
@@ -149,9 +147,8 @@ export default function TabChange() {
         <Slider label="Counts as changed above" value={thr * 100} min={2} max={20} step={0.5} unit=" cm" format={(v) => v.toFixed(1)} onChange={(v) => setThr(v / 100)} hint="Scanner noise is about 1 cm, so anything under this is treated as the same surface." />
         <Slider label="Smallest change" value={minPts} min={10} max={300} step={10} unit=" points" onChange={setMinPts} />
       </Section>
-      <Section title="Heatmap">
-        <Seg value={view} onChange={setView} options={[{ value: 'heat', label: 'Heatmap' }, { value: 'kind', label: 'Gone / new' }]} />
-        <Seg value={view} onChange={setView} options={[{ value: 'from', label: 'Earlier visit' }, { value: 'to', label: 'Later visit' }]} />
+      <Section title="Show">
+        <Seg value={view} onChange={setView} options={[{ value: 'kind', label: 'Gone / new' }, { value: 'heat', label: 'Heatmap' }]} />
         {view === 'heat' && (
           <>
             <div style={{ height: 12, borderRadius: 6, background: GRADIENT, marginTop: 4 }} />
