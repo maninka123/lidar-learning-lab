@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLab } from '../state/store';
 import { loadClassroomForSegmentation, nodesFromClassroom, paintClasses } from '../apps/classroom';
-import { askDeepSeek, DEEPSEEK_MODEL, estimateTokens, loadOwnKey, NoKeyError, pointCloudToText, saveOwnKey, AiResult } from '../apps/deepseek';
+import { askDeepSeek, estimateTokens, loadOwnKey, NoKeyError, pointCloudToText, saveOwnKey, AiResult } from '../apps/deepseek';
 import { PointCloud } from '../core/pointcloud';
 import { Markdown } from '../ui/Markdown';
 import { Chat } from '../ui/Chat';
@@ -233,7 +233,7 @@ export default function Tab8() {
       <Seg value={pane} onChange={setPane} options={[{ value: 'direct', label: '1 Direct AI' }, { value: 'graph', label: '2 Scene graph' }, { value: 'ai', label: '3 Graph → AI' }]} label="Section" />
       {pane === 'direct' && (<>
       <Section title="Direct inference: give the point cloud to an AI">
-        <p className="hint">Skip the pipeline: send the raw points, as text, straight to <b>DeepSeek Flash</b> (<span className="mono">{DEEPSEEK_MODEL}</span>).</p>
+        <p className="hint">Skip the pipeline: send the raw points, as text, straight to <b>DeepSeek V4 Flash</b>.</p>
         <Slider label="Points to send" value={nPts} min={100} max={3000} step={100} onChange={setNPts} hint="Every point costs tokens (the model's unit of reading). More points cost more and can run over its limit." />
         <Toggle label="Include the colours" checked={withColour} onChange={setWithColour} />
         {preview && cloud && (
@@ -245,7 +245,7 @@ export default function Tab8() {
         )}
         <AiAccess needKey={needKey} ownKey={ownKey} setOwnKey={setOwnKey} testId="ds-key" />
         <PromptView system={directPrompt.system} user={directPrompt.user} testId="ds-prompt" />
-        <Btn variant="primary" onClick={sendToAi} busy={aiBusy} disabled={!preview} testId="ds-send">Send to DeepSeek Flash ({DEEPSEEK_MODEL})</Btn>
+        <Btn variant="primary" onClick={sendToAi} busy={aiBusy} disabled={!preview} testId="ds-send">Send</Btn>
         {aiErr && <Callout kind="warn">{aiErr}</Callout>}
         {ai && (
           <div className="callout fade-in" style={{ gap: 8 }} data-testid="ds-answer">
