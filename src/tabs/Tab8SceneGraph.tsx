@@ -251,7 +251,7 @@ export default function Tab8() {
           <div className="callout fade-in" style={{ gap: 8 }} data-testid="ds-answer">
             <b>DeepSeek's answer (raw)</b>
             <Markdown text={ai.text} />
-            <span className="caption">{fmtN(ai.sent)} points sent · {fmtN(ai.promptTokens)} tokens read · {fmtN(ai.completionTokens)} written · {(ai.ms / 1000).toFixed(1)} s · {ai.via === 'server' ? 'key held by the server' : 'your own key'} · model: DeepSeek Flash ({DEEPSEEK_MODEL})</span>
+            <span className="caption">{fmtN(ai.sent)} points sent · {fmtN(ai.promptTokens)} tokens read · {fmtN(ai.completionTokens)} written · {(ai.ms / 1000).toFixed(1)} s · {ai.via === 'server' ? 'key held by the server' : 'your own key'} · DeepSeek V4 Flash</span>
           </div>
         )}
         <Callout kind="edu" title="Why this is not real point cloud inference">
