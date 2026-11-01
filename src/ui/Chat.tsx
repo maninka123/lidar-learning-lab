@@ -1,5 +1,5 @@
 import { KeyboardEvent, ReactNode, useEffect, useRef, useState } from 'react';
-import { chatDeepSeek, ChatMsg, NoKeyError } from '../apps/deepseek';
+import { chatDeepSeek, ChatMsg, DEEPSEEK_MODEL, NoKeyError } from '../apps/deepseek';
 import { Markdown } from './Markdown';
 import { AiAccess } from './AiAccess';
 import { noKeyMessage } from '../apps/workshop';
@@ -67,6 +67,7 @@ export function Chat({ id, system, suggestions, ownKey, setOwnKey, title = 'Ask 
       </div>
       {needKey && <AiAccess needKey ownKey={ownKey} setOwnKey={(k) => { setOwnKey(k); if (k) { setNeedKey(false); setErr(null); } }} />}
       {disabledReason && <span className="caption" style={{ padding: '0 4px' }}>{disabledReason}</span>}
+      <span className="chat-model" data-testid={`${id}-model`}>Model: DeepSeek V4 Flash ({DEEPSEEK_MODEL})</span>
       <div className="chat-input">
         <textarea ref={box} rows={1} value={text} placeholder={placeholder} onChange={(e) => setText(e.target.value)} onKeyDown={onKey} disabled={busy || !!disabledReason} aria-label="Your message" data-testid={`${id}-input`} />
         <button className="chat-send" onClick={() => void send(text)} disabled={busy || !text.trim() || !!disabledReason} aria-label="Send" data-testid={`${id}-send`}>
