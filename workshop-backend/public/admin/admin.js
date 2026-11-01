@@ -96,7 +96,7 @@ function renderMonitor() {
       <div class="tile hero-tile"><span>Using the AI now</span><b>${m.usersNow}</b><small>of ${m.usersJoined} joined · seen in the last ${m.activeWindowMin} min</small></div>
       <div class="tile"><span>Requests / min</span><b>${m.rpmNow}</b><small>last full minute: ${m.rpm}</small></div>
     </div>
-    ${running ? '' : `<p class="faint">The workshop is ${esc(m.status)}, so nobody can use the AI right now.</p>`}
+    ${running ? '' : `<p class="faint">AI access is ${esc(LABEL[m.status] || m.status).toLowerCase()}, so users cannot use the shared AI right now (the rest of the lab still works).</p>`}
     <div class="chartbox">${chart(m.series)}<div class="legend"><span><i style="background:var(--accent)"></i>answered ${t.ok}</span><span><i style="background:var(--orange)"></i>held back ${t.denied}</span><span><i style="background:var(--red)"></i>failed ${t.fail}</span><span>last 30 min</span></div></div>
     <div class="pair"><div class="tile"><span>Answer time</span><b style="font-size:1.4rem">${ms}</b><small>average, last 5 min</small></div><div class="tile"><span>Problems, 30 min</span><b style="font-size:1.4rem;color:${t.fail || t.denied ? 'var(--orange)' : 'var(--green)'}">${t.fail + t.denied}</b><small>${t.req ? Math.round(((t.fail + t.denied) / t.req) * 100) : 0} % of requests</small></div></div>
   </section>
@@ -105,7 +105,9 @@ function renderMonitor() {
     <div class="lights">
       <div class="light">${LED(m.health.store.ok ? 'ok' : 'bad')}<span>Database</span><small>${m.health.store.ms} ms</small></div>
       <div class="light">${LED(m.health.deepseek.ok ? 'ok' : 'bad')}<span>DeepSeek</span><small>${esc(m.health.deepseek.detail || '')}${m.health.deepseek.ok ? ` · ${m.balance.ms} ms` : ''}</small></div>
-      <div class="light">${LED(running ? 'ok' : m.status === 'scheduled' ? 'warn' : 'bad')}<span>Workshop</span><small>${esc(LABEL[m.status] || m.status)}</small></div>
+      <div class="light">${LED(running ? 'ok' : m.status === 'scheduled' ? 'warn' : 'bad')}<span>AI access for users</span><small>${esc(LABEL[m.status] || m.status)}</small></div>
+      <div class="light">${LED(!m.site ? 'warn' : m.site.throttled ? 'bad' : m.site.ok ? 'ok' : 'bad')}<span>Student website</span><small>${m.site.throttled ? 'slowing visitors down (HTTP ' + m.site.status + ')' : m.site.ok ? 'GitHub Pages · ' + m.site.ms + ' ms' : esc(m.site.error || 'not reachable')}</small></div>
+      <div class="light">${LED(!m.github.ok ? 'warn' : m.github.pages === 'operational' && m.github.overall === 'none' ? 'ok' : m.github.pages === 'operational' ? 'warn' : 'bad')}<span>GitHub status</span><small>${!m.github.ok ? esc('could not read it (' + m.github.error + ')') : m.github.incident ? esc(m.github.incident) : 'Pages ' + esc(m.github.pages.replace(/_/g, ' '))}</small></div>
       <div class="light">${LED(t.fail === 0 ? 'ok' : t.fail < 3 ? 'warn' : 'bad')}<span>AI failures</span><small>${t.fail} in 30 min</small></div>
     </div>
   </section>
@@ -123,7 +125,7 @@ function renderMonitor() {
     ${errRows ? `<table class="mini"><thead><tr><th>Time</th><th>Kind</th><th>Status</th></tr></thead><tbody>${errRows}</tbody></table>` : ''}
   </section>`;
 }
-const LABEL = { active: 'Running', scheduled: 'Scheduled', expired: 'Ended', off: 'Off' };
+const LABEL = { active: 'On', scheduled: 'Scheduled', expired: 'Ended', off: 'Off' };
 function tick() {
   if (!data) return;
   const now = Date.now() + skew, c = data.config;
@@ -155,7 +157,7 @@ function render() {
   $('statusText').textContent = LABEL[data.status]; $('dot').className = 'dot ' + data.status;
   $('runningView').classList.toggle('hidden', !live); $('idleView').classList.toggle('hidden', live);
   $('window').textContent = live ? `${fmtSydney(c.startAt)} → ${fmtSydney(c.endAt)}` : data.status === 'expired' ? `Ended ${fmtSydney(c.endAt)}` : '';
-  $('idleText').textContent = data.status === 'expired' ? 'That workshop has ended. Start another:' : 'Start a workshop:';
+  $('idleText').textContent = data.status === 'expired' ? 'AI access has ended. Turn it on again:' : 'Turn on AI access:';
   $('limitsCard').classList.toggle('hidden', !live); $('lowerRow').classList.toggle('g2', live); // while idle, the limits are asked for as part of starting
   if (!live) { if (document.activeElement !== $('startPerUser')) $('startPerUser').value = c.maxPerStudent; if (document.activeElement !== $('startTotal')) $('startTotal').value = c.maxTotal; if (document.activeElement !== $('startMax')) $('startMax').value = c.maxStudents || ''; $('startUnl').checked = c.maxStudents === 0; $('startMax').disabled = c.maxStudents === 0; }
   if (live && document.activeElement !== $('endExact')) $('endExact').value = epochToSydneyInput(c.endAt);
@@ -185,7 +187,7 @@ document.addEventListener('click', (e) => {
   if (b.dataset.access) run(async () => { await api('PUT', 'config', { needCode: b.dataset.access === 'codes' }); await refresh(); });
   if (b.dataset.revoke && confirm('Block this user? They lose access to the workshop AI.')) run(async () => { await api('POST', 'codes-revoke', { id: b.dataset.revoke }); await refresh(); });
 });
-$('disable').addEventListener('click', () => confirm('Turn the workshop off now? Users lose access immediately.') && run(async () => { await api('POST', 'workshop-disable'); toast('Workshop is off'); await refresh(); }));
+$('disable').addEventListener('click', () => confirm('Turn AI access off now? Users lose the shared AI immediately (the rest of the lab keeps working).') && run(async () => { await api('POST', 'workshop-disable'); toast('AI access is off'); await refresh(); }));
 $('applyEnd').addEventListener('click', () => run(async () => { await api('POST', 'workshop-end', { endAt: sydneyToEpoch($('endExact').value) }); toast('End time updated'); await refresh(); }));
 $('deleteData').addEventListener('click', () => confirm('Delete every user record for this workshop (names, places, usage and any codes)? This cannot be undone.') && run(async () => { await api('POST', 'data-delete'); toast('User records deleted'); await refresh(); }));
 $('saveLimits').addEventListener('click', () => run(async () => {
@@ -201,7 +203,7 @@ $('startBtn').addEventListener('click', () => run(async () => {
   // the basics first (requests per user, total requests), then switch on
   await api('PUT', 'config', { maxPerStudent: Number($('startPerUser').value), maxTotal: Number($('startTotal').value), maxStudents: $('startUnl').checked ? 0 : Number($('startMax').value) });
   const dates = $('startAt').value && $('endAt').value ? { startAt: sydneyToEpoch($('startAt').value), endAt: sydneyToEpoch($('endAt').value) } : { durationMinutes: dur };
-  await api('POST', 'workshop-start', dates); toast(dates.startAt ? 'Workshop scheduled' : 'Workshop started'); await refresh();
+  await api('POST', 'workshop-start', dates); toast(dates.startAt ? 'AI access scheduled' : 'AI access is on'); await refresh();
 }));
 
 let issued = [];

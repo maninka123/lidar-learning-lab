@@ -65,4 +65,14 @@ describe('live monitor', () => {
     const kv = JSON.stringify([...(ctx.store as unknown as { h: Map<string, Map<string, string>> }).h.entries()].filter(([k]) => k.includes(':live:')).map(([k, m]) => [k, [...m]]));
     expect(kv).not.toMatch(/Private|hello|9\.9\.9|1\.2\.3/); expect(HOUR).toBeGreaterThan(0);
   });
+
+  it('checks the student website like a visitor and GitHub\'s status page, and flags throttling', async () => {
+    const ctx = setup(); const a = await startWorkshop(ctx, 3, { needCode: false });
+    let v = (await a.call('GET', 'live')).body as { site: { ok: boolean; throttled: boolean; url: string }; github: { ok: boolean; pages: string; incident?: string } };
+    expect(v.site).toMatchObject({ ok: true, throttled: false }); expect(v.site.url.startsWith('https://students.example')).toBe(true); expect(v.github).toMatchObject({ ok: true, pages: 'operational' });
+    ctx.upstream.site = 'throttled'; ctx.upstream.gh = 'incident'; ctx.clock.t = T0 + 61e3;
+    v = (await a.call('GET', 'live')).body as typeof v; expect(v.site).toMatchObject({ ok: false, throttled: true }); expect(v.github).toMatchObject({ pages: 'degraded_performance', incident: 'Degraded Pages builds' });
+    ctx.upstream.site = 'down'; ctx.upstream.gh = 'down'; ctx.clock.t = T0 + 130e3;
+    const r = await a.call('GET', 'live'); expect(r.status).toBe(200); v = r.body as typeof v; expect(v.site.ok).toBe(false); expect(v.github.ok).toBe(false);
+  });
 });

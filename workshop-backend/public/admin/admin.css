@@ -99,3 +99,4 @@ h3 { font-size:.75rem; letter-spacing:.07em; }
 .credit b { font-size:1.875rem; letter-spacing:-.03em; } .credit span { font-size:.8125rem; line-height:1.35; }
 .card { border-radius:18px; } .side .card { border:1px solid var(--sep); box-shadow:none; background:var(--bg-elev); }
 .mini td { font-size:.8125rem; }
+.kicker { display:block; font-size:.6875rem; font-weight:650; letter-spacing:.07em; text-transform:uppercase; color:var(--text3); line-height:1.2; margin-bottom:1px; }

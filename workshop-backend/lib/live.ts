@@ -59,10 +59,45 @@ export function requestsLeft(b: Balance, spendUsd: number, requests: number, now
   return { balanceUsd: usd, perRequestUsd: perReq, basis: measured ? 'measured' : 'typical', requests: perReq > 0 ? Math.floor(usd / perReq) : null, approxCurrency: b.currency === 'CNY' };
 }
 
+// ------------------------------------------------------------------ the student website (GitHub Pages) and GitHub's own status
+const SITE_KEY = 'ws:site', GH_KEY = 'ws:ghstatus', GH_URL = 'https://www.githubstatus.com/api/v2/summary.json';
+export interface SiteCheck { t: number; ok: boolean; ms: number; status?: number; throttled: boolean; url: string; error?: string }
+export interface GhStatus { t: number; ok: boolean; pages?: string; overall?: string; incident?: string; error?: string }
+const cached = async <T extends { t: number }>(s: Store, key: string, now: number, maxAge: number, make: () => Promise<T>): Promise<T> => {
+  try { const raw = await s.get(key); if (raw) { const v = JSON.parse(raw) as T; if (now - v.t < maxAge) return v; } } catch { /* look again */ }
+  const v = await make(); try { await s.set(key, JSON.stringify(v), 600); } catch { /* ignore */ } return v;
+};
+/** Where the lab itself is served from: the first allowed origin (for GitHub Pages that is a user site, and the lab lives in a folder). */
+export const siteUrl = (deps: Deps) => { const o = deps.env.origins[0] ?? ''; return o ? (/github\.io$/.test(o) ? o + '/lidar-learning-lab/' : o + '/') : ''; };
+
+/** Ask for the student site the way a visitor would. A 429 or 503 means the host is slowing people down. */
+export const siteCheck = (deps: Deps, now: number): Promise<SiteCheck> => cached(deps.store, SITE_KEY, now, 30_000, async () => {
+  const url = siteUrl(deps), t0 = Date.now(); if (!url) return { t: now, ok: false, ms: 0, throttled: false, url, error: 'no site address set' };
+  try {
+    const ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), 8000);
+    try { const r = await deps.fetch(url, { method: 'GET', signal: ctl.signal, headers: { Accept: 'text/html' } }); await r.arrayBuffer().catch(() => null); return { t: now, ok: r.ok, ms: Date.now() - t0, status: r.status, throttled: r.status === 429 || r.status === 503, url, error: r.ok ? undefined : `HTTP ${r.status}` }; }
+    finally { clearTimeout(timer); }
+  } catch (e) { return { t: now, ok: false, ms: Date.now() - t0, throttled: false, url, error: (e as Error).name === 'AbortError' ? 'timeout' : 'unreachable' }; }
+});
+
+/** GitHub's public status page: the "Pages" component and any open incident. */
+export const githubStatus = (deps: Deps, now: number): Promise<GhStatus> => cached(deps.store, GH_KEY, now, 60_000, async () => {
+  try {
+    const ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), 8000);
+    try {
+      const r = await deps.fetch(GH_URL, { signal: ctl.signal, headers: { Accept: 'application/json' } });
+      const j = (r.ok ? await r.json().catch(() => null) : null) as { status?: { indicator?: string; description?: string }; components?: { name?: string; status?: string }[]; incidents?: { name?: string; status?: string }[] } | null;
+      if (!j) return { t: now, ok: false, error: r.ok ? 'unreadable' : `HTTP ${r.status}` };
+      const pages = j.components?.find((c) => c.name?.toLowerCase() === 'pages')?.status, inc = j.incidents?.find((i) => i.status !== 'resolved' && i.status !== 'postmortem');
+      return { t: now, ok: true, pages: pages ?? 'unknown', overall: j.status?.indicator ?? 'unknown', incident: inc?.name };
+    } finally { clearTimeout(timer); }
+  } catch (e) { return { t: now, ok: false, error: (e as Error).name === 'AbortError' ? 'timeout' : 'unreachable' }; }
+});
+
 // ------------------------------------------------------------------ the dashboard view
 export async function liveView(deps: Deps, c: W.WorkshopConfig, now: number) {
   const s = deps.store, t0 = Date.now();
-  const [ser, bal, codes, tot] = await Promise.all([series(s, c.workshopId, now, 30), balance(deps, now), W.listCodes(s, c.workshopId), s.hgetall(W.k.totals(c.workshopId))]);
+  const [ser, bal, codes, tot, site, gh] = await Promise.all([series(s, c.workshopId, now, 30), balance(deps, now), W.listCodes(s, c.workshopId), s.hgetall(W.k.totals(c.workshopId)), siteCheck(deps, now), githubStatus(deps, now)]);
   const storeMs = Date.now() - t0, ACTIVE = 2 * 60e3;
   const requests = Number(tot?.requests ?? 0) || 0, spendUsd = (Number(tot?.costNano ?? 0) || 0) / 1e9;
   const last = (n: number) => ser.slice(-n), sum = (a: Minute[], f: 'req' | 'ok' | 'fail' | 'denied') => a.reduce((x, m) => x + m[f], 0);
@@ -75,6 +110,7 @@ export async function liveView(deps: Deps, c: W.WorkshopConfig, now: number) {
     series: ser, totals30: { req: sum(ser, 'req'), ok: sum(ser, 'ok'), fail: sum(ser, 'fail'), denied: sum(ser, 'denied'), reasons },
     capacity: { requests, maxTotal: c.maxTotal, spendUsd, perUserLimit: c.maxPerStudent, rpmPerUser: c.rpm, rpmPerAddress: c.rpmAddress },
     balance: bal, left: requestsLeft(bal, spendUsd, requests, now),
+    site, github: gh,
     health: { store: { ok: true, ms: storeMs }, deepseek: { ok: bal.ok && bal.available !== false, ms: bal.ms, detail: bal.ok ? (bal.available === false ? 'account says it cannot take requests' : 'reachable') : bal.error } },
     errors: (await W.recentErrors(s)).filter((e) => e.workshopId === c.workshopId || e.workshopId === '-').slice(0, 8),
   };

@@ -35,24 +35,25 @@
     <section class="card hidden" id="touchCard"><div class="row between"><span class="muted" id="touchText"></span><button id="touchSetup" class="btn sm">Set up a passkey</button></div></section>
 
     <section class="card hero" id="workshopCard">
-      <div class="card-head"><div class="status"><span class="dot" id="dot"></span><h2 id="statusText">Off</h2></div><span class="faint" id="window"></span></div>
+      <div class="card-head"><div class="status"><span class="dot" id="dot"></span><div><span class="kicker">Shared AI access for users</span><h2 id="statusText">Off</h2></div></div><span class="faint" id="window"></span></div>
 
       <div id="runningView" class="hidden stack">
         <div class="big" id="countdown">—</div>
         <div class="bar" aria-hidden="true"><i id="barFill"></i></div>
-        <div class="row"><button class="btn sm" data-extend="60">+1 h</button><button class="btn sm" data-extend="180">+3 h</button><button class="btn sm" data-extend="1440">+1 day</button><button class="btn sm" data-extend="-60">−1 h</button><button id="disable" class="btn sm danger">Turn off now</button></div>
+        <div class="row"><button class="btn sm" data-extend="60">+1 h</button><button class="btn sm" data-extend="180">+3 h</button><button class="btn sm" data-extend="1440">+1 day</button><button class="btn sm" data-extend="-60">−1 h</button><button id="disable" class="btn sm danger">Turn off AI access</button></div>
         <details><summary>Set an exact end time</summary><div class="row"><input type="datetime-local" id="endExact" class="auto"><button id="applyEnd" class="btn sm">Apply</button></div></details>
       </div>
 
       <div id="idleView" class="stack">
-        <p class="muted" id="idleText">Start a workshop:</p>
+        <p class="muted">Lets users use the lab’s AI without their own DeepSeek key, with limits you set. <b>The workshop itself works fine without this</b>: only the AI features need it.</p>
+        <p class="muted" id="idleText">Turn on AI access:</p>
         <div class="seg" role="group" aria-label="Duration" id="durSeg"><button data-dur="180" aria-pressed="true">3 hours</button><button data-dur="360" aria-pressed="false">6 hours</button><button data-dur="1440" aria-pressed="false">1 day</button><button data-dur="2880" aria-pressed="false">2 days</button></div>
         <details><summary>Or pick dates</summary>
           <div class="grid g2"><label>Starts<input type="datetime-local" id="startAt"></label><label>Ends<input type="datetime-local" id="endAt"></label></div>
         </details>
         <div class="grid g3"><label>Requests per user<input id="startPerUser" type="number" min="1"></label><label>Total requests<input id="startTotal" type="number" min="1"></label><label>Max users<input id="startMax" type="number" min="1" max="500"><span class="check"><input type="checkbox" id="startUnl"> Unlimited</span></label></div>
-        <p class="faint">You can raise any of these later while the workshop is running.</p>
-        <div class="row"><button id="startBtn" class="btn primary">Start workshop</button></div>
+        <p class="faint">You can raise any of these later while AI access is on.</p>
+        <div class="row"><button id="startBtn" class="btn primary">Turn on AI access</button></div>
       </div>
     </section>
 
