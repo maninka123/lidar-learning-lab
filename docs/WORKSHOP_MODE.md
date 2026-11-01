@@ -61,21 +61,22 @@ Go to `https://<your-project>.vercel.app/admin` and sign in with your username a
 
 ## Running a workshop
 
-**Start:** open `/admin`, press **3 hours / 6 hours / 1 day / 2 days** (or *Or pick dates* for a Sydney-time schedule). That is all. By default access is **open**: while the workshop runs, anyone using the lab can use its AI steps with no key and no code. Each browser gets an anonymous id, so usage is still counted per user.
+**Start:** open `/admin` and press **3 hours / 6 hours / 1 day / 2 days** (or pick Sydney-time dates). Access is open by default: while it runs, anyone in the lab can use the AI steps with no key and no code, and each browser is counted as an anonymous user.
 
-**While it runs:** the dashboard refreshes every 5 seconds: time left, users joined and active now, requests, tokens and the **spend so far**, worked out per request from DeepSeek's advertised prices for the model (see below). Extend or shorten with **+1 h / +3 h / +1 day / −1 h** or an exact end time; **Turn off now** ends it at once.
+**While it runs:** the dashboard refreshes every 5 seconds. Extend or shorten with **+1 h / +3 h / +1 day / −1 h** or an exact end time. **Turn off AI access** ends it at once.
+* **Live monitor** (right column): users using the AI now, requests per minute, a 30-minute chart (answered, held back, failed), answer time, health lights (database, DeepSeek, AI access, student website, GitHub status, failures), capacity left (requests, users, DeepSeek credit and roughly how many requests it pays for) and why requests were held back. A 429 or 503 from the student site means GitHub Pages is slowing visitors down.
+* **On / Off** is the shared AI access only: the lab works without it.
+* It cannot see the website's own traffic, and it keeps no prompts, answers, names or addresses.
 
-**Live monitor (right-hand column of the dashboard):** refreshed every 5 seconds from counters the server keeps itself, so nobody using the lab has to do anything. It shows how many users used the AI in the last 2 minutes, requests per minute, a 30-minute chart (answered, held back, failed), answer time, health lights (database, DeepSeek, workshop, AI failures), capacity left (requests, users, DeepSeek credit and roughly how many requests it still pays for), why requests were held back (for example one network asking too fast) and recent failures. The credit is read from DeepSeek's balance service with the workshop key, which never leaves the server. The health lights also check the student website the way a visitor would (a 429 or 503 answer means GitHub Pages is slowing people down) and read GitHub's public status page for Pages incidents. In the dashboard "Off / On" refers to the shared AI access for users only: the lab works without it. It cannot see the website's own traffic (GitHub Pages does not publish it), and it keeps no prompts, answers, names or addresses.
+**Limits:** *Requests per user*, *Total requests* and *Max users* (defaults 40, 1,500, 100; *Unlimited* for users). Raise any of them while it runs, using the Limits card or the **+100 / +500 / +10 / +25** buttons. Built in: a per-minute rate limit per user and per network address, a cap on users per address, and a hard ceiling on tokens per request.
 
-**Limits:** starting asks for *Requests per user*, *Total requests* and *Max users* (defaults 40, 1,500 and 100; tick *Unlimited* for no limit on users). You can raise any of them at any time while it runs, with the Limits card or the quick "+100 / +500 / +10 / +25" buttons; changes apply to the next request. The lab chooses its own reply sizes, and a hard ceiling on tokens per request is built in. Other safeguards need no setting: a per-minute rate limit per user and per network address, a cap on how many different users one address can create (a whole classroom may share one address), and a cap on how many users one address can create.
+**Access codes (optional):** switch *Access* to **Codes** for a smaller or untrusted group. Codes are shown once and stored only as keyed hashes.
 
-**Access codes (optional):** switch *Access* to **Codes** if you want personal codes (for a smaller or untrusted group). Generate them, copy or download the CSV, and hand one to each user. Codes are shown once and stored only as keyed hashes.
+**After:** it ends by itself at the end time and the lab returns to bring-your-own-key. Then revoke the dedicated DeepSeek key and, if you like, **Delete user records**.
 
-**After:** the workshop ends by itself at its end time (checked by the server on every request); the lab goes back to bring-your-own-key. Then revoke the dedicated DeepSeek key and, if you like, **Delete user records**.
+**Cost:** estimated from DeepSeek's advertised `deepseek-flash` prices (what `deepseek-v4-flash` is billed as): $0.15 per 1M input tokens ($0.003 on cache hits) and $0.60 per 1M output, double at peak (01:00–04:00 and 06:00–10:00 UTC, Mon–Fri). Source and date are in the dashboard and `workshop-backend/lib/pricing.ts`; check them at https://api-docs.deepseek.com/quick_start/pricing/. Chinese public holidays are ignored.
 
-**Cost:** the estimate uses the advertised `deepseek-flash` prices (which `deepseek-v4-flash` is billed as): $0.15 per 1M input tokens ($0.003 on cache hits) and $0.60 per 1M output tokens off-peak, double at peak (01:00–04:00 and 06:00–10:00 UTC, Monday to Friday). Source and date are shown on the dashboard and in `workshop-backend/lib/pricing.ts`; check them against <https://api-docs.deepseek.com/quick_start/pricing/> and update that file if DeepSeek changes its prices. The estimate ignores Chinese public holidays.
-
-**Protecting your budget without codes:** open access cannot tell two browsers on one network apart from a determined abuser, so the real protection is *Total requests* plus the per-address caps. Pick a *Total requests* you are happy to pay for (1,500 requests cost roughly $1 or less at these prices), and watch the spend tile.
+**Budget without codes:** two browsers on one network can't be told apart from an abuser, so set **Total requests** to what you are happy to pay (1,500 requests cost roughly $1 or less) and watch the spend tile.
 
 ## Student analytics (privacy-conscious)
 
