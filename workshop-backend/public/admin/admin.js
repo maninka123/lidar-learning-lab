@@ -24,7 +24,7 @@ const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&
 function toast(text, bad) { const t = $('toast'); t.textContent = text; t.className = 'msg ' + (bad ? 'bad' : 'good'); clearTimeout(toast.h); toast.h = setTimeout(() => t.classList.add('hidden'), 5000); }
 const run = async (f) => { try { await f(); } catch (e) { toast(e.message, true); } };
 
-function showLogin() { $('login').classList.remove('hidden'); $('app').classList.add('hidden'); $('logout').classList.add('hidden'); clearInterval(timer); clearInterval(poll); mon = null; }
+function showLogin() { $('login').classList.remove('hidden'); $('app').classList.add('hidden'); $('viewBar').classList.add('hidden'); $('chView').classList.add('hidden'); $('logout').classList.add('hidden'); clearInterval(timer); clearInterval(poll); mon = null; }
 // ---- Passkeys (WebAuthn): Touch ID, Face ID, Windows Hello, a phone or a security key. Binary fields travel as base64url text.
 const b64 = { enc: (buf) => btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''),
   dec: (s) => Uint8Array.from(atob(s.replace(/-/g, '+').replace(/_/g, '/').padEnd(Math.ceil(s.length / 4) * 4, '=')), (c) => c.charCodeAt(0)).buffer };
@@ -53,7 +53,7 @@ async function boot() {
   if (!s.authenticated) { showLogin(); $('touchLogin').classList.toggle('hidden', !(touch && s.passkeys)); return; }
   $('touchCard').classList.toggle('hidden', !touch || s.passkeys > 0); // offered until a passkey has been set up
   $('touchText').textContent = 'Sign in faster next time with a passkey: Touch ID, Face ID, Windows Hello or a security key.';
-  csrf = s.csrf; $('login').classList.add('hidden'); $('app').classList.remove('hidden'); $('logout').classList.remove('hidden');
+  csrf = s.csrf; $('login').classList.add('hidden'); $('app').classList.remove('hidden'); $('logout').classList.remove('hidden'); $('viewBar').classList.remove('hidden');
   await refresh(); refreshLive(); clearInterval(timer); clearInterval(poll); timer = setInterval(tick, 1000); poll = setInterval(() => { run(refresh); if (!document.hidden) refreshLive(); }, 5000); // live: refreshed every few seconds
 }
 $('loginForm').addEventListener('submit', async (e) => {
@@ -218,3 +218,106 @@ $('csvCodes').addEventListener('click', () => {
   const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'workshop-codes.csv'; a.click(); URL.revokeObjectURL(a.href);
 });
 boot();
+
+// ---- Challenge scores: what students sent from the Industrial Digital Twin Challenge
+let ch = { subs: [], labels: {}, accept: { accepting: false, until: null }, settings: null }, chUnit = 'unlimited';
+const TASK_NAMES = { twin: 'Digital twin', detect: 'Object detection', colour: 'Colour-coded objects', change: 'Change detection', quality: 'Noise handling', safety: 'Safety and clearance', budget: 'Budget and efficiency' };
+const DEFAULT_SET = { budget: 3000, priceScale: 1, maxSubmissions: 0, weights: { twin: 20, detect: 20, colour: 10, change: 20, quality: 10, safety: 10, budget: 10 }, enabled: { twin: true, detect: true, colour: true, change: true, quality: true, safety: true, budget: true } };
+const TASK_SHORT = { twin: 'Twin', detect: 'Objects', colour: 'Colour', change: 'Change', quality: 'Noise', safety: 'Safety', budget: 'Budget' };
+const openRows = new Set();
+function setView(v) {
+  document.querySelectorAll('[data-view]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.view === v)));
+  $('app').style.display = v === 'workshop' ? '' : 'none';
+  $('chView').classList.toggle('hidden', v !== 'challenge');
+  if (v === 'challenge') run(loadChallenge);
+}
+$('viewBar').addEventListener('click', (e) => { const b = e.target.closest('[data-view]'); if (b) setView(b.dataset.view); });
+async function loadChallenge() { const r = await api('GET', 'challenge'); ch = { subs: r.submissions || [], labels: r.labels || {}, accept: r.accept || { accepting: false, until: null }, settings: r.settings || DEFAULT_SET }; skew = r.now - Date.now(); renderChallenge(); if (!document.activeElement || !$('chSettings').contains(document.activeElement)) renderSettings(ch.settings); }
+const netName = (s) => ch.labels[s.net] || ('network ' + s.net.slice(0, 6));
+const place = (s) => [s.geo && s.geo.city, s.geo && s.geo.country].filter(Boolean).join(', ') || 'unknown place';
+/** index numbers seen per IP address and per browser id: more than one means one computer sent for several people */
+function sharing() {
+  const byIp = new Map(), byDev = new Map();
+  for (const s of ch.subs) { const k = s.index.toLowerCase(); if (s.ip) { if (!byIp.has(s.ip)) byIp.set(s.ip, new Set()); byIp.get(s.ip).add(k); } if (s.device) { if (!byDev.has(s.device)) byDev.set(s.device, new Set()); byDev.get(s.device).add(k); } }
+  return { ip: (s) => (s.ip && byIp.get(s.ip) ? byIp.get(s.ip).size : 1), dev: (s) => (s.device && byDev.get(s.device) ? byDev.get(s.device).size : 1) };
+}
+function visibleSubs() {
+  const q = $('chSearch').value.trim().toLowerCase(), kind = $('chKind').value, mode = $('chMode').value;
+  const sh = sharing(), shared = $('chShare').value === 'shared';
+  let list = ch.subs.filter((s) => (!kind || s.kind === kind) && (!q || s.name.toLowerCase().includes(q) || s.index.toLowerCase().includes(q)) && (!shared || sh.ip(s) > 1 || sh.dev(s) > 1));
+  if (mode === 'latest') { const best = new Map(); for (const s of list) { const k = s.index.toLowerCase(), b = best.get(k); if (!b || s.total > b.total || (s.total === b.total && s.at > b.at)) best.set(k, s); } list = [...best.values()].sort((a, b) => b.at - a.at); }
+  return list;
+}
+function renderSettings(s) {
+  const f = $('chSetForm'); f.budget.value = s.budget; f.priceScale.value = s.priceScale; f.maxSubmissions.value = s.maxSubmissions;
+  $('chTasks').innerHTML = Object.keys(TASK_NAMES).map((k) => `<tr><td>${esc(TASK_NAMES[k])}</td><td><input type="checkbox" data-en="${k}" ${s.enabled[k] ? 'checked' : ''} aria-label="${esc(TASK_NAMES[k])} counts"></td><td class="num"><input type="number" data-w="${k}" min="0" max="100" value="${s.weights[k]}" style="width:70px" aria-label="${esc(TASK_NAMES[k])} weight"></td><td class="num" data-share="${k}">—</td></tr>`).join('');
+  updateShares();
+}
+function readSettings() {
+  const f = $('chSetForm'), weights = {}, enabled = {};
+  document.querySelectorAll('[data-w]').forEach((i) => { weights[i.dataset.w] = Number(i.value); });
+  document.querySelectorAll('[data-en]').forEach((i) => { enabled[i.dataset.en] = i.checked; });
+  return { budget: Number(f.budget.value), priceScale: Number(f.priceScale.value), maxSubmissions: Number(f.maxSubmissions.value), weights, enabled };
+}
+function updateShares() {
+  const s = readSettings(), total = Object.keys(TASK_NAMES).reduce((a, k) => a + (s.enabled[k] ? s.weights[k] || 0 : 0), 0);
+  document.querySelectorAll('[data-share]').forEach((c) => { const k = c.dataset.share; c.textContent = s.enabled[k] && total ? ((100 * (s.weights[k] || 0)) / total).toFixed(0) + ' %' : '—'; });
+  $('chSetNote').textContent = 'Points are rescaled to 100 over the tasks that count';
+}
+$('chSettings').addEventListener('input', updateShares);
+$('chSetSave').addEventListener('click', () => run(async () => { const r = await api('POST', 'challenge-settings', readSettings()); ch.settings = r.settings; renderSettings(r.settings); $('chSetMsg').textContent = 'Saved ' + fmtSydney(Date.now()); toast('Challenge settings saved'); }));
+$('chSetReset').addEventListener('click', () => { renderSettings(DEFAULT_SET); $('chSetMsg').textContent = 'Defaults loaded: press Save to keep them'; });
+function renderAccept() {
+  const a = ch.accept, on = !!a.accepting, left = a.until ? a.until - (Date.now() + skew) : null;
+  $('chDot').className = 'dot ' + (on ? 'active' : 'off'); $('chStatus').textContent = on ? 'Accepting scores' : 'Closed';
+  $('chOpenView').classList.toggle('hidden', !on); $('chClosedView').classList.toggle('hidden', on);
+  $('chCountdown').textContent = !on ? '' : left === null ? 'Open until you stop it' : 'Closes in ' + fmtDuration(left) + ' (' + fmtSydney(a.until) + ')';
+}
+setInterval(() => { if ($('chView').classList.contains('hidden')) return; if (ch.accept.accepting && ch.accept.until && ch.accept.until - (Date.now() + skew) <= 0) ch.accept.accepting = false; renderAccept(); }, 1000);
+$('chDur').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-unit]'); if (!b) return; chUnit = b.dataset.unit;
+  document.querySelectorAll('#chDur button').forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
+  $('chLenBox').classList.toggle('hidden', chUnit === 'unlimited');
+  if (chUnit !== 'unlimited') { $('chLenLabel').textContent = 'Open for (' + chUnit + ')'; $('chLen').value = chUnit === 'hours' ? 3 : 1; }
+});
+$('chStart').addEventListener('click', () => run(async () => { const n = Number($('chLen').value), mins = chUnit === 'hours' ? n * 60 : chUnit === 'days' ? n * 1440 : null; if (mins !== null && !(n >= 1)) throw new Error('Enter how many ' + chUnit + '.'); await api('POST', 'challenge-start', mins === null ? {} : { durationMinutes: Math.round(mins) }); await loadChallenge(); toast(chUnit === 'unlimited' ? 'Now accepting scores until you stop it' : 'Now accepting scores'); }));
+$('chStop').addEventListener('click', () => { if (confirm('Stop accepting scores? Students can still use the challenge and see their grade, but sending will be refused until you start it again.')) run(async () => { await api('POST', 'challenge-stop', {}); await loadChallenge(); toast('Stopped: no more scores are accepted'); }); });
+function renderChallenge() {
+  renderAccept();
+  const all = ch.subs, students = new Set(all.map((s) => s.index.toLowerCase())), sh = sharing();
+  const bestBy = new Map(); for (const s of all) { const k = s.index.toLowerCase(); if (!bestBy.has(k) || s.total > bestBy.get(k)) bestBy.set(k, s.total); }
+  const bests = [...bestBy.values()], avg = bests.length ? bests.reduce((a, b) => a + b, 0) / bests.length : 0;
+  $('chTiles').innerHTML = [['Records', all.length], ['Students', students.size], ['Average best score', avg.toFixed(1)], ['Top score', bests.length ? Math.max(...bests).toFixed(1) : '—']].map(([k, v]) => `<div class="tile"><span class="faint">${esc(k)}</span><b class="big" style="font-size:1.6rem">${esc(String(v))}</b></div>`).join('');
+  $('chNote').textContent = all.length ? 'Latest ' + fmtSydney(all[0].at) : 'Nothing received yet';
+  const list = visibleSubs();
+  $('chRows').innerHTML = list.length ? list.map((s) => {
+    const chips = Object.keys(TASK_SHORT).map((k) => `<span class="chip" title="${esc(TASK_SHORT[k])}">${esc(TASK_SHORT[k])} ${Math.round((s.tasks[k] || 0) * 100)}</span>`).join(' ');
+    const mins = s.startedAt ? Math.max(0, Math.round((s.at - s.startedAt) / 60000)) : null;
+    const det = openRows.has(s.id) ? `<tr><td colspan="9"><div class="stack" style="gap:6px;font-size:.85rem">
+      <div><b>Team:</b> ${esc(s.team || '—')} · <b>Equipment:</b> ${esc(s.equipment.lidars.join('; ') || 'no LiDAR')}${s.equipment.cameras.length ? ' · cameras: ' + esc(s.equipment.cameras.join('; ')) : ''}${s.equipment.lights ? ' · ' + s.equipment.lights + ' lamp(s)' : ''}${s.equipment.platform ? ' · mobile platform' : ''}</div>
+      <div><b>Pipeline:</b> ${esc(s.pipeline.join(' → ') || '—')}</div>
+      <div><b>Key results:</b> ${esc(Object.entries(s.metrics).map(([k, v]) => k + ' ' + v).join(' · ') || '—')}</div>
+      <div><b>Points:</b> ${esc(Object.keys(TASK_SHORT).map((k) => TASK_SHORT[k] + ' ' + (s.points[k] ?? 0)).join(' · '))} · <b>Budget used:</b> ${s.cost} / ${s.budget} credits</div>
+      <div class="faint">Started ${s.startedAt ? esc(fmtSydney(s.startedAt)) : '—'}${mins !== null ? ' (about ' + mins + ' min before sending)' : ''} · time zone ${esc(s.client.tz || '—')} · language ${esc(s.client.lang || '—')} · from ${esc(s.origin || '—')}</div></div></td></tr>` : '';
+    return `<tr><td>${esc(fmtSydney(s.at))}</td><td>${esc(s.name)}</td><td class="mono">${esc(s.index)}</td><td>${esc(place(s))}<br><span class="faint">${esc(netName(s))}</span><br><span class="mono faint">${esc(s.ip || 'no IP')}${s.device ? ' · ' + esc(s.device.slice(0, 6)) : ''}</span>${sh.dev(s) > 1 ? ` <span class="chip bad" title="This browser sent scores under ${sh.dev(s)} different index numbers">same browser · ${sh.dev(s)} index numbers</span>` : sh.ip(s) > 1 ? ` <span class="chip warn" title="This IP address sent scores under ${sh.ip(s)} different index numbers">same IP · ${sh.ip(s)} index numbers</span>` : ''}</td><td class="num"><b>${s.total.toFixed(1)}</b><br><span class="faint">${esc(s.kind)}</span></td><td>${chips}</td><td class="num">${s.cost}</td><td class="num">${s.attempts.practice}+${s.attempts.final}</td><td><button class="btn sm" data-open="${esc(s.id)}">${openRows.has(s.id) ? 'Hide' : 'Details'}</button> <button class="btn sm danger" data-del="${esc(s.id)}" title="Delete this record">✕</button></td></tr>${det}`;
+  }).join('') : '<tr><td colspan="9" class="faint">No scores to show.</td></tr>';
+  // networks: how many distinct students and records came from each
+  const nets = new Map(); for (const s of all) { const n = nets.get(s.net) || { tag: s.net, st: new Set(), n: 0, place: place(s), ip: s.ip }; n.st.add(s.index.toLowerCase()); n.n++; nets.set(s.net, n); }
+  $('chNets').innerHTML = [...nets.values()].sort((a, b) => b.st.size - a.st.size).map((n) => `<tr><td class="mono">${esc(n.tag.slice(0, 8))}</td><td class="mono">${esc(n.ip || '—')}</td><td>${esc(ch.labels[n.tag] || '—')}</td><td>${esc(n.place)}</td><td class="num">${n.st.size}</td><td class="num">${n.n}</td><td><button class="btn sm" data-label="${esc(n.tag)}">Label</button></td></tr>`).join('') || '<tr><td colspan="7" class="faint">None yet.</td></tr>';
+}
+['chSearch', 'chMode', 'chKind', 'chShare'].forEach((id) => $(id).addEventListener('input', renderChallenge));
+$('chRefresh').addEventListener('click', () => run(loadChallenge));
+$('chView').addEventListener('click', (e) => {
+  const o = e.target.closest('[data-open]'), d = e.target.closest('[data-del]'), l = e.target.closest('[data-label]');
+  if (o) { const id = o.dataset.open; if (openRows.has(id)) openRows.delete(id); else openRows.add(id); renderChallenge(); }
+  if (d && confirm('Delete this score record?')) run(async () => { await api('POST', 'challenge-delete', { id: d.dataset.del }); await loadChallenge(); });
+  if (l) { const cur = ch.labels[l.dataset.label] || ''; const v = prompt('Name for this network (for example Campus Wi-Fi or Home). Leave empty to remove the label.', cur); if (v !== null) run(async () => { await api('POST', 'challenge-label', { tag: l.dataset.label, label: v }); await loadChallenge(); }); }
+});
+$('chClear').addEventListener('click', () => { if (confirm('Delete ALL challenge score records? This cannot be undone.')) run(async () => { await api('POST', 'challenge-clear', {}); await loadChallenge(); }); });
+$('chCsv').addEventListener('click', () => {
+  const q = (v) => '"' + String(v ?? '').replace(/"/g, '""') + '"';
+  const head = ['sent (Sydney)', 'name', 'index', 'place', 'network', 'ip address', 'browser id', 'index numbers on this IP', 'index numbers on this browser', 'kind', 'score', ...Object.values(TASK_SHORT).map((n) => n + ' (0-1)'), 'cost', 'budget', 'practice runs', 'final runs', 'equipment', 'pipeline'];
+  const sh = sharing(), rows = visibleSubs().map((s) => [fmtSydney(s.at), s.name, s.index, place(s), netName(s), s.ip || '', s.device || '', sh.ip(s), sh.dev(s), s.kind, s.total, ...Object.keys(TASK_SHORT).map((k) => s.tasks[k] ?? 0), s.cost, s.budget, s.attempts.practice, s.attempts.final, [...s.equipment.lidars, ...s.equipment.cameras].join('; '), s.pipeline.join(' > ')]);
+  const csv = [head, ...rows].map((r) => r.map(q).join(',')).join('\n');
+  const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' })); a.download = 'challenge_scores.csv'; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+});

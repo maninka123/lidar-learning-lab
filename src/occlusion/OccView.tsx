@@ -15,12 +15,19 @@ export const STATUS_LABELS = ['Visible: the laser can reach it', 'Hidden: someth
 const col = (hex: string) => new THREE.Color(hex);
 
 /** The surface samples as coloured dots: the colour says what the scanner(s) can see there. */
-export function SamplePoints({ samples, colours, size = 4 }: { samples: SurfaceSamples; colours: Float32Array; size?: number }) {
+export function SamplePoints({ samples, colours, size = 4, onlySeenHidden }: { samples: SurfaceSamples; colours: Float32Array; size?: number; onlySeenHidden?: Uint8Array /* per-sample status: keep only the visible and hidden ones */ }) {
   const geom = useMemo(() => {
+    let pos = samples.pos, colr = colours;
+    if (onlySeenHidden) {
+      const idx: number[] = [];
+      for (let i = 0; i < samples.count; i++) if (onlySeenHidden[i] <= 1) idx.push(i);
+      pos = new Float32Array(idx.length * 3); colr = new Float32Array(idx.length * 3);
+      idx.forEach((i, k) => { for (let c = 0; c < 3; c++) { pos[k * 3 + c] = samples.pos[i * 3 + c]; colr[k * 3 + c] = colours[i * 3 + c]; } });
+    }
     const g = new THREE.BufferGeometry();
-    g.setAttribute('position', new THREE.BufferAttribute(samples.pos, 3)); g.setAttribute('color', new THREE.BufferAttribute(colours, 3));
+    g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setAttribute('color', new THREE.BufferAttribute(colr, 3));
     return g;
-  }, [samples, colours]);
+  }, [samples, colours, onlySeenHidden]);
   useEffect(() => () => geom.dispose(), [geom]);
   return <points geometry={geom} frustumCulled={false} raycast={() => null}><pointsMaterial vertexColors size={size} sizeAttenuation={false} /></points>;
 }

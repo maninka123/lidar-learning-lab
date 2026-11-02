@@ -9,7 +9,7 @@ import { KindLegend } from '../ui/shared';
 import { SceneFromStore } from './common';
 import { CloudLayer } from '../ui/three';
 import { Plan2D } from '../ui/Plan2D';
-import { Crosshair, Dots, EyeOff, Pause, Play, Plus, Trash2 } from '../ui/icons';
+import { Boxes, Circle, Crosshair, Dots, EyeOff, Pause, Play, Plus, Trash2 } from '../ui/icons';
 import { PRESETS, PRESET_GROUPS } from '../sensor/presets';
 import { staticPose } from '../sensor/simulate';
 import { runTask } from '../engine/client';
@@ -54,8 +54,8 @@ export default function TabOcclusion() {
   const z0 = DEFAULT_Z[sceneId] ?? 1.5;
   const [act, setAct] = useState<Act>('explore');
   const [ex, setEx] = useState<Scanner>(() => mk(0, scene.defaultPose.x, scene.defaultPose.y, z0, 'tls', scene.defaultPose.yaw));
-  const [arr, setArr] = useState<{ A: Scanner[]; B: Scanner[] }>({ A: [], B: [] });
-  const [slot, setSlot] = useState<'A' | 'B'>('A');
+  const [draft, setDraft] = useState<Scanner[]>([]); // the placement being built in Design
+  const [saved, setSaved] = useState<{ A: Scanner[]; B: Scanner[] }>({ A: [], B: [] }); // placements sent to Compare from Design
   const [sel, setSel] = useState<number | null>(null);
   const [tool, setTool] = useState(true);
   const [beams, setBeams] = useState<'play' | 'pause' | 'hide'>('play'), animate = beams === 'play', [showVis, setShowVis] = useState(true), [showFov, setShowFov] = useState(false);
@@ -73,14 +73,14 @@ export default function TabOcclusion() {
   useEffect(() => {
     gen.current++;
     setEx(mk(0, scene.defaultPose.x, scene.defaultPose.y, z0, 'tls', scene.defaultPose.yaw));
-    setArr({ A: [], B: [] }); setSel(null); setScans({}); setShowScans(false); setBusy(false);
+    setDraft([]); setSaved({ A: [], B: [] }); setSel(null); setScans({}); setShowScans(false); setBusy(false);
     setChal((c) => (c && c.scene === sceneId ? c : null));
   }, [sceneId]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { const st = useLab.getState(), prev = st.view.sceneOpacity; st.setView({ sceneOpacity: 0.35 }); return () => { useLab.getState().setView({ sceneOpacity: prev }); useLab.getState().patch({ interaction: 'select' }); useOccGuide.getState().close(); }; }, []);
-  useEffect(() => { s.patch({ interaction: tool && !guideOn ? 'add-station' : 'select' }); }, [tool, guideOn, act]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { s.patch({ interaction: tool && !guideOn && act !== 'compare' ? 'add-station' : 'select' }); }, [tool, guideOn, act]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const list = arr[slot];
-  const setList = (f: (l: Scanner[]) => Scanner[]) => setArr((a) => ({ ...a, [slot]: f(a[slot]) }));
+  const list = draft;
+  const setList = (f: (l: Scanner[]) => Scanner[]) => setDraft(f);
   const selected = list.find((q) => q.id === sel) ?? null;
   const maxN = chal ? chal.maxScanners : MAX_SCANNERS;
   const presetFor = () => (chal ? chal.preset : list[list.length - 1]?.preset ?? 'tls');
@@ -91,6 +91,7 @@ export default function TabOcclusion() {
     return insideSolid(scene, x, y, z) ? 'That spot is inside an object. Try an open place.' : null;
   }
   function place(x: number, y: number) {
+    if (act === 'compare') return; // Compare only looks at what was saved from Design
     if (act === 'explore') { const e = invalid(x, y, ex.z); if (e) return s.notify(e, 'warn'); setEx((q) => ({ ...q, x, y })); return; }
     if (selected && !(addMode.current)) { const e = invalid(x, y, selected.z); if (e) return s.notify(e, 'warn'); setList((l) => l.map((q) => (q.id === selected.id ? { ...q, x, y } : q))); return; }
     if (list.length >= maxN) return s.notify(`At most ${maxN} scanners${chal ? ' in this challenge' : ''}. Select one and click to move it, or delete one.`, 'warn');
@@ -104,7 +105,7 @@ export default function TabOcclusion() {
   const cur = act === 'explore' ? ex : selected;
 
   // ---- what to show: the student's own work, or a scripted step of the walkthrough
-  const dEx = useDebounced(ex, 140), dArr = useDebounced(arr, 140);
+  const dEx = useDebounced(ex, 140), dDraft = useDebounced(draft, 140);
   const g = useOccGuide();
   const demo = useMemo(() => (guideOn ? demoPlan(scene, 'tls') : null), [guideOn, scene]);
   const q = (v: number, n = 12) => Math.round(v * n) / n;
@@ -121,8 +122,8 @@ export default function TabOcclusion() {
   const vAct = gv?.act ?? act;
   const exList = gv ? gv.list : [dEx];
   const exEval = useMemo(() => evaluate(scene, exList), [scene, JSON.stringify(exList)]); // eslint-disable-line react-hooks/exhaustive-deps
-  const evA = useMemo(() => evaluate(scene, dArr.A), [scene, dArr.A]), evB = useMemo(() => evaluate(scene, dArr.B), [scene, dArr.B]);
-  const evSlot = gv ? exEval : slot === 'A' ? evA : evB;
+  const evA = useMemo(() => evaluate(scene, saved.A), [scene, saved.A]), evB = useMemo(() => evaluate(scene, saved.B), [scene, saved.B]), evDraft = useMemo(() => evaluate(scene, dDraft), [scene, dDraft]);
+  const evSlot = gv ? exEval : evDraft;
   const dispList: Scanner[] = gv ? gv.list : vAct === 'explore' ? [ex] : list;
   const vMode = gv?.mode ?? mode;
   const selId = gv ? (gv.mode === 'unique' ? 1 : null) : vAct === 'explore' ? ex.id : sel;
@@ -164,19 +165,19 @@ export default function TabOcclusion() {
 
   const ch = chal ? evaluateChallenge(chal, list.length, evSlot.stats) : null;
   function startChallenge(c: Challenge) {
-    setChal(c); setAct('design'); setSlot('A'); setSel(null); setScans({}); setShowScans(false);
+    setChal(c); setAct('design'); setSel(null); setScans({}); setShowScans(false);
     if (sceneId !== c.scene) s.setScene(c.scene); // the environment effect resets the scanners
-    else setArr({ A: [], B: arr.B });
+    else setDraft([]);
     addMode.current = false; setTool(true);
   }
-  function showSolution() { if (!chal) return; setArr((a) => ({ ...a, A: chal.reference.map((p, i) => mk(nextId.current++ + i * 0, p.x, p.y, chal.height, chal.preset, facing(scene, p.x, p.y))) })); setSel(null); }
+  function showSolution() { if (!chal) return; setDraft(chal.reference.map((p, i) => mk(nextId.current++ + i * 0, p.x, p.y, chal.height, chal.preset, facing(scene, p.x, p.y)))); setSel(null); }
 
   // ---- 3D views
   const markersFor = (l: Scanner[], selectedId: number | null) => <ScannerMarkers scanners={l} selected={selectedId} sensorOf={scannerSensor} />;
   const sceneBlock = (l: Scanner[], e: ReturnType<typeof evaluate>, col: Float32Array, selectedId: number | null, showRays: boolean) => (
     <>
       {!pointsOnly && <SceneFromStore interactive={true} />}
-      {(showVis || look === 'dots') && !(look === 'cloud' && showScans && vAct === 'design' && scanClouds.length > 0) && <SamplePoints samples={e.samples} colours={col} size={Math.max(3, s.view.pointSize)} />}
+      {(showVis || look === 'dots') && !(look === 'cloud' && showScans && vAct === 'design' && scanClouds.length > 0) && <SamplePoints samples={e.samples} colours={col} size={Math.max(3, s.view.pointSize)} onlySeenHidden={look === 'dots' && vAct === 'explore' ? e.status[0] : undefined} />}
       {markersFor(l, selectedId)}
       {showFov && l.map((sc, i) => <FovVolume key={sc.id} sc={sc} sensor={sensorOf(sc.preset)} color={STATION_COLOURS[i % 4]} reach={reach} opacity={sc.id === selectedId ? 0.12 : 0.05} />)}
       {showRays && beams !== 'hide' && fan && rayScanner && <RaySweep origin={[rayScanner.x, rayScanner.y, rayScanner.z]} ends={fan.ends} hit={fan.hit} animate={animate} />}
@@ -186,8 +187,8 @@ export default function TabOcclusion() {
   const home = scene.cameraHome, target = scene.cameraTarget;
   const viewport = vAct === 'compare' && !gv ? (
     <div style={{ position: 'absolute', inset: 0, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2, background: '#d9d9de' }}>
-      <div style={{ position: 'relative' }}><Viewport id="o-a" group="occ" primary bgOverride={pointsOnly ? '#ffffff' : undefined} hideGrid={pointsOnly} home={home} target={target} label={`Arrangement A · ${pct(evA.stats.coverage)} observed`} labelPos="tl" labelTop={12} hideAxes>{sceneBlock(dArr.A, evA, heatA, null, false)}</Viewport></div>
-      <div style={{ position: 'relative' }}><Viewport id="o-b" group="occ" primary={false} bgOverride={pointsOnly ? '#ffffff' : undefined} hideGrid={pointsOnly} home={home} target={target} label={`Arrangement B · ${pct(evB.stats.coverage)} observed`} labelPos="tl" labelTop={12} hideAxes>{sceneBlock(dArr.B, evB, showDiff ? diffColours : heatB, null, false)}</Viewport></div>
+      <div style={{ position: 'relative' }}><Viewport id="o-a" group="occ" primary bgOverride={pointsOnly ? '#ffffff' : undefined} hideGrid={pointsOnly} home={home} target={target} label={`Arrangement A · ${pct(evA.stats.coverage)} observed`} labelPos="tl" hideAxes>{sceneBlock(saved.A, evA, heatA, null, false)}</Viewport></div>
+      <div style={{ position: 'relative' }}><Viewport id="o-b" group="occ" primary={false} bgOverride={pointsOnly ? '#ffffff' : undefined} hideGrid={pointsOnly} home={home} target={target} label={`Arrangement B · ${pct(evB.stats.coverage)} observed`} labelPos="tl" hideAxes>{sceneBlock(saved.B, evB, showDiff ? diffColours : heatB, null, false)}</Viewport></div>
     </div>
   ) : (
     <Viewport home={home} target={target} hideAxes={true} bgOverride={pointsOnly ? '#ffffff' : undefined} hideGrid={pointsOnly}>{sceneBlock(dispList, vAct === 'explore' ? exEval : evSlot, colours, selId, vAct === 'explore' || selId !== null)}</Viewport>
@@ -234,7 +235,7 @@ export default function TabOcclusion() {
     </>
   );
   const legend = vAct === 'explore'
-    ? STATUS_LABELS.map((l, i) => ({ color: STATUS_COLOURS[i], label: l }))
+    ? STATUS_LABELS.map((l, i) => ({ color: STATUS_COLOURS[i], label: l })).slice(0, look === 'dots' ? 2 : 4)
     : vAct === 'compare' && showDiff && !gv ? [{ color: HEAT[1], label: 'B sees it, A did not' }, { color: HEAT[0], label: 'A saw it, B does not' }, { color: HEAT[2], label: 'Both see it' }, { color: NEUTRAL, label: 'Neither' }]
     : vMode === 'owner' ? [...dispList.map((_, i) => ({ color: STATION_COLOURS[i], label: `Seen by scanner ${i + 1}` })), { color: NEUTRAL, label: 'Not seen' }]
     : vMode === 'unique' ? [{ color: STATION_COLOURS[Math.max(0, dispList.findIndex((d) => d.id === selId))], label: 'Only this scanner sees it' }, { color: NEUTRAL, label: 'Others see it too' }, { color: HEAT[0], label: 'Nobody sees it' }]
@@ -265,9 +266,19 @@ export default function TabOcclusion() {
       <Section title="Activity">
         <Seg value={act} onChange={(v) => { setAct(v); if (v !== 'explore') setTool(true); }} label="Activity" options={[{ value: 'explore', label: 'A · Explore' }, { value: 'design', label: 'B · Design' }, { value: 'compare', label: 'C · Compare' }]} />
       </Section>
-      <Section title="Plan view" hint="Click to place or move. Dots are walls and furniture sides at working height.">
+      {act === 'compare' && (
+        <Section title="Compare two placements">
+          <p className="hint">This tab only compares. Build placements in Design and press <b>Save here</b> under A or B.</p>
+          {(['A', 'B'] as const).map((k) => <div key={k} className="hint"><b>{k}</b> · {saved[k].length ? `${saved[k].length} scanner${saved[k].length === 1 ? '' : 's'}` : 'nothing saved yet'}</div>)}
+          <Toggle label="Show what B changes (right view)" checked={showDiff} onChange={setShowDiff} />
+          <Toggle label="Show the field of view" checked={showFov} onChange={setShowFov} />
+          <Toggle label="Colour the surfaces" checked={showVis} onChange={setShowVis} />
+          <Btn onClick={() => setAct('design')} testId="occ-back-design">Back to Design</Btn>
+        </Section>
+      )}
+      {act !== 'compare' && <Section title="Plan view" hint="Click to place or move. Dots are walls and furniture sides at working height.">
         <Plan2D scene={scene} height={230} onClick={onPlan} layers={planLayers} />
-      </Section>
+      </Section>}
       {act === 'explore' && (
         <Section title="Explore occlusion">
           <Callout kind="edu" title="Where can the laser not go?">Move the scanner. The dots on the surfaces show what it can reach. Walls and furniture throw <b>shadows</b>.</Callout>
@@ -278,22 +289,36 @@ export default function TabOcclusion() {
           <p className="hint">Orange dots are laser hits. Faint lines that stop in the air are beams that hit nothing within range.</p>
         </Section>
       )}
-      {act !== 'explore' && (
-        <Section title={act === 'design' ? 'Design the placement' : 'Compare two placements'}>
-          {act === 'compare' && <Seg value={slot} onChange={(v) => { setSlot(v); setSel(null); }} label="Arrangement" options={[{ value: 'A', label: `Edit A (${arr.A.length})` }, { value: 'B', label: `Edit B (${arr.B.length})` }]} />}
+      {act === 'design' && (
+        <Section title="Design the placement">
           <div className="btn-row" style={{ flexWrap: 'wrap' }}>
             <Btn sm variant={tool && (!selected || addMode.current) ? 'primary' : ''} icon={<Plus size={15} />} onClick={() => { addMode.current = true; setTool(true); setSel(null); }} disabled={list.length >= maxN} testId="occ-add">Add scanner</Btn>
             <Btn sm icon={<Trash2 size={15} />} onClick={() => { if (selected) { setList((l) => l.filter((x) => x.id !== selected.id)); setSel(null); setScans((m) => { const c = { ...m }; delete c[selected.id]; return c; }); } }} disabled={!selected} testId="occ-delete">Delete</Btn>
             <Btn sm onClick={() => { setList(() => []); setSel(null); setScans({}); }} disabled={!list.length} testId="occ-clear">Clear</Btn>
-            {act === 'compare' && <Btn sm onClick={() => setArr((a) => ({ ...a, B: a.A.map((x) => ({ ...x, id: nextId.current++ })) }))} testId="occ-copy">Copy A to B</Btn>}
           </div>
           <p className="hint">{list.length < maxN ? `Press Add scanner, then click the scene or the plan (up to ${maxN}). ` : `Maximum of ${maxN} scanners. `}Click a scanner on the plan, or its number below, to select it. With one selected, a click moves it.</p>
           <div className="btn-row" style={{ flexWrap: 'wrap' }}>{list.map((sc, i) => <button key={sc.id} className="btn sm" aria-pressed={sc.id === sel} onClick={() => { setSel(sc.id); addMode.current = false; }} data-testid={`occ-pick-${i + 1}`} style={{ borderColor: STATION_COLOURS[i], borderWidth: 2, borderStyle: 'solid', fontWeight: sc.id === sel ? 700 : 500 }}>Scanner {i + 1}</button>)}</div>
           {editor}
-          {act === 'design' && <Seg value={mode} onChange={setMode} label="Colour by" options={[{ value: 'heat', label: 'How many see it' }, { value: 'owner', label: 'Which scanner' }, { value: 'unique', label: 'Only this one' }]} />}
-          {act === 'compare' && <Toggle label="Show what B changes (right view)" checked={showDiff} onChange={setShowDiff} />}
+          {act === 'design' && <Seg value={mode} onChange={setMode} label="Colour by" options={[{ value: 'heat', label: 'How many see it' }, { value: 'owner', label: 'Which scanner' }]} />}
           <Toggle label="Show the field of view" checked={showFov} onChange={setShowFov} />
           <Toggle label="Colour the surfaces" checked={showVis} onChange={setShowVis} />
+        </Section>
+      )}
+      {act === 'design' && (
+        <Section title="Add to compare">
+          <p className="hint">Happy with a placement? Save it as A or B, build another, then open Compare to see them side by side.</p>
+          {(['A', 'B'] as const).map((k) => {
+            const ev = k === 'A' ? evA : evB, n = saved[k].length;
+            return (
+              <div key={k} style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                <b style={{ width: 16 }}>{k}</b>
+                <span className="hint" style={{ flex: 1, minWidth: 90 }} data-testid={`occ-saved-${k}`}>{n ? `${n} scanner${n === 1 ? '' : 's'} · ${pct(ev.stats.coverage)} observed` : 'empty'}</span>
+                <Btn sm onClick={() => { setSaved((a) => ({ ...a, [k]: list.map((x) => ({ ...x })) })); s.notify(`Saved as ${k}.`, 'info'); }} disabled={!list.length} testId={`occ-save-${k}`}>Save here</Btn>
+                <Btn sm onClick={() => { setDraft(saved[k].map((x) => ({ ...x }))); setSel(null); }} disabled={!n} testId={`occ-load-${k}`}>Edit</Btn>
+              </div>
+            );
+          })}
+          <Btn variant="primary" onClick={() => setAct('compare')} disabled={!saved.A.length || !saved.B.length} testId="occ-open-compare">Open Compare</Btn>
         </Section>
       )}
       {act === 'design' && list.length > 0 && (
@@ -318,7 +343,7 @@ export default function TabOcclusion() {
             <tr><td>Seen by 2+</td><td className="mono">{pct(evA.stats.overlap, 1)}</td><td className="mono">{pct(evB.stats.overlap, 1)}</td></tr>
             <tr><td>Unobserved</td><td className="mono">{pct(evA.stats.unobserved, 1)}</td><td className="mono">{pct(evB.stats.unobserved, 1)}</td></tr>
           </tbody></table>
-          <p className="hint" data-testid="occ-improvement">{evA.stats.scanners === 0 || evB.stats.scanners === 0 ? 'Build both arrangements. Copy A to B, then add or move a scanner in B.' : cmp.delta > 0.0005 ? `B observes ${(cmp.gained * 100).toFixed(1)} % of the surface that A missed${cmp.lost > 0.0005 ? ` but loses ${(cmp.lost * 100).toFixed(1)} %` : ''}: +${(cmp.delta * 100).toFixed(1)} points.` : cmp.delta < -0.0005 ? `B is worse by ${(-cmp.delta * 100).toFixed(1)} points.` : 'No change in coverage.'}</p>
+          <p className="hint" data-testid="occ-improvement">{evA.stats.scanners === 0 || evB.stats.scanners === 0 ? 'Save a placement as A and another as B in Design first.' : cmp.delta > 0.0005 ? `B observes ${(cmp.gained * 100).toFixed(1)} % of the surface that A missed${cmp.lost > 0.0005 ? ` but loses ${(cmp.lost * 100).toFixed(1)} %` : ''}: +${(cmp.delta * 100).toFixed(1)} points.` : cmp.delta < -0.0005 ? `B is worse by ${(-cmp.delta * 100).toFixed(1)} points.` : 'No change in coverage.'}</p>
         </Section>
       )}
       {act === 'design' && (
@@ -337,19 +362,12 @@ export default function TabOcclusion() {
           ) : <p className="hint">Three goals with a limited number of scanners: Easy (Room), Medium (Workshop), Hard (Street).</p>}
         </Section>
       )}
-      <Section title="What do the numbers mean?" open={false}>
-        <p className="hint"><b>Observed</b> = the share of the surface <i>area</i> that at least one scanner can see in a straight line, within its range and field of view. We test thousands of evenly spread points on the walls, floor and objects. <b>Seen twice or more</b> = visible to two scanners. It counts <i>geometry</i>, not how many laser points land there, and it tests the points we sampled, so thin or tiny surfaces may be missed.</p>
-      </Section>
-      <Section title="Next">
-        <p className="hint">This tab asks <b>where</b> to put scanners. The next one asks <b>how</b> to join their scans together.</p>
-        <Btn sm onClick={() => { const i = tabIndex('TLS Scanning'); if (i >= 0) useLab.getState().setTab(i); }} testId="occ-open-tls">Open TLS Scanning</Btn>
-      </Section>
       <GuideClock store={useOccGuide} dur={(st) => (st.step === 1 ? 4000 : st.step === 3 ? 3000 : 2500)} onDone={(st) => { if (st.step < 4) st.goto(st.step + 1); else st.pause(); }} />
     </>
   );
 
-  return <TabFrame title="Occlusion & Sensor Placement" tab={4} viewport={viewport} controls={controls} learn={null} noPanelTabs envIds={['A', 'B', 'C']} stats={stats} overlays={<KindLegend items={legend} />}
-    viewExtras={<><Seg block={false} value={beams} onChange={setBeams} label="Laser beams" options={[{ value: 'play', label: <><Play size={13} /> Play</> }, { value: 'pause', label: <><Pause size={13} /> Pause</> }, { value: 'hide', label: <><EyeOff size={13} /> Hide</> }]} /><Seg block={false} value={look} onChange={setLook} label="View" options={[{ value: 'scene', label: 'Scene' }, { value: 'cloud', label: <><Dots size={13} /> Point cloud</> }, { value: 'dots', label: 'Occlusion dots' }]} /></>} />;
+  return <TabFrame title="Occlusion & Sensor Placement" tab={4} viewport={viewport} controls={controls} learn={null} noPanelTabs envIds={['A', 'B', 'C']} stats={stats} overlays={<KindLegend items={legend} top={124} />}
+    viewExtras={<>{vAct !== 'compare' && <Seg block={false} value={beams} onChange={setBeams} label="Laser beams" options={[{ value: 'play', label: <><Play size={13} /> Play</> }, { value: 'pause', label: <><Pause size={13} /> Pause</> }, { value: 'hide', label: <><EyeOff size={13} /> Hide</> }]} />}<Seg block={false} value={look} onChange={setLook} label="View" options={[{ value: 'scene', label: <><Boxes size={13} /> Scene</> }, { value: 'cloud', label: <><Dots size={13} /> Point cloud</> }, { value: 'dots', label: <><Circle size={13} /> Coverage</> }]} /></>} />;
 }
 
 function hexRgb(h: string): [number, number, number] { const v = parseInt(h.slice(1), 16); return [(v >> 16) & 255, (v >> 8) & 255, v & 255]; }

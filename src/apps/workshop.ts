@@ -1,5 +1,6 @@
 import { useEffect, useSyncExternalStore } from 'react';
 import type { ChatMsg } from './deepseek';
+import { ChallengeSettings, TASK_KEYS } from '../twin/catalogue';
 
 /**
  * Workshop Mode, student side. When the instructor has switched a workshop on, students can use the AI features with
@@ -110,3 +111,35 @@ export async function workshopChat(code: string, messages: ChatMsg[], maxTokens:
 export const noKeyMessage = (action: string) => (workshopSnapshot().available
   ? `Enter your workshop access code below, then press ${action} again.`
   : `No AI key yet. Paste your own DeepSeek key below (it stays in this browser), then press ${action} again.`);
+
+/** Send a Challenge score to the instructor's server. The body is built by `buildSubmission`; nothing else is sent. */
+export async function submitChallengeScore(body: unknown, timeoutMs = 10000): Promise<{ ok: boolean; message: string }> {
+  if (!workshopConfigured()) return { ok: false, message: 'Sending scores is not set up for this copy of the lab.' };
+  const ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), timeoutMs);
+  try {
+    const r = await fetch(`${api}/api/student/submit`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal: ctl.signal });
+    const j = (await r.json().catch(() => ({}))) as { ok?: boolean; message?: string; error?: string };
+    return r.ok && j.ok ? { ok: true, message: 'Sent. Your score has been recorded.' } : { ok: false, message: j.message || (r.status === 403 ? 'Scores are not being accepted right now. Keep grading, and send when it opens.' : r.status === 429 ? 'Too many scores were sent from this network. Try again later.' : 'The score could not be sent. Try again.') };
+  } catch { return { ok: false, message: 'Could not reach the server. Check your connection and try again.' }; } finally { clearTimeout(timer); }
+}
+
+/** The grading settings the instructor chose in the admin page. Anything odd is ignored (the built-in defaults stay). */
+export function readSettings(v: unknown): ChallengeSettings | undefined {
+  if (!v || typeof v !== 'object') return undefined;
+  const o = v as Record<string, unknown>, w = (o.weights ?? {}) as Record<string, unknown>, e = (o.enabled ?? {}) as Record<string, unknown>;
+  const budget = Number(o.budget), priceScale = Number(o.priceScale), maxSubmissions = Number(o.maxSubmissions);
+  if (!Number.isFinite(budget) || budget < 500 || !Number.isFinite(priceScale) || priceScale <= 0 || !Number.isFinite(maxSubmissions) || maxSubmissions < 0) return undefined;
+  const weights = {} as ChallengeSettings['weights'], enabled = {} as ChallengeSettings['enabled'];
+  for (const k of TASK_KEYS) { const x = Number(w[k]); if (!Number.isFinite(x) || x < 0 || x > 100) return undefined; weights[k] = x; enabled[k] = e[k] !== false; }
+  return { budget, priceScale, maxSubmissions, weights, enabled };
+}
+/** Is the instructor accepting Challenge scores right now, and what are the grading settings? Any problem counts as "not known": the lab then still lets you try to send and shows the server's answer. */
+export async function challengeAccepting(timeoutMs = 4000): Promise<{ known: boolean; accepting: boolean; until: number | null; settings?: ChallengeSettings }> {
+  if (!workshopConfigured()) return { known: false, accepting: false, until: null };
+  const ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), timeoutMs);
+  try {
+    const r = await fetch(`${api}/api/public/challenge`, { signal: ctl.signal, cache: 'no-store' });
+    const j = r.ok ? ((await r.json()) as { accepting?: unknown; until?: unknown; settings?: unknown }) : null;
+    return j && typeof j.accepting === 'boolean' ? { known: true, accepting: j.accepting, until: typeof j.until === 'number' ? j.until : null, settings: readSettings(j.settings) } : { known: false, accepting: false, until: null };
+  } catch { return { known: false, accepting: false, until: null }; } finally { clearTimeout(timer); }
+}

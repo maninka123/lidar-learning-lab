@@ -466,7 +466,7 @@ test.describe('corner cases', () => {
     page.on('pageerror', (e) => bad.push(`pageerror: ${e.message}`));
     page.on('console', (m) => { if (m.type() === 'error' && !/Failed to load resource|ERR_|favicon|ytimg|youtube/i.test(m.text())) bad.push(`console: ${m.text()}`); });
     await page.goto('/');
-    for (let i = 0; i < 18; i++) { await page.getByTestId(`nav-${i}`).click(); await page.waitForTimeout(700); await expect(page.locator('canvas').first()).toBeVisible(); }
+    for (let i = 0; i < 19; i++) { await page.getByTestId(`nav-${i}`).click(); await page.waitForTimeout(700); await expect(page.locator('canvas').first()).toBeVisible(); }
     expect(bad).toEqual([]);
   });
 
@@ -674,15 +674,17 @@ test.describe('occlusion & sensor placement', () => {
     await page.getByTestId('environment-menu').click(); await page.getByTestId('env-B').click();
     await expect(page.getByTestId('occ-pick-1')).toHaveCount(0);
   });
-  test('compare: copy A to B, add a scanner to B and see the improvement', async ({ page }) => {
+  test('compare: save two placements in Design, then compare them', async ({ page }) => {
     await page.goto('/'); await go(page, 4);
-    await page.getByRole('button', { name: /C · Compare/ }).click();
+    await page.getByRole('button', { name: /B · Design/ }).click();
     await addUntil(page, 1);
-    await page.getByTestId('occ-copy').click();
-    await page.getByRole('button', { name: /Edit B/ }).click();
-    await expect(page.getByTestId('occ-pick-1')).toBeVisible();
+    await page.getByTestId('occ-save-A').click();
+    await expect(page.getByTestId('occ-saved-A')).toContainText('1 scanner');
     await addUntil(page, 2, 6);
-    await expect(page.getByTestId('occ-improvement')).toContainText(/\+|observes|No change/, { timeout: 10000 });
+    await page.getByTestId('occ-save-B').click();
+    await page.getByTestId('occ-open-compare').click();
+    await expect(page.getByTestId('occ-add')).toHaveCount(0);
+    await expect(page.getByTestId('occ-improvement')).toContainText(/\+|observes|No change|worse/, { timeout: 10000 });
     await expect(page.getByTestId('occ-compare')).toContainText('Scanners');
   });
   test('challenge: shows a goal, progress and completes with the example solution', async ({ page }) => {
@@ -710,17 +712,12 @@ test.describe('occlusion & sensor placement', () => {
     await addUntil(page, 1);
     await page.getByTestId('occ-scan-all').click();
     await expect(page.getByTestId('occ-table')).toContainText('pts', { timeout: 60000 });
-    await page.getByRole('button', { name: 'Point cloud' }).click();
-    await expect(page.getByRole('button', { name: 'Point cloud' })).toHaveAttribute('aria-pressed', 'true');
-    await page.getByRole('button', { name: 'Occlusion dots' }).click();
-    await expect(page.getByRole('button', { name: 'Occlusion dots' })).toHaveAttribute('aria-pressed', 'true');
+    await page.getByRole('button', { name: 'Point cloud', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Point cloud', exact: true })).toHaveAttribute('aria-pressed', 'true');
+    await page.getByRole('button', { name: 'Coverage', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Coverage', exact: true })).toHaveAttribute('aria-pressed', 'true');
     await page.getByRole('button', { name: 'Scene', exact: true }).click();
     await expect(page.getByRole('button', { name: 'Scene', exact: true })).toHaveAttribute('aria-pressed', 'true');
-  });
-  test('links on to TLS Scanning', async ({ page }) => {
-    await page.goto('/'); await go(page, 4);
-    await page.getByTestId('occ-open-tls').click();
-    await expect(page.getByTestId('nav-8')).toHaveAttribute('aria-current', 'page');
   });
 });
 
@@ -766,5 +763,105 @@ test.describe('guided ICP and SLAM lessons', () => {
     await page.getByTestId('slam-guide-step-5').click({ force: true }); await expect(page.getByTestId('slam-guide-ate')).toContainText('ATE');
     await page.getByTestId('slam-guide-step-6').click({ force: true }); await expect(page.getByTestId('slam-guide-pipeline')).toContainText('simplified');
     await page.getByTestId('slam-guide-close').click(); await page.getByRole('button', { name: 'Controls', exact: true }).click(); await expect(page.getByTestId('run-slam')).toBeVisible();
+  });
+});
+
+test.describe('industrial digital twin challenge', () => {
+  test('is the last tab; the budget can never be exceeded, and every item can be removed and re-bought', async ({ page }) => {
+    await page.goto('/');
+    await expect(page.getByTestId('nav-18')).toContainText('Industrial Digital Twin');
+    await page.getByTestId('nav-18').click();
+    await expect(page.getByTestId('twin-stage-title')).toContainText('Mission');
+    await page.getByTestId('twin-start').click();
+    await page.getByTestId('twin-buy-rot32').click(); await page.getByTestId('twin-buy-cam-mid').click();
+    const before = await page.getByTestId('twin-remaining').innerText();
+    await expect(page.getByTestId('twin-buy-tls')).toBeDisabled(); // 6000+ credits do not fit in what is left
+    await expect(page.getByTestId('twin-budget')).not.toContainText('Over budget');
+    expect(await page.getByTestId('twin-remaining').innerText()).toBe(before);
+    // every owned item has its own Remove button; removing frees the credits, and the item can be bought again
+    await expect(page.getByTestId('twin-owned')).toContainText('LiDAR 1'); await expect(page.getByTestId('twin-owned')).toContainText('Camera 1');
+    await page.getByTestId('twin-remove-c1').click();
+    await expect(page.getByTestId('twin-owned')).not.toContainText('Camera 1'); expect(await page.getByTestId('twin-remaining').innerText()).not.toBe(before);
+    await page.getByTestId('twin-remove-l1').click(); await expect(page.getByTestId('twin-owned')).not.toContainText('LiDAR 1'); await expect(page.getByTestId('twin-remaining')).toContainText('3000');
+    await expect(page.getByTestId('twin-buy-tls')).toBeDisabled(); // a 6000-credit TLS does not fit in the default 3000 (the admin can raise the budget)
+    await page.getByTestId('twin-buy-rot128').click(); await expect(page.getByTestId('twin-owned')).toContainText('128');
+    await expect(page.getByTestId('twin-budget')).not.toContainText('Over budget');
+  });
+  test('upgrades that would go over the budget are refused with a message', async ({ page }) => {
+    await page.goto('/'); await page.getByTestId('nav-18').click(); await page.getByTestId('twin-stage-2').click();
+    await page.getByTestId('twin-buy-rot128').click(); await page.getByTestId('twin-buy-cam-high').click(); await page.getByTestId('twin-buy-light').click(); await page.getByTestId('twin-buy-light').click(); // 2905 of 3000
+    await page.getByTestId('twin-stage-3').click(); await page.getByTestId('twin-unit-c1').click();
+    const left = await page.getByTestId('twin-remaining').innerText();
+    await page.getByText(/Low-light kit/).click(); // +120: refused
+    await expect(page.getByText(/Not enough credits/).first()).toBeVisible();
+    expect(await page.getByTestId('twin-remaining').innerText()).toBe(left);
+    await expect(page.getByTestId('twin-budget')).not.toContainText('Over budget');
+  });
+  test('new equipment starts scattered around the factory, not on top of each other; the tilt reaches ±90°', async ({ page }) => {
+    await page.goto('/'); await page.getByTestId('nav-18').click(); await page.getByTestId('twin-stage-2').click();
+    for (let i = 0; i < 3; i++) await page.getByTestId('twin-buy-rot16').click();
+    const pos = await page.evaluate(() => (window as any).__twin?.getState().design.lidars.map((u: any) => [u.x, u.y]));
+    expect(pos).toHaveLength(3);
+    for (let i = 0; i < 3; i++) for (let j = i + 1; j < 3; j++) expect(Math.hypot(pos[i][0] - pos[j][0], pos[i][1] - pos[j][1])).toBeGreaterThan(5);
+    await page.getByTestId('twin-stage-3').click(); await page.getByTestId('twin-unit-l1').click();
+    const tilt = page.getByLabel('Tilt up (+) / down (−)'); await expect(tilt).toHaveAttribute('min', '-90'); await expect(tilt).toHaveAttribute('max', '90');
+    await expect(page.getByLabel('Resolution')).toHaveCount(0); // the model (channel count) decides it
+  });
+  test('the plan sits in the top-left corner of the view, and the coverage numbers are in the live statistics', async ({ page }) => {
+    await page.goto('/'); await page.getByTestId('nav-18').click(); await page.getByTestId('twin-stage-2').click(); await page.getByTestId('twin-buy-rot32').click(); await page.getByTestId('twin-stage-3').click();
+    await expect(page.getByTestId('twin-plan')).toBeVisible(); await expect(page.getByTestId('twin-plan').locator('canvas')).toBeVisible();
+    const stage = await page.getByTestId('stage').boundingBox(), plan = await page.getByTestId('twin-plan').boundingBox();
+    expect(plan!.x - stage!.x).toBeLessThan(30); expect(plan!.y - stage!.y).toBeLessThan(90); // top left of the canvas
+    await expect(page.getByTestId('stats-card')).toContainText('Observed', { timeout: 30000 });
+    await expect(page.getByTestId('stats-card').getByTestId('stats-group')).toHaveCount(3); // Budget, Equipment, LiDAR coverage
+    await expect(page.getByTestId('right-panel').getByTestId('twin-plan')).toHaveCount(0); // not in the panel
+    await page.getByTestId('twin-plan-toggle').click(); await expect(page.getByTestId('twin-plan').locator('canvas')).toHaveCount(0); // it can be folded away
+    await page.getByTestId('twin-plan-toggle').click(); await expect(page.getByTestId('twin-plan').locator('canvas')).toBeVisible();
+    const legend = await page.getByLabel('Legend').boundingBox(); expect(legend!.x + legend!.width).toBeGreaterThan(stage!.x + stage!.width - 40); // the colour key is at the top right
+    await page.getByTestId('stats-card').getByRole('button', { name: /LiDAR coverage/ }).click(); // a group title folds its numbers away
+    await expect(page.getByTestId('stats-card')).not.toContainText('Observed'); await page.getByTestId('stats-card').getByRole('button', { name: /LiDAR coverage/ }).click(); await expect(page.getByTestId('stats-card')).toContainText('Observed');
+      await page.getByTestId('twin-stage-5').click(); await expect(page.getByTestId('twin-plan')).toBeVisible(); // it stays for the later stages
+    await page.getByTestId('twin-stage-8').click(); await expect(page.getByTestId('twin-plan')).toBeVisible();
+  });
+  test('the same model can be bought twice, and each unit stays where it is put', async ({ page }) => {
+    await page.goto('/'); await page.getByTestId('nav-18').click(); await page.getByTestId('twin-stage-2').click();
+    await page.getByTestId('twin-buy-rot32').click(); await page.getByTestId('twin-buy-rot32').click();
+    await expect(page.getByTestId('twin-owned')).toContainText('LiDAR 1'); await expect(page.getByTestId('twin-owned')).toContainText('LiDAR 2');
+    await page.getByTestId('twin-stage-3').click(); await expect(page.getByTestId('twin-unit-l2')).toBeVisible();
+    await expect(page.getByTestId('twin-add-station')).toHaveCount(0); // no stations: these are fixed units for monitoring
+  });
+  test('the 3D view can show the scene, the points, or both at once', async ({ page }) => {
+    await page.goto('/'); await page.getByTestId('nav-18').click(); await page.getByTestId('twin-stage-2').click(); await page.getByTestId('twin-buy-rot32').click();
+    await page.getByTestId('twin-stage-5').click(); await page.getByTestId('twin-acquire').click();
+    await expect(page.getByTestId('twin-survey')).toBeVisible({ timeout: 60000 });
+    const view = page.getByRole('group', { name: 'What the 3D view shows' });
+    for (const m of ['Scene', 'Points', 'Both']) { await view.getByRole('button', { name: m, exact: true }).click(); await expect(view.getByRole('button', { name: m, exact: true })).toHaveAttribute('aria-pressed', 'true'); }
+    await expect(page.locator('canvas').first()).toBeVisible();
+  });
+  test('pipeline checks order, runs a practice, and shows a grade and the send section', async ({ page }) => {
+    test.setTimeout(240_000);
+    await page.goto('/'); await page.getByTestId('nav-18').click();
+    await page.getByTestId('twin-stage-2').click(); await page.getByTestId('twin-buy-rot32').click(); await page.getByTestId('twin-buy-rot32').click();
+    await page.getByTestId('twin-stage-6').click();
+    await page.getByTestId('twin-add-colour').click(); // needs a camera and objects: the message says so
+    await expect(page.locator('[data-testid^="twin-block-error-"]').first()).toBeVisible();
+    await expect(page.getByTestId('twin-run')).toBeDisabled();
+    await page.getByTestId('twin-bypass-9').click();
+    await expect(page.getByTestId('twin-run')).toBeEnabled();
+    await page.getByTestId('twin-run').click();
+    await expect(page.getByTestId('twin-steps')).toBeVisible({ timeout: 180000 });
+    await page.getByTestId('twin-stage-9').click();
+    await expect(page.getByTestId('twin-total')).toContainText('/ 100');
+    await expect(page.getByTestId('twin-send-off')).toBeVisible(); // no server address is built into the test app: sending is explained, not offered
+    await page.getByTestId('twin-stage-7').click(); await expect(page.getByTestId('twin-twin')).toContainText('Covered');
+  });
+  test('the workspace is remembered after a reload', async ({ page }) => {
+    await page.goto('/'); await page.getByTestId('nav-18').click();
+    await page.getByTestId('twin-team').fill('Lidar Legends');
+    await page.getByTestId('twin-stage-2').click(); await page.getByTestId('twin-buy-rot16').click();
+    await page.waitForTimeout(700); await page.reload(); await page.getByTestId('nav-18').click();
+    await expect(page.getByTestId('twin-stage-title')).toContainText('Equipment'); // it opens where you left off
+    await expect(page.getByTestId('twin-owned')).toContainText('Low-resolution');
+    await page.getByTestId('twin-stage-1').click(); await expect(page.getByTestId('twin-team')).toHaveValue('Lidar Legends');
   });
 });

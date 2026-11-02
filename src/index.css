@@ -321,8 +321,36 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 @media (prefers-reduced-motion: reduce) { .bub, .typing i { animation: none; } }
 
 /* the applications are an optional group of their own at the end of the menu */
-.nav-sep { height: 1px; background: var(--line, #e5e5ea); margin: 10px 8px 4px; }
+.nav-sep { flex: none; height: 1px; background: var(--line, #e5e5ea); margin: 10px 8px 4px; }
 .nav-group { display: flex; align-items: baseline; justify-content: space-between; padding: 4px 12px 2px; font-size: 0.6875rem; letter-spacing: 0.06em; text-transform: uppercase; color: #8e8e93; }
 .nav-group b { font-weight: 700; }
 .nav-group span { font-size: 0.625rem; text-transform: none; letter-spacing: 0; background: #f2f2f7; border-radius: 999px; padding: 1px 8px; color: #6e6e73; }
 .chat-model { font-size: 0.6875rem; color: #8e8e93; text-align: center; margin-top: -2px; }
+
+/* a bill: item ..... credits, with a small remove mark that turns red when the pointer is on it */
+.bill { display: grid; gap: 2px; font-variant-numeric: tabular-nums; border: 1px solid var(--line, #e5e5ea); border-radius: 14px; padding: 10px 12px; background: var(--bg-elev, #fff); }
+.bill-head { display: flex; justify-content: space-between; padding: 0 26px 6px 0; font-size: 0.72rem; letter-spacing: .06em; text-transform: uppercase; color: var(--text2, #6e6e73); border-bottom: 1px solid var(--line, #e5e5ea); margin-bottom: 4px; }
+.bill-row, .bill-total { display: flex; align-items: baseline; gap: 6px; font-size: 0.875rem; padding: 3px 0; }
+.bill-row.sub { font-size: 0.8125rem; color: var(--text2, #6e6e73); padding-left: 14px; }
+.bill-label { flex: 0 1 auto; max-width: 68%; }
+.bill-dots { flex: 1 1 12px; min-width: 12px; border-bottom: 1px dotted var(--text3, #aeaeb2); transform: translateY(-3px); }
+.bill-amt { flex: none; text-align: right; min-width: 3.2em; }
+.bill-total { border-top: 1px solid var(--text2, #6e6e73); margin-top: 6px; padding-top: 6px; font-weight: 650; font-size: 0.9375rem; }
+.bill-empty { color: var(--text2, #6e6e73); font-size: 0.875rem; padding: 6px 0; }
+.bill-x-slot { flex: none; width: 22px; display: inline-flex; justify-content: center; align-self: center; }
+.bill-x { width: 22px; height: 22px; border: 0; border-radius: 999px; background: transparent; color: var(--text3, #aeaeb2); font-size: 0.8rem; line-height: 1; cursor: pointer; transition: background .15s, color .15s; }
+.bill-x:hover, .bill-x:focus-visible { background: #ff453a; color: #fff; outline: none; }
+
+.stats-groups { display: grid; gap: 6px; }
+.stats-section { display: grid; gap: 6px; }
+.stats-section + .stats-section { border-top: 1px solid var(--line, #e5e5ea); padding-top: 6px; }
+.stats-group { display: flex; align-items: center; gap: 8px; width: 100%; font: inherit; background: rgba(120,120,128,.12); border: 0; border-radius: 10px; padding: 5px 8px; cursor: pointer; text-align: left; color: var(--text, #1d1d1f); transition: background .15s; }
+.stats-group:hover { background: rgba(10,132,255,.16); }
+.stats-chev { font-size: 0.85rem; width: 1em; color: var(--accent, #0a84ff); }
+.stats-gname { flex: 1; font-size: 0.72rem; font-weight: 650; letter-spacing: .07em; text-transform: uppercase; }
+.stats-toggle { font-size: 0.7rem; font-weight: 650; padding: 1px 9px; border-radius: 999px; background: var(--bg-elev, #fff); color: var(--accent, #0a84ff); border: 1px solid rgba(10,132,255,.35); }
+.stats-row { display: grid; gap: 6px; }
+.stats-row .stat { padding: 0.4rem 0.6rem; }
+.stats-row .stat .v { font-size: 1.1rem; }
+
+.plan-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 0 4px 4px; font-size: 0.78rem; }

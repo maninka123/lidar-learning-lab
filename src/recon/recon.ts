@@ -80,7 +80,7 @@ function basis(cam: Camera) {
   return { f, r, u };
 }
 
-function texture(objPattern: string | undefined, x: number, y: number, z: number): number {
+export function texture(objPattern: string | undefined, x: number, y: number, z: number): number {
   if (objPattern === 'checker') return (Math.floor(x * 5) + Math.floor(y * 5)) & 1 ? 0.8 : 1;
   if (objPattern === 'stripes') return 0.88 + 0.12 * Math.sin(z * 55 + x * 9 + y * 5);
   return 1;

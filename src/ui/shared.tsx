@@ -1,4 +1,4 @@
-import { ReactNode, useEffect, useRef, useState } from 'react';
+import { ReactNode, useEffect, useRef, useState, Fragment } from 'react';
 import { Home, ArrowDownToLine, ScanLine, PanelLeft, Eye, EyeOff, Undo2, RotateCcw, Camera, Download, Settings2, FolderOpen, PanelRightClose, PanelRightOpen, Database, Upload, ChevronDown, Check, Circle, Move } from './icons';
 import { useLab, doUndo, exportSettings, importSettings, Background } from '../state/store';
 import { viewBus } from './viewBus';
@@ -122,27 +122,37 @@ export function ViewControls({ simple, extra }: { simple?: boolean; extra?: Reac
   );
 }
 
-export function StatsCard({ items, title = 'Live statistics', row }: { items: { k: string; v: ReactNode; s?: string }[]; title?: string; row?: boolean }) {
+export function StatsCard({ items, title = 'Live statistics', row }: { items: { k: string; v: ReactNode; s?: string; group?: string }[]; title?: string; row?: boolean }) {
   const fps = useLab((s) => s.fps);
   const [open, setOpen] = useState(true);
+  const [folded, setFolded] = useState<Record<string, boolean>>({}); // group titles that are collapsed
+  const groups = items.reduce<{ name: string; items: typeof items }[]>((acc, it) => { const name = it.group ?? ''; const g = acc.find((x) => x.name === name); if (g) g.items.push(it); else acc.push({ name, items: [it] }); return acc; }, []);
   if (row) return (
     <div className="overlay" style={{ left: 12, bottom: 12, display: 'flex', gap: 8 }} data-testid="stats-card">
       {items.map((it) => <div key={it.k} className="glass card" style={{ padding: '0.45rem 0.85rem', minWidth: 150 }}><div className="caption">{it.k}</div><div style={{ fontSize: '1.2rem', fontWeight: 650 }}>{it.v}</div>{it.s && <div className="caption">{it.s}</div>}</div>)}
     </div>
   );
   return (
-    <div className="overlay glass card" style={{ left: 12, bottom: 12, width: open ? 'min(24rem, calc(100% - 24px))' : 'auto' }} data-testid="stats-card">
+    <div className="overlay glass card" style={{ left: 12, bottom: 12, width: open ? 'min(26rem, calc(100% - 24px))' : 'auto' }} data-testid="stats-card">
       <button className="section-head" onClick={() => setOpen(!open)} style={{ marginBottom: open ? 8 : 0, width: '100%' }}>
         <h3>{title}</h3><span className="spacer" /><span className="caption mono">{fps} fps</span>
       </button>
-      {open && <div className="stats-grid">{items.map((it) => <Stat key={it.k} k={it.k} v={it.v} s={it.s} />)}</div>}
+      {open && (items.some((it) => it.group)
+        ? <div className="stats-groups">{groups.map((g) => (
+          <div key={g.name} className="stats-section">
+            <button className="stats-group" data-testid="stats-group" aria-expanded={!folded[g.name]} onClick={() => setFolded((f) => ({ ...f, [g.name]: !f[g.name] }))}>
+              <span className="stats-chev" aria-hidden="true">{folded[g.name] ? '▸' : '▾'}</span><span className="stats-gname">{g.name}</span><span className="stats-toggle">{folded[g.name] ? 'Show' : 'Hide'}</span>
+            </button>
+            {!folded[g.name] && <div className="stats-row" style={{ gridTemplateColumns: `repeat(${g.items.length}, minmax(0, 1fr))` }}>{g.items.map((it) => <Stat key={it.k} k={it.k} v={it.v} s={it.s} />)}</div>}
+          </div>))}</div>
+        : <div className="stats-grid">{items.map((it) => <Stat key={it.k} k={it.k} v={it.v} s={it.s} />)}</div>)}
     </div>
   );
 }
 
-export function KindLegend({ items }: { items: { color: string; label: string; style?: 'dot' | 'wire' | 'dash' }[] }) {
+export function KindLegend({ items, top = 66, side = 'left' }: { items: { color: string; label: string; style?: 'dot' | 'wire' | 'dash' }[]; top?: number; side?: 'left' | 'right' }) {
   return (
-    <div className="overlay glass card legend" style={{ left: 12, top: 66, padding: '0.45rem 0.8rem' }} aria-label="Legend">
+    <div className="overlay glass card legend" style={{ [side]: 12, top, padding: '0.45rem 0.8rem' }} aria-label="Legend">
       {items.map((it) => (
         <span key={it.label}><i style={{ background: it.style === 'wire' ? 'transparent' : it.color, border: it.style ? `2px ${it.style === 'dash' ? 'dashed' : 'solid'} ${it.color}` : undefined, borderRadius: it.style ? 4 : 99 }} />{it.label}</span>
       ))}

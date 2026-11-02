@@ -29,6 +29,8 @@
     </form>
   </section>
 
+  <nav id="viewBar" class="hidden" aria-label="Sections" style="margin-bottom:14px"><div class="seg" role="group" aria-label="Section"><button data-view="workshop" aria-pressed="true">Workshop</button><button data-view="challenge" aria-pressed="false" id="chTab">Challenge scores</button></div></nav>
+
   <div id="app" class="hidden layout">
   <div class="stack">
     <div id="toast" class="msg hidden"></div>
@@ -94,6 +96,43 @@
   </div>
   <aside class="stack side" id="monitor" aria-label="Live monitor"></aside>
   </div>
+  <section id="chView" class="hidden stack" aria-label="Challenge scores">
+    <section class="card" id="chAccept">
+      <div class="card-head"><div class="status"><span class="dot off" id="chDot"></span><div><span class="kicker">Receiving scores</span><h2 id="chStatus">Closed</h2></div></div></div>
+      <p class="muted" id="chAcceptText">Students can always use the challenge and see their grade. They can only <b>send</b> a score while this is open.</p>
+      <div id="chOpenView" class="hidden stack"><div class="big" id="chCountdown">Open</div><div class="row"><button id="chStop" class="btn danger">Stop accepting scores</button></div></div>
+      <div id="chClosedView" class="stack">
+        <div class="seg" role="group" aria-label="Open for" id="chDur"><button data-unit="unlimited" aria-pressed="true">Unlimited</button><button data-unit="hours" aria-pressed="false">Hours</button><button data-unit="days" aria-pressed="false">Days</button></div>
+        <label id="chLenBox" class="hidden" style="max-width:220px"><span id="chLenLabel">Open for (hours)</span><input id="chLen" type="number" min="1" max="8760" step="1" value="3"></label>
+        <div class="row"><button id="chStart" class="btn primary">Start accepting scores</button></div>
+      </div>
+    </section>
+    <section class="card" id="chSettings">
+      <div class="card-head"><div><span class="kicker">Industrial Digital Twin Challenge</span><h2>Grading and budget</h2></div><span class="faint" id="chSetNote"></span></div>
+      <p class="muted">Students see these settings but cannot change them. They apply the next time a student opens the challenge.</p>
+      <form id="chSetForm" class="grid g3">
+        <label>Budget (credits)<input name="budget" type="number" min="500" max="1000000" step="250"></label>
+        <label>Price scale (× catalogue)<input name="priceScale" type="number" min="0.2" max="5" step="0.1"></label>
+        <label>Final evaluations allowed<input name="maxSubmissions" type="number" min="0" max="1000"><span class="faint">0 = as many as wanted</span></label>
+      </form>
+      <div class="scroll"><table><thead><tr><th>Task</th><th>Counts</th><th class="num">Weight</th><th class="num">Share</th></tr></thead><tbody id="chTasks"></tbody></table></div>
+      <div class="row"><button id="chSetSave" class="btn primary">Save settings</button><button id="chSetReset" class="btn sm">Reset to defaults</button><span class="faint" id="chSetMsg"></span></div>
+    </section>
+    <section class="card">
+      <div class="card-head"><div><span class="kicker">Industrial Digital Twin Challenge</span><h2>Scores sent by students</h2></div><span class="faint" id="chNote"></span></div>
+      <div class="grid g4" id="chTiles"></div>
+      <div class="row">
+        <label style="flex:1;min-width:160px">Search name or index<input id="chSearch" placeholder="e.g. z1234567 or Ada"></label>
+        <label style="width:170px">Show<select id="chMode"><option value="latest">Best per student</option><option value="all">Every record</option></select></label>
+        <label style="width:190px">Computers<select id="chShare"><option value="">All records</option><option value="shared">Shared computers only</option></select></label>
+        <label style="width:140px">Kind<select id="chKind"><option value="">All</option><option value="final">Final only</option><option value="practice">Practice only</option></select></label>
+      </div>
+      <div class="row"><button id="chRefresh" class="btn sm">Refresh</button><button id="chCsv" class="btn sm">Download CSV</button><button id="chClear" class="btn sm danger">Delete all scores</button></div>
+      <div class="scroll"><table id="chTable"><thead><tr><th>Sent</th><th>Name</th><th>Index</th><th>From</th><th class="num">Score</th><th>Tasks</th><th class="num">Cost</th><th class="num">Tries</th><th></th></tr></thead><tbody id="chRows"></tbody></table></div>
+      <p class="faint">“From” shows the IP address of the computer that sent it, the approximate city and country, and the network name. A red mark means that computer (same IP address, or the same browser) sent scores under more than one index number: use it to spot one person submitting for several students. A shared IP address can also be a whole lab or a campus network, so check the browser mark (the second one) before drawing conclusions. Same network = same tag: label it once (for example “Campus Wi-Fi” or “Home”) in the Networks table and every record from it shows that name, so you can see at a glance who sent from the university and who from home. Scores are kept until you delete them.</p>
+    </section>
+    <section class="card"><div class="card-head"><h2>Networks</h2><span class="faint">where scores came from</span></div><div class="scroll"><table><thead><tr><th>Network</th><th>IP address</th><th>Label</th><th>Place</th><th class="num">Students</th><th class="num">Records</th><th></th></tr></thead><tbody id="chNets"></tbody></table></div></section>
+  </section>
 </main>
 <script type="module" src="/admin/admin.js"></script>
 </body>

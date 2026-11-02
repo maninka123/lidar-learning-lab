@@ -118,3 +118,8 @@ ADMIN_PASSWORD='choose-a-password' npm run dev    # http://127.0.0.1:8787/admin
 Then in the repository root add `VITE_WORKSHOP_API_URL=http://127.0.0.1:8787` to `.env.local` and run the student app with `npm run dev`. In this mode `localhost` origins are allowed; this never applies in production.
 
 Tests: `cd workshop-backend && npm test` (backend) and `npm test` in the root (student app).
+
+
+## Challenge scores (separate from AI access)
+
+The admin page has a second tab, **Challenge scores**. Switch **Receiving scores** on (unlimited, or for a number of hours or days) and students can send the score of the Industrial Digital Twin Challenge with their name and index number. It does not depend on AI access being on. See [DIGITAL_TWIN_CHALLENGE.md](DIGITAL_TWIN_CHALLENGE.md).

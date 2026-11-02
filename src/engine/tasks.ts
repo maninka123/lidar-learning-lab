@@ -9,8 +9,11 @@ import { PointCloud } from '../core/pointcloud';
 import { SceneDef } from '../scenes/geometry';
 import { SensorConfig } from '../sensor/presets';
 import { Rigid } from '../core/math';
+import { runScenario, runFinal, RunConfig } from '../twin/runner';
 
 export const tasks = {
+  twinRun: (p: { config: RunConfig; seed: number }) => runScenario(p.config, p.seed),
+  twinFinal: (p: { config: RunConfig; seeds?: number[] }) => runFinal(p.config, p.seeds),
   scan: (req: ScanRequest) => simulateScan(req),
   pipeline: (p: { original: PointCloud; steps: OpSpec[]; seed: number }) => runPipeline(p.original, p.steps, p.seed),
   segment: (p: { cloud: PointCloud; params: SegParams; ignore: number[]; fromPlanes?: SegResult }) => {

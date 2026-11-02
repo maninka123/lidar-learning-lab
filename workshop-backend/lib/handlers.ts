@@ -6,6 +6,7 @@ import { clearCookie, createSession, csrfOk, destroySession, getSession, loginAl
 import * as W from './workshop';
 import * as L from './live';
 import * as P from './passkeys';
+import * as CH from './challenge';
 import { createHash, timingSafeEqual } from 'node:crypto';
 
 const DEEPSEEK_URL = 'https://api.deepseek.com/chat/completions';
@@ -28,6 +29,7 @@ async function guarded(req: Req, deps: Deps, f: () => Promise<Res>, cors = false
 export const publicHandler = (deps: Deps) => async (req: Req): Promise<Res> => {
   if (req.method === 'OPTIONS') return { status: 204, headers: corsHeaders(req, deps) };
   if (req.method !== 'GET') return err(405, 'method_not_allowed');
+  if (req.path.replace(/\/$/, '').endsWith('/challenge')) return guarded(req, deps, async () => { const c = await CH.loadAccept(deps.store); return json(200, { accepting: CH.isAccepting(c, deps.now()), until: c.until, settings: await CH.loadSettings(deps.store) }); }, true);
   // Fail closed: if anything is wrong the student app simply sees "no workshop" and keeps its normal behaviour.
   const res = await guarded(req, deps, async () => {
     const c = await W.loadConfig(deps.store), st = W.statusOf(c, deps.now());
@@ -75,9 +77,10 @@ export const studentHandler = (deps: Deps) => async (req: Req): Promise<Res> => 
   const origin = req.headers['origin'];
   if (origin && !originAllowed(origin, deps)) return err(403, 'origin_not_allowed');
   const route = req.path.replace(/^\/api\/student\/?/, '').replace(/\/$/, '');
-  if (req.method !== 'POST' || (route !== 'validate' && route !== 'chat')) return err(404, 'not_found');
+  if (req.method !== 'POST' || (route !== 'validate' && route !== 'chat' && route !== 'submit')) return err(404, 'not_found');
   return guarded(req, deps, async () => {
     if (req.tooLarge) return err(413, 'too_large', 'The request is too large.');
+    if (route === 'submit') return submitChallenge(req, deps);
     const now = deps.now(), c = await W.loadConfig(deps.store), st = W.statusOf(c, now);
     // Expiry is decided here, on every request: no timer or scheduled job is involved.
     if (st !== 'active') return err(403, st === 'expired' ? 'expired' : 'workshop_inactive', st === 'expired' ? 'The workshop has ended.' : 'There is no workshop running right now.');
@@ -135,6 +138,15 @@ export const studentHandler = (deps: Deps) => async (req: Req): Promise<Res> => 
     return json(200, { choices: [{ message: { content: data.choices[0].message?.content ?? '' } }], usage: { prompt_tokens: tin, completion_tokens: tout }, workshop: { remainingRequests: Math.max(0, c.maxPerStudent - rec.requests - 1) } });
   }, true);
 };
+
+/** A student sends the score of the Industrial Digital Twin Challenge. It does not depend on a workshop being switched on. */
+async function submitChallenge(req: Req, deps: Deps): Promise<Res> {
+  if (!CH.isAccepting(await CH.loadAccept(deps.store), deps.now())) return err(403, 'closed', 'Scores are not being accepted right now. Keep grading, and send when it opens.');
+  const p = CH.parseSubmission(req.body);
+  if (!p.ok) return err(400, 'bad_request', p.message);
+  const r = await CH.addSubmission(deps.store, p.value, { now: deps.now(), headers: req.headers, ip: clientIp(req.headers, req.ip), secret: deps.env.authSecret });
+  return r.ok ? json(200, { ok: true, id: r.id }) : err(429, 'too_many', 'Too many scores were sent from this network. Try again later.');
+}
 
 // ================================================================== admin
 const ok = (extra: object = {}) => json(200, { ok: true, ...extra });
@@ -200,6 +212,18 @@ export const adminHandler = (deps: Deps) => async (req: Req): Promise<Res> => {
         const r = await W.createCodes(deps.store, c, deps.env.authSecret, num(body.count), String(body.prefix ?? ''), now);
         return 'error' in r ? err(400, 'bad_request', r.error) : json(200, { ok: true, codes: r.codes, note: 'Copy these now. They cannot be shown again.' });
       }
+      case 'GET challenge': { const ac = await CH.loadAccept(deps.store); return json(200, { submissions: await CH.listSubmissions(deps.store), labels: await CH.netLabels(deps.store), now, accept: { ...ac, accepting: CH.isAccepting(ac, now) }, settings: await CH.loadSettings(deps.store) }); }
+      case 'POST challenge-settings': { const s = CH.parseSettings(body); if (!s.ok) return err(400, 'bad_request', s.message); await CH.saveSettings(deps.store, s.value); return ok({ settings: s.value }); }
+      case 'POST challenge-start': {
+        // no duration = unlimited; otherwise a positive number of minutes (the dashboard turns hours and days into minutes)
+        const m = body.durationMinutes === undefined || body.durationMinutes === null ? null : num(body.durationMinutes);
+        if (m !== null && (!Number.isFinite(m) || m < 1 || m > CH.MAX_OPEN_MINUTES)) return err(400, 'bad_request', 'Give a length of time between 1 minute and 365 days, or leave it unlimited.');
+        return ok({ accept: await CH.startAccepting(deps.store, now, m === null ? null : Math.round(m)) });
+      }
+      case 'POST challenge-stop': return ok({ accept: await CH.stopAccepting(deps.store) });
+      case 'POST challenge-label': return (await CH.setNetLabel(deps.store, String(body.tag ?? ''), CH.cleanLabel(body.label))) ? ok() : err(400, 'bad_request', 'Unknown network.');
+      case 'POST challenge-delete': return (await CH.deleteSubmission(deps.store, String(body.id ?? ''))) ? ok() : err(404, 'not_found');
+      case 'POST challenge-clear': await CH.clearSubmissions(deps.store); return ok();
       case 'POST data-delete': await W.purgeWorkshop(deps.store, c.workshopId); return ok();
       case 'POST codes-revoke': return (await W.revokeCode(deps.store, c.workshopId, String(body.id ?? ''))) ? ok() : err(404, 'not_found');
       default: return err(404, 'not_found');
