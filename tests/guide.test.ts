@@ -129,3 +129,15 @@ describe('SLAM playback', () => {
     expect(frameFor(1, 0.5, 11)).toBe(5); expect(frameFor(3, 0, 11)).toBe(10); expect(frameFor(0, 1, 11)).toBe(6); expect(frameFor(2, 0.4, 11, true)).toBeCloseTo(4);
   });
 });
+
+describe('route drawn by the student', () => {
+  it('a route of waypoints is closed, evenly stepped, and ends where it starts', async () => {
+    const { pathFromWaypoints } = await import('../src/registration/slam');
+    const p = pathFromWaypoints([[0, 0], [10, 0], [10, 6], [0, 6]], 40);
+    expect(p.length).toBe(41);
+    expect(p[40]).toEqual(p[0]);
+    const step = p.slice(1).map((q, i) => Math.hypot(q.x - p[i].x, q.y - p[i].y));
+    expect(Math.max(...step) / Math.min(...step)).toBeLessThan(1.5);
+    expect(p.every((q) => q.x > -0.5 && q.x < 10.5 && q.y > -0.5 && q.y < 6.5)).toBe(true);
+  });
+});

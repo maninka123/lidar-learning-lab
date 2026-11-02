@@ -7,6 +7,7 @@ import { Btn, Callout, Eq, NumberField, Section, Seg, Slider, Toggle, fmtN } fro
 import { DisplaySection, KindLegend } from '../ui/shared';
 import { SceneFromStore, MiniChart } from './common';
 import { PolyLine, CloudLayer, Marker } from '../ui/three';
+import { Crosshair, Trash2, X } from '../ui/icons';
 import { Play, Wand, RotateCcw } from '../ui/icons';
 import { PRESETS, presetToConfig, SensorConfig } from '../sensor/presets';
 import { runTask } from '../engine/client';
@@ -25,7 +26,14 @@ const REG_SENSOR: SensorConfig = { ...presetToConfig(PRESETS.find((p) => p.id ==
 
 const errTransform = (r: ReturnType<typeof useLab.getState>['reg']): Rigid => rigidFromEuler(r.errT[0], r.errT[1], r.errT[2], r.errYawDeg * D2R, r.errPitchDeg * D2R, r.errRollDeg * D2R);
 
-export default function Tab4({ labSwitch }: { lab?: 'slam'; labSwitch?: React.ReactNode }) {
+/** The lesson lives in the Learn tab of the side panel: opening the tab starts it, leaving it closes it. */
+function SlamLearn({ slam, busy, onRun, onTls }: { slam: ReturnType<typeof useLab.getState>['slam']; busy: boolean; onRun: (o?: Record<string, number | boolean>) => void; onTls: () => void }) {
+  useEffect(() => { useSlamGuide.getState().start(); if (!useLab.getState().slam) onRun({ loopClosure: true }); return () => useSlamGuide.getState().close(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  const on = useSlamGuide((g) => g.on);
+  return <div style={{ padding: '0 1rem' }}>{on ? <SlamGuidePanel slam={slam} busy={busy} onRun={() => onRun({ loopClosure: true })} onRunWith={onRun} openTls={onTls} /> : <Btn variant="primary" icon={<Play size={16} />} onClick={() => useSlamGuide.getState().start()} testId="slam-guide-start">Start the lesson again</Btn>}</div>;
+}
+
+export default function Tab4() {
   const s = useLab();
   const scene = getScene(s.sceneId);
   const [busy, setBusy] = useState(false);
@@ -34,11 +42,15 @@ export default function Tab4({ labSwitch }: { lab?: 'slam'; labSwitch?: React.Re
   const setP = (patch: Partial<typeof p>) => s.patch({ slamParams: { ...p, ...patch } });
 
   const guideOn = useSlamGuide((g) => g.on);
+  const [tool, setTool] = useState(false);
+  useEffect(() => { s.patch({ interaction: tool && !guideOn ? 'add-waypoint' : 'select' }); return () => { useLab.getState().patch({ interaction: 'select' }); }; }, [tool, guideOn]); // eslint-disable-line react-hooks/exhaustive-deps
+  const wps = s.waypoints;
+  const addWp = (x: number, y: number) => s.patch({ waypoints: [...useLab.getState().waypoints, [x, y]] });
   async function runSlam(over: Partial<typeof p> = {}) {
     setBusy(true);
     try {
-      const params = { ...p, ...over };
-      if (Object.keys(over).length) s.patch({ slamParams: params });
+      const params = { ...p, ...over, waypoints: s.waypoints.length >= 3 ? s.waypoints : undefined };
+      if (Object.keys(over).length) s.patch({ slamParams: { ...p, ...over } });
       const r = await runTask('slam', { scene, sensor: SLAM_SENSOR, params });
       s.patch({ slam: r });
       s.setCloud('slam-map', r.maps.corrected ?? r.maps.est, true);
@@ -55,6 +67,10 @@ export default function Tab4({ labSwitch }: { lab?: 'slam'; labSwitch?: React.Re
     <>
       <SceneFromStore interactive={false} />
       {guideOn && slam && <SlamGuideScene slam={slam} z={z} sensor={SLAM_SENSOR} pointSize={s.view.pointSize} />}
+      {!guideOn && wps.length > 0 && <>
+        {wps.length > 1 && <PolyLine pts={[...wps, ...(wps.length > 2 ? [wps[0]] : [])].map(([x, y]) => [x, y, 0.3] as Vec3)} color="#ff9f0a" width={3} dashed />}
+        {wps.map(([x, y], i) => <Marker key={i} p={[x, y, 0.3]} color="#ff9f0a" r={0.5} label={`${i + 1}`} />)}
+      </>}
       {slam && !guideOn && (
         <>
           {showMap(slam.maps.gt, [140, 150, 170], s.slamShow.mapGt)}
@@ -80,14 +96,19 @@ export default function Tab4({ labSwitch }: { lab?: 'slam'; labSwitch?: React.Re
   const controls = (
     <>
         <>
-          {guideOn ? (
-            <SlamGuidePanel slam={slam} busy={busy} onRun={() => runSlam()} onRunWith={(o) => runSlam(o as Partial<typeof p>)} openTls={() => { const i = tabIndex('TLS Scanning'); if (i >= 0) s.setTab(i); }} />
-          ) : (
-            <Section title="How SLAM works">
-              <p className="hint">A short guided lesson that builds on ICP: from scan matching to drift to loop closure. All the controls below still work on their own.</p>
-              <Btn variant="primary" icon={<Play size={16} />} onClick={() => { useSlamGuide.getState().start(); if (!slam) void runSlam({ loopClosure: true }); }} testId="slam-guide-start">Start the guided lesson</Btn>
-            </Section>
-          )}
+          <Section title="Route">
+            <p className="hint">Click corners of a route in the scene or on the plan. The robot drives round them and back to the start. With fewer than 3 corners it drives a ready-made loop.</p>
+            <div className="btn-row" style={{ flexWrap: 'wrap' }}>
+              <Btn sm variant={tool ? 'primary' : ''} icon={<Crosshair size={15} />} onClick={() => setTool((v) => !v)} testId="add-waypoints-tool">{tool ? 'Click to add waypoints…' : 'Add waypoints'}</Btn>
+              <Btn sm onClick={() => s.patch({ waypoints: [[-14, 0], [14, 0], [14, 24], [-14, 24]] })}>Loop preset</Btn>
+              <Btn sm icon={<Trash2 size={15} />} onClick={() => s.patch({ waypoints: [] })} disabled={!wps.length} testId="clear-waypoints">Clear ({wps.length})</Btn>
+            </div>
+            {wps.length > 0 && <ol style={{ margin: 0, paddingLeft: '1.3rem', display: 'grid', gap: 2 }}>{wps.map(([x, y], i) => (
+              <li key={i} className="mono" style={{ fontSize: '0.875rem' }}><span style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}><span>{x.toFixed(1)}, {y.toFixed(1)}</span>
+                <button className="btn sm" style={{ padding: '2px 6px', minHeight: 0 }} title={`Remove waypoint ${i + 1}`} aria-label={`Remove waypoint ${i + 1}`} data-testid={`wp-remove-${i}`} onClick={() => s.patch({ waypoints: useLab.getState().waypoints.filter((_, j) => j !== i) })}><X size={13} /></button></span></li>
+            ))}</ol>}
+            <Plan2D scene={scene} height={200} onClick={(x, y) => tool && addWp(x, y)} layers={{ paths: wps.length > 1 ? [{ pts: [...wps, ...(wps.length > 2 ? [wps[0]] : [])], color: '#ff9f0a', dashed: true }] : [], markers: wps.map(([x, y], i) => ({ x, y, color: '#ff9f0a', label: `${i + 1}` })) }} />
+          </Section>
           <Callout kind="warn" title="Teaching approximation">
             The robot follows a known loop. Motion error is <b>injected</b> into the odometry (or ICP scan matching is used). Loop closure here = ICP between the last and first scan + the residual spread along the path. It is <b>not</b> a full pose-graph SLAM back-end, and nothing is prerecorded.
           </Callout>
@@ -136,9 +157,7 @@ export default function Tab4({ labSwitch }: { lab?: 'slam'; labSwitch?: React.Re
       envIds={['A', 'B', 'D']}
       viewport={viewport}
       controls={controls}
-      learn={null}
-      noPanelTabs
-      topExtras={labSwitch}
+      learn={<SlamLearn slam={slam} busy={busy} onRun={runSlam} onTls={() => { const i = tabIndex('TLS Scanning'); if (i >= 0) s.setTab(i); }} />}
       stats={stats}
       overlays={<KindLegend items={[{ color: '#30d158', label: 'Ground-truth trajectory' }, { color: '#ff453a', label: 'Estimated (drifting)', style: 'dash' }, { color: '#0a84ff', label: 'After loop closure' }]} />}
     />

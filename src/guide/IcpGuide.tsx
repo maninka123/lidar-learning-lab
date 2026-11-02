@@ -5,7 +5,7 @@ import { Btn, Section } from '../ui/controls';
 import { ConvergenceChart, GuideClock, GuideNote, GuidePanel, GuideStep } from '../ui/Guide';
 import { Arc, Arrow, RigidGroup } from './three';
 import { PolyLine } from '../ui/three';
-import { useIcpGuide, nav } from './store';
+import { useIcpGuide } from './store';
 import { tabIndex } from '../tabs/nav';
 import { axisAngle, deltaOf, highlightPair, icpVerdict, pairResidual, pairsAt, transformAt } from './replay';
 import type { IcpResult } from '../registration/icp';
@@ -64,7 +64,7 @@ export function IcpMatrixBox({ auto, T, result }: { auto: boolean; T: Rigid | nu
   if (on && result) {
     const k = Math.min(iter, result.history.length - 1);
     if (step === 2) { shown = deltaOf(result.history, k); title = `This round's move (iteration ${k + 1})`; }
-    else { shown = transformAt(result.history, k, moveFraction(step, progress)); title = `B's transform after iteration ${k + (moveFraction(step, progress) >= 1 ? 2 : 1) - 1}`; }
+    else { shown = transformAt(result.history, k, moveFraction(step, progress)); title = moveFraction(step, progress) >= 1 ? `B's transform after iteration ${k + 1}` : `B's transform before iteration ${k + 1}`; }
   }
   const m = shown ? [[shown.R[0], shown.R[1], shown.R[2], shown.t[0]], [shown.R[3], shown.R[4], shown.R[5], shown.t[1]], [shown.R[6], shown.R[7], shown.R[8], shown.t[2]], [0, 0, 0, 1]] : null;
   const tint = (i: number) => (!on ? undefined : i % 4 === 3 && i < 12 ? 'rgba(255,159,10,.28)' : i < 12 && i % 4 < 3 ? 'rgba(10,132,255,.16)' : undefined);
@@ -158,4 +158,4 @@ export function IcpGuidePanel({ extent, result, method, busy, onRun, onPreset, v
 }
 
 /** Jump to the SLAM lab inside the mapping tab. */
-export function goToSlam() { nav.mappingLab = 'slam'; const i = tabIndex('SLAM & Mobile Scanning'); if (i >= 0) useLab.getState().setTab(i); }
+export function goToSlam() { const i = tabIndex('SLAM & Mobile Scanning'); if (i >= 0) useLab.getState().setTab(i); }

@@ -18,6 +18,8 @@ export interface SlamParams {
   scaleErr: number; // fractional translation scale error
   loopClosure: boolean;
   z: number;
+  /** corners of the route the student drew (x, y). With three or more the robot drives round them and back to the start. */
+  waypoints?: [number, number][];
 }
 export interface SlamResult {
   gt: Pose2[];
@@ -46,6 +48,15 @@ export function loopPath(scene: SceneDef, steps: number): Pose2[] {
   const hx = ((max[0] - min[0]) / 2) * (scene.id === 'C' ? 0.7 : 0.72), hy = ((max[1] - min[1]) / 2) * (scene.id === 'C' ? 0.45 : 0.62);
   // city district: drive around the school block along the road centre lines (two long roads, two crossings)
   let pts: [number, number][] = scene.id === 'D' ? [[-14, 0], [14, 0], [14, 24], [-14, 24]] : [[cx - hx, cy - hy], [cx + hx, cy - hy], [cx + hx, cy + hy], [cx - hx, cy + hy]];
+  return closedPath(pts, steps);
+}
+
+/** The route the student drew, closed back to its start, corners rounded and resampled to `steps` equal moves. */
+export function pathFromWaypoints(wps: [number, number][], steps: number): Pose2[] {
+  return closedPath(wps.map((w) => [w[0], w[1]] as [number, number]), steps);
+}
+
+function closedPath(pts: [number, number][], steps: number): Pose2[] {
   for (let it = 0; it < 3; it++) { // Chaikin corner cutting on a closed polygon
     const out: [number, number][] = [];
     for (let i = 0; i < pts.length; i++) {
@@ -73,7 +84,7 @@ export function loopPath(scene: SceneDef, steps: number): Pose2[] {
 
 export function runSlam(scene: SceneDef, sensor: SensorConfig, p: SlamParams): SlamResult {
   const rng = makeRng(p.seed);
-  const gt = loopPath(scene, p.steps);
+  const gt = p.waypoints && p.waypoints.length >= 3 ? pathFromWaypoints(p.waypoints, p.steps) : loopPath(scene, p.steps);
   const n = gt.length;
   // 1. local scans (sensor frame) taken from the true poses
   const local: PointCloud[] = [];

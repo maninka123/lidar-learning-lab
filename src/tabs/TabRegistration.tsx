@@ -14,6 +14,7 @@ import { D2R, R2D, rigidFromEuler, rotationAngle, rigidApply, rigidCompose, Rigi
 import { evaluateAlignment } from '../registration/icp';
 import { makeRng } from '../core/rng';
 import { IcpGuidePanel, IcpGuideScene, IcpMatrixBox, goToSlam } from '../guide/IcpGuide';
+import type { IcpResult } from '../registration/icp';
 import { useIcpGuide } from '../guide/store';
 
 type Method = 'point' | 'plane';
@@ -79,6 +80,14 @@ function makePair(base: PointCloud, overlap: number, noise: number, seed: number
 
 const errOf = (r: ReturnType<typeof useLab.getState>['reg']): Rigid => rigidFromEuler(r.errT[0], r.errT[1], r.errT[2], r.errYawDeg * D2R, r.errPitchDeg * D2R, r.errRollDeg * D2R);
 interface Run { label: string; before: number; after: number; err: string; iters: number }
+
+/** The lesson lives in the Learn tab of the side panel: opening the tab starts it (and runs ICP if there is no run yet), leaving it closes it. */
+function IcpLearn({ setAuto, hasResult, ready, onRun, ...rest }: { setAuto: () => void; hasResult: boolean; ready: boolean; extent: number; result: IcpResult | null; method: Method; busy: boolean; onRun: () => void; verdict: { errT: number; errDeg: number } | null; openSlam: () => void; onPreset: (k: 'bad' | 'overlap' | 'wide') => void }) {
+  useEffect(() => { setAuto(); useIcpGuide.getState().start(); return () => useIcpGuide.getState().close(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (ready && !hasResult && !rest.busy) onRun(); }, [ready, rest.busy]); // eslint-disable-line react-hooks/exhaustive-deps
+  const on = useIcpGuide((g) => g.on);
+  return <div style={{ padding: '0 1rem' }}>{on ? <IcpGuidePanel {...rest} onRun={onRun} /> : <Btn variant="primary" icon={<Play size={16} />} onClick={() => useIcpGuide.getState().start()} testId="icp-guide-start">Start the lesson again</Btn>}</div>;
+}
 
 export default function TabRegistration() {
   const s = useLab();
@@ -179,23 +188,9 @@ export default function TabRegistration() {
 
   const controls = (
     <>
-      {!guideOn && <Callout kind="edu" title="What is registration?">
+      <Callout kind="edu" title="What is registration?">
         Two scans of the same place start in different positions. <b>Registration</b> finds the move (shift + turn) that lays cloud B (orange) on top of cloud A (blue). ICP does it by repeating: match each B point to its nearest A point, then move B to shrink the gaps.
-      </Callout>}
-      {guideOn ? (
-        <IcpGuidePanel extent={size} result={reg.result?.history.length ? reg.result : null} method={method} busy={busy} onRun={runIcp} verdict={reg.recoveredErr ? { errT: reg.recoveredErr.t, errDeg: reg.recoveredErr.deg } : null} openSlam={goToSlam}
-          onPreset={(k) => {
-            if (k === 'bad') setReg({ errT: [1.6, -1.2, 0], errYawDeg: 40, errPitchDeg: 0, errRollDeg: 0, ...reset });
-            else if (k === 'overlap') { setOverlap(0.3); setReg({ ...reset }); }
-            else { setTrim(1); setReg({ icp: { ...reg.icp, maxCorrDist: 5 }, ...reset }); }
-            useIcpGuide.getState().restart();
-          }} />
-      ) : (
-        <Section title="How ICP works">
-          <p className="hint">A short guided lesson: it replays a real ICP run step by step. You can still use all the controls on your own.</p>
-          <Btn variant="primary" icon={<Play size={16} />} onClick={() => { setMode('auto'); useIcpGuide.getState().start(); if (!reg.result) void runIcp(); }} disabled={!reg.A} testId="icp-guide-start">Start the guided lesson</Btn>
-        </Section>
-      )}
+      </Callout>
       <Section title="1 · Two clouds">
         <Select<string> label="Scene" value={srcId} onChange={setSrcId} options={SOURCES.map((x) => ({ value: x.id, label: x.label }))} />
         <Seg value={overlap} onChange={setOverlap} label="Overlap" options={[{ value: 0.8, label: 'Overlap 80 %' }, { value: 0.5, label: '50 %' }, { value: 0.3, label: '30 %' }]} />
@@ -260,8 +255,13 @@ export default function TabRegistration() {
       tab={5}
       viewport={viewport}
       controls={controls}
-      learn={null}
-      noPanelTabs
+      learn={<IcpLearn setAuto={() => setMode('auto')} hasResult={!!reg.result?.history.length} ready={!!reg.A} extent={size} result={reg.result?.history.length ? reg.result : null} method={method} busy={busy} onRun={runIcp} verdict={reg.recoveredErr ? { errT: reg.recoveredErr.t, errDeg: reg.recoveredErr.deg } : null} openSlam={goToSlam}
+        onPreset={(k) => {
+          if (k === 'bad') setReg({ errT: [1.6, -1.2, 0], errYawDeg: 40, errPitchDeg: 0, errRollDeg: 0, ...reset });
+          else if (k === 'overlap') { setOverlap(0.3); setReg({ ...reset }); }
+          else { setTrim(1); setReg({ icp: { ...reg.icp, maxCorrDist: 5 }, ...reset }); }
+          useIcpGuide.getState().restart();
+        }} />}
       noEnv
       stats={stats}
       overlays={<><KindLegend items={[{ color: '#0a84ff', label: 'Cloud A (reference)' }, ...(auto && reg.result && view === 'after' ? [{ color: '#30d158', label: 'Cloud B (moved by ICP)' }] : [{ color: '#ff9f0a', label: !auto ? 'Cloud B (to move)' : reg.result ? 'Cloud B (before ICP)' : 'Cloud B (start)' }])]} />{matrixBox}</>}
