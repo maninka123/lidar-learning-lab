@@ -13,8 +13,20 @@ export interface IcpOptions {
   method?: 'point' | 'plane'; // point-to-point (default) or point-to-plane
   trim?: number; // keep only this fraction of the best pairs each iteration (robust to non-overlap), 0..1
 }
-export interface IcpIter { iter: number; rmse: number; fitness: number; T: Rigid; scale: number; pairs: number }
+/** One real correspondence used by an iteration: source point index, where it was (p, after T) and its matched target point (q). */
+export interface IcpPair { si: number; p: Vec3; q: Vec3; d: number; n?: Vec3 }
+export interface IcpIter {
+  iter: number; rmse: number; fitness: number; T: Rigid; scale: number; pairs: number;
+  /** correspondence distance limit in force during this iteration */
+  gate?: number;
+  /** an evenly spaced sample of the pairs the solver actually used (for display only) */
+  sample?: IcpPair[];
+  /** the incremental move the solver computed from these pairs; T of the next iteration = delta ∘ T. Absent when no step was taken. */
+  delta?: Rigid;
+}
 export interface IcpResult { T: Rigid; scale: number; history: IcpIter[]; converged: boolean; finalRmse: number; fitness: number }
+
+const SAMPLE_PAIRS = 48;
 
 /** Apply similarity transform x' = s R x + t */
 export function applySim(T: Rigid, s: number, p: Vec3): Vec3 {
@@ -35,6 +47,7 @@ export function icp(src: Float32Array, nSrc: number, dst: Float32Array, nDst: nu
   const cur = new Float32Array(m * 3);
   const tgt = new Float32Array(m * 3);
   const nrm = new Float32Array(m * 3);
+  const sIdx = new Int32Array(m);
   const d2s = new Float64Array(m);
   const nCache = new Map<number, Vec3>();
   /** Surface normal of dst point i from PCA of its 10 nearest neighbours (computed lazily, cached). */
@@ -73,7 +86,7 @@ export function icp(src: Float32Array, nSrc: number, dst: Float32Array, nDst: nu
       srcSel[k * 3] = p[0];
       tgt[k * 3] = dst[nn.index * 3]; tgt[k * 3 + 1] = dst[nn.index * 3 + 1]; tgt[k * 3 + 2] = dst[nn.index * 3 + 2];
       if (o.method === 'plane') { const nv = normalAt(nn.index); nrm[k * 3] = nv[0]; nrm[k * 3 + 1] = nv[1]; nrm[k * 3 + 2] = nv[2]; }
-      d2s[k] = nn.dist2;
+      d2s[k] = nn.dist2; sIdx[k] = i;
       se += nn.dist2;
       k++;
     }
@@ -81,14 +94,19 @@ export function icp(src: Float32Array, nSrc: number, dst: Float32Array, nDst: nu
     if (o.trim && o.trim < 1) {
       // keep the best fraction of pairs (trimmed ICP): robust when the clouds only partly overlap
       const order = Array.from({ length: k }, (_, i) => i).sort((a, b) => d2s[a] - d2s[b]).slice(0, Math.max(3, Math.floor(k * o.trim)));
-      const c2 = new Float32Array(order.length * 3), t2 = new Float32Array(order.length * 3), n2 = new Float32Array(order.length * 3);
+      const c2 = new Float32Array(order.length * 3), t2 = new Float32Array(order.length * 3), n2 = new Float32Array(order.length * 3), s2 = new Int32Array(order.length);
       let se2 = 0;
-      order.forEach((i, j) => { c2.set(cur.subarray(i * 3, i * 3 + 3), j * 3); t2.set(tgt.subarray(i * 3, i * 3 + 3), j * 3); n2.set(nrm.subarray(i * 3, i * 3 + 3), j * 3); se2 += d2s[i]; });
-      cur.set(c2); tgt.set(t2); nrm.set(n2); k = order.length; se = se2;
+      order.forEach((i, j) => { s2[j] = sIdx[i]; c2.set(cur.subarray(i * 3, i * 3 + 3), j * 3); t2.set(tgt.subarray(i * 3, i * 3 + 3), j * 3); n2.set(nrm.subarray(i * 3, i * 3 + 3), j * 3); se2 += d2s[i]; });
+      cur.set(c2); tgt.set(t2); nrm.set(n2); sIdx.set(s2); k = order.length; se = se2;
     }
     const rmse = Math.sqrt(se / k);
     lastRmse = rmse; lastFit = k / m;
-    history.push({ iter: it, rmse, fitness: k / m, T: { R: T.R.slice(), t: [...T.t] as Vec3 }, scale: s, pairs: k });
+    const sample: IcpPair[] = [];
+    const every = Math.max(1, Math.floor(k / SAMPLE_PAIRS));
+    for (let a = 0; a < k && sample.length < SAMPLE_PAIRS; a += every) {
+      sample.push({ si: sIdx[a], p: [cur[a * 3], cur[a * 3 + 1], cur[a * 3 + 2]], q: [tgt[a * 3], tgt[a * 3 + 1], tgt[a * 3 + 2]], d: Math.hypot(cur[a * 3] - tgt[a * 3], cur[a * 3 + 1] - tgt[a * 3 + 1], cur[a * 3 + 2] - tgt[a * 3 + 2]), ...(o.method === 'plane' ? { n: [nrm[a * 3], nrm[a * 3 + 1], nrm[a * 3 + 2]] as Vec3 } : {}) });
+    }
+    history.push({ iter: it, rmse, fitness: k / m, T: { R: T.R.slice(), t: [...T.t] as Vec3 }, scale: s, pairs: k, gate, sample });
     if (Math.abs(prev - rmse) < o.tolerance) {
       if (gate > minGate * 1.01) { gate = Math.max(minGate, gate / 2); maxD2 = gate * gate; prev = Infinity; continue; }
       converged = true; break;
@@ -99,6 +117,7 @@ export function icp(src: Float32Array, nSrc: number, dst: Float32Array, nDst: nu
       d = planeStep(cur, tgt, nrm, k) ?? bestFitTransform(cur, tgt, k, false);
     } else d = bestFitTransform(cur, tgt, k, !!o.withScale);
     if (o.method !== 'plane' && o.withScale && o.scaleBounds && (s * d.scale < o.scaleBounds[0] || s * d.scale > o.scaleBounds[1])) d = bestFitTransform(cur, tgt, k, false);
+    history[history.length - 1].delta = { R: d.R.slice(), t: [...d.t] as Vec3 };
     // compose incremental similarity: x'' = ds*dR*(s R x + t) + dt
     const ds = d.scale;
     T = { R: mulR(d.R, T.R), t: (() => { const r = applyR(d.R, T.t); return [ds * r[0] + d.t[0], ds * r[1] + d.t[1], ds * r[2] + d.t[2]] as Vec3; })() };

@@ -4,13 +4,13 @@ import { X, Play } from './icons';
 export interface VideoInfo { id: string; title: string; by: string; channel: string; about?: string; tab?: number; tabName?: string }
 const FP = { by: 'Dr. Florent Poux', channel: 'https://www.youtube.com/@FlorentPoux' };
 export const VIDEOS: Record<string, VideoInfo> = {
-  library: { id: 'X57nSQZePyE', title: 'The library point cloud', ...FP, about: 'A coloured point cloud of a library: SLAM reconstruction, colour from the camera, surface finish.', tab: 9, tabName: 'Meshing & Surfaces' },
-  university: { id: '8nzo4YobRyc', title: '[Point Cloud] University', ...FP, about: 'A larger coloured campus point cloud.', tab: 9, tabName: 'Meshing & Surfaces' },
-  implant: { id: 'Hy4hnWMw5ms', title: '[3D STUDENTS] Implantation Point Cloud', ...FP, about: 'A point cloud shown without colour: just the points.', tab: 9, tabName: 'Meshing & Surfaces' },
-  factory: { id: 'Kq8FKKODkog', title: 'Abandonned Point Cloud Series : Old whool factory', ...FP, about: 'An abandoned factory captured as a coloured point cloud.', tab: 9, tabName: 'Meshing & Surfaces' },
-  cad: { id: 'Z8uAzTqdSts', title: 'How to Turn 3D Scan to CAD (.dxf, .dwg) for AEC', ...FP, about: 'Slice a scan, find the walls, export a floor plan for CAD.', tab: 13, tabName: 'Scan to CAD' },
-  ransac: { id: 'MJJNIvvAQzc', title: '3D Plane Detection with Adaptive RANSAC (100% Workflow Automation)', ...FP, about: 'Find floors, ceilings and walls automatically, with settings measured from the data.', tab: 10, tabName: 'Clustering & Segmentation' },
-  change: { id: '38Fu-pDwUoA', title: 'Smart 3D Change Detection: Complete Python Tutorial (point clouds)', ...FP, about: 'Compare two scans of the same place and find what changed.', tab: 14, tabName: 'Change Detection' },
+  library: { id: 'X57nSQZePyE', title: 'The library point cloud', ...FP, about: 'A coloured point cloud of a library: SLAM reconstruction, colour from the camera, surface finish.', tab: 11, tabName: 'Meshing & Surfaces' },
+  university: { id: '8nzo4YobRyc', title: '[Point Cloud] University', ...FP, about: 'A larger coloured campus point cloud.', tab: 11, tabName: 'Meshing & Surfaces' },
+  implant: { id: 'Hy4hnWMw5ms', title: '[3D STUDENTS] Implantation Point Cloud', ...FP, about: 'A point cloud shown without colour: just the points.', tab: 11, tabName: 'Meshing & Surfaces' },
+  factory: { id: 'Kq8FKKODkog', title: 'Abandonned Point Cloud Series : Old whool factory', ...FP, about: 'An abandoned factory captured as a coloured point cloud.', tab: 11, tabName: 'Meshing & Surfaces' },
+  cad: { id: 'Z8uAzTqdSts', title: 'How to Turn 3D Scan to CAD (.dxf, .dwg) for AEC', ...FP, about: 'Slice a scan, find the walls, export a floor plan for CAD.', tab: 16, tabName: 'Scan to CAD' },
+  ransac: { id: 'MJJNIvvAQzc', title: '3D Plane Detection with Adaptive RANSAC (100% Workflow Automation)', ...FP, about: 'Find floors, ceilings and walls automatically, with settings measured from the data.', tab: 12, tabName: 'Unsupervised Learning' },
+  change: { id: '38Fu-pDwUoA', title: 'Smart 3D Change Detection: Complete Python Tutorial (point clouds)', ...FP, about: 'Compare two scans of the same place and find what changed.', tab: 7, tabName: 'Change Detection' },
 };
 
 /** A video thumbnail with credit. Clicking opens a pop-up player that starts playing. */

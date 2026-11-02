@@ -13,6 +13,8 @@ import { parsePointCloud } from '../io/load';
 import { D2R, R2D, rigidFromEuler, rotationAngle, rigidApply, rigidCompose, Rigid, Vec3 } from '../core/math';
 import { evaluateAlignment } from '../registration/icp';
 import { makeRng } from '../core/rng';
+import { IcpGuidePanel, IcpGuideScene, IcpMatrixBox, goToSlam } from '../guide/IcpGuide';
+import { useIcpGuide } from '../guide/store';
 
 type Method = 'point' | 'plane';
 interface Source { id: string; label: string; file: string; note: string }
@@ -83,7 +85,9 @@ export default function TabRegistration() {
   const reg = s.reg;
   const setReg = (patch: Partial<typeof reg>) => s.patch({ reg: { ...useLab.getState().reg, ...patch } });
   const [srcId, setSrcId] = useState('room');
-  const overlap = 0.8, noise = 0.02; // fixed: partial overlap and a little sensor noise
+  const noise = 0.02; // a little sensor noise
+  const [overlap, setOverlap] = useState(0.8); // how much of the scene both clouds see
+  const guideOn = useIcpGuide((g) => g.on);
   const [mode, setMode] = useState<'manual' | 'auto'>('manual');
   const [calc, setCalc] = useState<{ rmse: number; fitness: number; t: number; deg: number } | null>(null);
   const [method, setMethod] = useState<Method>('point');
@@ -102,7 +106,7 @@ export default function TabRegistration() {
       setReg({ A, B, result: null, before: null, after: null, recoveredErr: null, iter: 0 });
     }).catch((e) => useLab.getState().notify((e as Error).message, 'error')).finally(() => on && setBusy(false));
     return () => { on = false; };
-  }, [srcId]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [srcId, overlap]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { setRuns([]); }, [srcId]);
 
   const Bmis = useMemo(() => (reg.B ? transformCloud(reg.B, errOf(reg), 'Cloud B (moved)') : null), [reg.B, reg.errT, reg.errYawDeg, reg.errPitchDeg, reg.errRollDeg]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -128,7 +132,7 @@ export default function TabRegistration() {
       const c: Vec3 = [reg.B!.positions[0], reg.B!.positions[1], reg.B!.positions[2]];
       const pc = rigidApply(total, c);
       const rec = { t: Math.hypot(pc[0] - c[0], pc[1] - c[1], pc[2] - c[2]), deg: rotationAngle(total.R) * R2D };
-      setView('after'); setReg({ result: r, before, after, iter: r.history.length - 1, recoveredErr: rec });
+      setView('after'); setReg({ result: r, before, after, iter: r.history.length - 1, recoveredErr: rec }); useIcpGuide.getState().setIter(0);
       setRuns((l) => [{ label: `${method === 'point' ? 'Point-to-point' : 'Point-to-plane'}${trim < 1 ? `, best ${Math.round(trim * 100)} %` : ''}, dist ${reg.icp.maxCorrDist.toFixed(1)} m`, before: before.rmse, after: after.rmse, err: `${(rec.t * 100).toFixed(1)} cm · ${rec.deg.toFixed(2)}°`, iters: r.history.length }, ...l].slice(0, 6));
     } catch (e) { s.notify((e as Error).message, 'error'); } finally { setBusy(false); }
   }
@@ -144,9 +148,11 @@ export default function TabRegistration() {
   const k = srcId === 'room' ? 0.75 : 0.45;
   const viewport = (
     <Viewport home={[cen[0] + size * k, cen[1] - size * k, cen[2] + size * (srcId === 'room' ? 0.5 : 0.35)]} target={cen} gridSize={Math.max(1, size / 10)} bgOverride="#ffffff" threshold={0.05}>
-      {reg.A && <CloudLayer cloud={reg.A} mode="rgb" size={ps} budget={200000} pickable={false} />}
-      {Bmis && (view === 'before' || !Bafter) && <CloudLayer cloud={Bmis} mode="rgb" size={ps} budget={200000} pickable={false} />}
-      {Bafter && view !== 'before' && <CloudLayer cloud={Bafter} mode="rgb" size={ps} budget={200000} pickable={false} />}
+      {guideOn && reg.result?.history.length && reg.A && Bmis ? <IcpGuideScene A={reg.A} B={Bmis} result={reg.result} size={size} extent={size} ps={ps} /> : <>
+        {reg.A && <CloudLayer cloud={reg.A} mode="rgb" size={ps} budget={200000} pickable={false} />}
+        {Bmis && (view === 'before' || !Bafter) && <CloudLayer cloud={Bmis} mode="rgb" size={ps} budget={200000} pickable={false} />}
+        {Bafter && view !== 'before' && <CloudLayer cloud={Bafter} mode="rgb" size={ps} budget={200000} pickable={false} />}
+      </>}
     </Viewport>
   );
 
@@ -169,26 +175,31 @@ export default function TabRegistration() {
 
   // matrix shown on the canvas: the move you made (manual) or the move ICP found (automatic)
   const shownT: Rigid | null = auto ? (reg.result ? reg.result.history[iterIdx].T : null) : errOf(reg);
-  const matrix = shownT ? [[shownT.R[0], shownT.R[1], shownT.R[2], shownT.t[0]], [shownT.R[3], shownT.R[4], shownT.R[5], shownT.t[1]], [shownT.R[6], shownT.R[7], shownT.R[8], shownT.t[2]], [0, 0, 0, 1]] : null;
-  const matrixBox = (
-    <div data-testid="transform-matrix" style={{ position: 'absolute', right: 14, bottom: 14, background: 'rgba(255,255,255,.92)', border: '1px solid var(--line, #d2d2d7)', borderRadius: 12, padding: '8px 12px', pointerEvents: 'none', boxShadow: '0 2px 10px rgba(0,0,0,.08)' }}>
-      <div style={{ fontSize: '0.8125rem', fontWeight: 600, marginBottom: 4 }}>{auto ? 'Transform found by ICP' : 'Transform you applied to B'}</div>
-      {matrix ? (
-        <div className="mono" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 3.6rem)', gap: '2px 6px', fontSize: '0.8125rem', textAlign: 'right' }}>
-          {matrix.flat().map((v, i) => <span key={i} style={{ opacity: i >= 12 ? 0.5 : 1 }}>{(Math.abs(v) < 5e-4 ? 0 : v).toFixed(3)}</span>)}
-        </div>
-      ) : <span className="hint">Run ICP to see it.</span>}
-    </div>
-  );
+  const matrixBox = <IcpMatrixBox auto={auto} T={shownT} result={reg.result?.history.length ? reg.result : null} />;
 
   const controls = (
     <>
-      <Callout kind="edu" title="What is registration?">
+      {!guideOn && <Callout kind="edu" title="What is registration?">
         Two scans of the same place start in different positions. <b>Registration</b> finds the move (shift + turn) that lays cloud B (orange) on top of cloud A (blue). ICP does it by repeating: match each B point to its nearest A point, then move B to shrink the gaps.
-      </Callout>
+      </Callout>}
+      {guideOn ? (
+        <IcpGuidePanel extent={size} result={reg.result?.history.length ? reg.result : null} method={method} busy={busy} onRun={runIcp} verdict={reg.recoveredErr ? { errT: reg.recoveredErr.t, errDeg: reg.recoveredErr.deg } : null} openSlam={goToSlam}
+          onPreset={(k) => {
+            if (k === 'bad') setReg({ errT: [1.6, -1.2, 0], errYawDeg: 40, errPitchDeg: 0, errRollDeg: 0, ...reset });
+            else if (k === 'overlap') { setOverlap(0.3); setReg({ ...reset }); }
+            else { setTrim(1); setReg({ icp: { ...reg.icp, maxCorrDist: 5 }, ...reset }); }
+            useIcpGuide.getState().restart();
+          }} />
+      ) : (
+        <Section title="How ICP works">
+          <p className="hint">A short guided lesson: it replays a real ICP run step by step. You can still use all the controls on your own.</p>
+          <Btn variant="primary" icon={<Play size={16} />} onClick={() => { setMode('auto'); useIcpGuide.getState().start(); if (!reg.result) void runIcp(); }} disabled={!reg.A} testId="icp-guide-start">Start the guided lesson</Btn>
+        </Section>
+      )}
       <Section title="1 · Two clouds">
         <Select<string> label="Scene" value={srcId} onChange={setSrcId} options={SOURCES.map((x) => ({ value: x.id, label: x.label }))} />
-        <p className="hint">{source.note} A and B use different points of the same scan, and B only sees part of it.</p>
+        <Seg value={overlap} onChange={setOverlap} label="Overlap" options={[{ value: 0.8, label: 'Overlap 80 %' }, { value: 0.5, label: '50 %' }, { value: 0.3, label: '30 %' }]} />
+        <p className="hint">{source.note} A and B use different points of the same scan, and B only sees part of it. Less overlap makes ICP harder.</p>
       </Section>
       <Section title="2 · Align the clouds">
         <Seg value={mode} onChange={setMode} label="How" options={[{ value: 'manual', label: 'Manual' }, { value: 'auto', label: 'Automatic (ICP)' }]} />

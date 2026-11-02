@@ -1,5 +1,5 @@
 import { Fragment, Suspense, lazy, useState, ReactNode } from 'react';
-import { Layers, PanelLeft, Radar, Info, Boxes, Route, GitMerge, Filter, Network, Camera, Share2, Ruler, Eye, Wand, Crosshair } from './ui/icons';
+import { Layers, PanelLeft, Radar, Info, Boxes, Route, GitMerge, Filter, Network, Camera, Share2, Ruler, Eye, Wand, Crosshair, Target } from './ui/icons';
 import { useLab } from './state/store';
 import { Toast } from './ui/shared';
 import { ReadySignal } from './intro/ready';
@@ -8,6 +8,8 @@ const Tab0 = lazy(() => import('./tabs/Tab0Concepts'));
 const Tab1 = lazy(() => import('./tabs/Tab1Fundamentals'));
 const Tab2 = lazy(() => import('./tabs/Tab2Explorer'));
 const TabCmp = lazy(() => import('./tabs/TabCompareSensors'));
+import { registerTabLabels } from './tabs/nav';
+const TabOcc = lazy(() => import('./tabs/TabOcclusion'));
 const TabMap = lazy(() => import('./tabs/TabMapping'));
 const TabTls = lazy(() => import('./tabs/TabTls'));
 const TabFusion = lazy(() => import('./tabs/TabFusion'));
@@ -27,6 +29,7 @@ const TABS: { label: string; icon: ReactNode; el: ReactNode }[] = [
   { label: 'Scanner Simulator', icon: <Radar size={18} />, el: <Tab1 /> },
   { label: 'Compare Sensors', icon: <Layers size={18} />, el: <TabCmp /> },
   { label: 'Point Cloud Gallery', icon: <Boxes size={18} />, el: <Tab2 /> },
+  { label: 'Occlusion & Sensor Placement', icon: <Target size={18} />, el: <TabOcc /> },
   { label: 'Point Cloud Processing', icon: <Filter size={18} />, el: <Tab5 /> },
   { label: 'Point Cloud Registration', icon: <GitMerge size={18} />, el: <TabReg /> },
   { label: 'Change Detection', icon: <Eye size={18} />, el: <TabChange /> },
@@ -43,6 +46,7 @@ const TABS: { label: string; icon: ReactNode; el: ReactNode }[] = [
 ];
 
 /** From this tab on, the lessons are applications: optional extras that put the earlier ideas to work. */
+registerTabLabels(TABS.map((x) => x.label));
 const APPS_FROM = TABS.findIndex((x) => x.label === 'Scan to CAD');
 
 export default function App() {

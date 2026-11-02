@@ -13,7 +13,7 @@ test.describe('LiDAR Learning Lab', () => {
     const errors: string[] = [];
     page.on('pageerror', (e) => errors.push(e.message));
     await page.goto('/');
-    await expect(page.getByTestId('nav-4')).toBeVisible();
+    await expect(page.getByTestId('nav-5')).toBeVisible();
     (page as any).__errors = errors;
   });
   test.afterEach(async ({ page }) => { expect((page as any).__errors).toEqual([]); });
@@ -141,7 +141,7 @@ test.describe('LiDAR Learning Lab', () => {
   });
 
   test('tab 5: mobile scanning - single scan then a moving trajectory', async ({ page }) => {
-    await go(page, 8);
+    await go(page, 9);
     await page.getByTestId('run-mls').click();
     await expect.poll(() => state(page, (s) => s.mls?.cloud?.count ?? 0), { timeout: 90000 }).toBeGreaterThan(500);
     await page.getByText('Loop preset').click();
@@ -152,7 +152,7 @@ test.describe('LiDAR Learning Lab', () => {
   });
 
   test('tab 5: SLAM drift + loop closure', async ({ page }) => {
-    await go(page, 8);
+    await go(page, 9);
     await page.getByRole('button', { name: 'SLAM', exact: true }).click();
     await page.evaluate(() => window.__lab.getState().patch({ slamParams: { ...window.__lab.getState().slamParams, loopClosure: true } }));
     await page.getByTestId('run-slam').click();
@@ -162,7 +162,7 @@ test.describe('LiDAR Learning Lab', () => {
   });
 
   test('tab 4: point cloud registration - ICP corrects a rigid error', async ({ page }) => {
-    await go(page, 5);
+    await go(page, 6);
     await expect.poll(() => state(page, (s) => !!s.reg.A && !!s.reg.B), { timeout: 60000 }).toBe(true);
     await page.getByTestId('calculate').click();
     await expect(page.getByTestId('transform-matrix')).toBeVisible();
@@ -178,7 +178,7 @@ test.describe('LiDAR Learning Lab', () => {
     await go(page, 1);
     await page.getByTestId('run-scan').click();
     await expect.poll(() => state(page, (s) => !!s.clouds.scan)).toBe(true);
-    await go(page, 4);
+    await go(page, 5);
     await page.getByText('Noise + outliers + clean').click();
     await expect.poll(() => state(page, (s) => s.proc.quality?.injected ?? 0), { timeout: 60000 }).toBeGreaterThan(100);
     const q = await state(page, (s) => s.proc.quality);
@@ -186,13 +186,13 @@ test.describe('LiDAR Learning Lab', () => {
     await page.getByRole('button', { name: 'Result', exact: true }).click();
     await page.getByTestId('reset-original').click();
     await expect.poll(() => state(page, (s) => s.proc.steps.length)).toBe(0);
-    await go(page, 11);
+    await go(page, 12);
     await page.getByTestId('run-seg').click();
     await expect.poll(() => state(page, (s) => s.seg.gt?.recovered?.length ?? 0), { timeout: 60000 }).toBeGreaterThanOrEqual(3);
   });
 
   test('tab 7: LiDAR vs reconstruction needs valid alignment before reporting errors', async ({ page }) => {
-    await go(page, 16);
+    await go(page, 17);
     await expect(page.getByRole('button', { name: 'Exercise' })).toHaveCount(0);
     await expect(page.getByTestId('scene-picker')).toBeVisible();
     await page.getByTestId('scene-living').click();
@@ -215,7 +215,7 @@ test.describe('LiDAR Learning Lab', () => {
 
   test('tab 12: scene graph on the classroom, offline queries, local-llm-fit card and direct DeepSeek inference (mocked)', async ({ page }) => {
     await page.route('**/api/deepseek/**', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ choices: [{ message: { content: '# Summary\n\n**Room:** a classroom per the graph.\n\n- z near 0 is the floor\n- some tables' } }], usage: { prompt_tokens: 9876, completion_tokens: 21 } }) }));
-    await go(page, 13);
+    await go(page, 14);
     await expect(page.getByTestId('ds-preview')).toContainText('points');
     await page.getByTestId('ds-prompt').click();
     await expect(page.getByTestId('ds-prompt-text')).toContainText('System');
@@ -287,7 +287,7 @@ test('viewport: right-drag and the Pan button move the view like CloudCompare', 
 
 test('tab 6: Street is always the big city, also after switching labs and environments', async ({ page }) => {
   await page.goto('/');
-  await page.getByTestId('nav-8').click();
+  await page.getByTestId('nav-9').click();
   await expect.poll(() => page.evaluate(() => (window as any).__lab.getState().sceneId)).toBe('D');
   await page.getByRole('button', { name: 'SLAM', exact: true }).click();
   await page.getByRole('button', { name: 'Mobile scanning', exact: true }).click();
@@ -303,14 +303,14 @@ test.describe('classroom applications', () => {
   test.beforeEach(async ({ page }) => { await page.goto('/'); });
   const go2 = async (page: any, n: number) => { await page.getByTestId(`nav-${n}`).click(); };
   test('tab 10: scan to CAD finds walls and exports a DXF', async ({ page }) => {
-    await go2(page, 15);
+    await go2(page, 16);
     await expect(page.getByTestId('stats-card')).toContainText(/Walls found\s*\d+/, { timeout: 90000 });
     await expect.poll(async () => parseInt(((await page.getByTestId('stats-card').innerText()).match(/Walls found\s*(\d+)/) ?? [])[1] ?? '0'), { timeout: 90000 }).toBeGreaterThanOrEqual(4);
     const [dl] = await Promise.all([page.waitForEvent('download'), page.getByTestId('export-dxf').click()]);
     expect(dl.suggestedFilename()).toBe('classroom_walls.dxf');
   });
   test('tab 11: change detection shows five visits and a heatmap', async ({ page }) => {
-    await go2(page, 6);
+    await go2(page, 7);
     await expect(page.getByTestId('stamp-4')).toBeVisible({ timeout: 90000 });
     await expect(page.getByTestId('change-chart')).toContainText(/\d+\.\d%/, { timeout: 120000 });
     await expect(page.getByText('What changed', { exact: true })).toBeVisible({ timeout: 120000 });
@@ -318,7 +318,7 @@ test.describe('classroom applications', () => {
     await expect(page.getByTestId('stats-card')).toContainText(/Time between\s*\d+/);
   });
   test('tab 12: meshing builds a surface', async ({ page }) => {
-    await go2(page, 10);
+    await go2(page, 11);
     await page.getByTestId('video-X57nSQZePyE').click();
     await expect(page.locator('iframe[src*="X57nSQZePyE"]')).toBeVisible();
     await expect(page.getByTestId('video-fullscreen')).toBeVisible();
@@ -330,7 +330,7 @@ test.describe('classroom applications', () => {
 
 test('tab 7: TLS stations are scanned, registered and compared with the truth', async ({ page }) => {
   await page.goto('/');
-  await page.getByTestId('nav-7').click();
+  await page.getByTestId('nav-8').click();
   await page.getByTestId('tls-preset-3').click();
   await page.getByTestId('scan-stations').click();
   await expect(page.getByTestId('stats-card')).toContainText(/\d{2,3},\d{3} points scanned/, { timeout: 120000 });
@@ -345,7 +345,7 @@ test('tab 7: TLS stations are scanned, registered and compared with the truth', 
 
 test('tab 8: LiDAR + camera fusion - estimate, calculate, save and map', async ({ page }) => {
   await page.goto('/');
-  await page.getByTestId('nav-9').click();
+  await page.getByTestId('nav-10').click();
   await expect(page.getByTestId('fusion-calculate')).toBeEnabled({ timeout: 120000 });
   await page.getByTestId('fusion-calculate').click();
   await expect(page.getByTestId('fusion-errors')).toContainText('Total');
@@ -367,7 +367,7 @@ test('tab 8: LiDAR + camera fusion - estimate, calculate, save and map', async (
 
 test('processing: draw a crop box on the original cloud with the mouse', async ({ page }) => {
   await page.goto('/');
-  await page.getByTestId('nav-4').click();
+  await page.getByTestId('nav-5').click();
   await expect.poll(() => page.evaluate(() => Object.keys((window as any).__lab.getState().clouds).length), { timeout: 60000 }).toBeGreaterThan(0);
   await page.getByTestId('add-type').locator('select').selectOption('crop');
   await page.getByTestId('add-step').click();
@@ -388,7 +388,7 @@ test('processing: draw a crop box on the original cloud with the mouse', async (
 
 test('segmentation: label clusters by hand and use them in the scene graph', async ({ page }) => {
   await page.goto('/');
-  await page.getByTestId('nav-11').click();
+  await page.getByTestId('nav-12').click();
   await expect(page.getByText(/125,\d{3} pts/)).toBeVisible({ timeout: 60000 });
   await page.getByTestId('run-seg').click();
   await expect.poll(() => page.evaluate(() => (window as any).__lab.getState().seg.result?.clusters?.length ?? 0), { timeout: 90000 }).toBeGreaterThan(5);
@@ -403,7 +403,7 @@ test('segmentation: label clusters by hand and use them in the scene graph', asy
   await page.getByTestId('label-0').selectOption('Chair');
   await page.getByTestId('label-1').selectOption('Table');
   await expect(page.getByText(/trained on labelled point clouds|semantic segmentation model/)).toBeVisible();
-  await page.getByTestId('nav-13').click();
+  await page.getByTestId('nav-14').click();
   await page.getByRole('button', { name: '2 Scene graph', exact: true }).click();
   await page.getByRole('button', { name: 'My labelled clusters' }).click();
   await expect(page.getByTestId('graph-empty')).toHaveCount(0);
@@ -413,7 +413,7 @@ test('segmentation: label clusters by hand and use them in the scene graph', asy
 
 test('segmentation: planes first, then clusters, as two separate stages', async ({ page }) => {
   await page.goto('/');
-  await page.getByTestId('nav-11').click();
+  await page.getByTestId('nav-12').click();
   await expect(page.getByText(/125,\d{3} pts/)).toBeVisible({ timeout: 60000 });
   await expect(page.getByTestId('run-cluster')).toBeDisabled();
   await page.getByTestId('run-planes').click();
@@ -426,7 +426,7 @@ test('segmentation: planes first, then clusters, as two separate stages', async 
 test('tab 13: drive, point clouds, scene graph per frame, temporal graph, results and AI question (mocked)', async ({ page }) => {
   await page.route('**/api/deepseek/**', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ choices: [{ message: { content: '## Moving\n\n- **person**: crosses ahead' } }], usage: { prompt_tokens: 2000, completion_tokens: 12 } }) }));
   await page.goto('/');
-  await page.getByTestId('nav-14').click();
+  await page.getByTestId('nav-15').click();
   await page.getByTestId('mv-play').click();
   await page.getByTestId('mv-play').click();
   await page.getByRole('button', { name: '2 Clouds', exact: true }).click();
@@ -462,7 +462,7 @@ test('tab 13: drive, point clouds, scene graph per frame, temporal graph, result
 test.describe('corner cases', () => {
   test('TLS tab: changing the environment while a scan is running leaves nothing of the old one behind', async ({ page }) => {
     await page.goto('/');
-    await page.getByTestId('nav-7').click();
+    await page.getByTestId('nav-8').click();
     await page.getByTestId('tls-preset-3').click();
     await page.getByTestId('scan-stations').click();
     await page.getByTestId('environment-menu').click();
@@ -478,13 +478,13 @@ test.describe('corner cases', () => {
     page.on('pageerror', (e) => bad.push(`pageerror: ${e.message}`));
     page.on('console', (m) => { if (m.type() === 'error' && !/Failed to load resource|ERR_|favicon|ytimg|youtube/i.test(m.text())) bad.push(`console: ${m.text()}`); });
     await page.goto('/');
-    for (let i = 0; i < 17; i++) { await page.getByTestId(`nav-${i}`).click(); await page.waitForTimeout(700); await expect(page.locator('canvas').first()).toBeVisible(); }
+    for (let i = 0; i < 18; i++) { await page.getByTestId(`nav-${i}`).click(); await page.waitForTimeout(700); await expect(page.locator('canvas').first()).toBeVisible(); }
     expect(bad).toEqual([]);
   });
 
   test('TLS tab: needs a station, works with just one, and the city is not left selected in other tabs', async ({ page }) => {
     await page.goto('/');
-    await page.getByTestId('nav-7').click();
+    await page.getByTestId('nav-8').click();
     await expect(page.getByTestId('scan-stations')).toBeDisabled();
     await page.getByTestId('add-stations-tool').click();
     await page.getByTestId('environment-menu').click();
@@ -505,16 +505,16 @@ test.describe('corner cases', () => {
 
   test('CAD with a slice at the ceiling, change detection with the same visit twice', async ({ page }) => {
     await page.goto('/');
-    await page.getByTestId('nav-15').click();
+    await page.getByTestId('nav-16').click();
     await expect(page.getByTestId('stats-card')).toContainText(/Walls found\s*[1-9]/, { timeout: 90000 });
-    await page.getByTestId('nav-6').click();
+    await page.getByTestId('nav-7').click();
     await expect(page.getByTestId('stamp-0')).toBeVisible({ timeout: 90000 });
     await expect(page.getByTestId('change-chart')).toContainText(/\d+\.\d%/, { timeout: 120000 });
   });
 });
 
 test('SLAM tab: a waypoint can be removed and the route follows', async ({ page }) => {
-  await page.goto('/'); await page.getByTestId('nav-8').click();
+  await page.goto('/'); await page.getByTestId('nav-9').click();
   await page.getByRole('button', { name: 'Loop preset' }).click();
   const n0 = await state(page, (s) => s.waypoints.length);
   expect(n0).toBeGreaterThan(3);
@@ -526,7 +526,7 @@ test('SLAM tab: a waypoint can be removed and the route follows', async ({ page 
 });
 
 test('supervised learning: images left, point clouds right, drag blocks, clear errors, train, compare', async ({ page }) => {
-  await page.goto('/'); await page.getByTestId('nav-12').click();
+  await page.goto('/'); await page.getByTestId('nav-13').click();
   await expect(page.getByTestId('nn-image-flow')).toBeVisible();
   await expect(page.getByTestId('nn-points-flow')).toBeVisible();
   await expect(page.getByTestId('right-panel')).toHaveCount(0);
@@ -559,7 +559,7 @@ test('supervised learning: images left, point clouds right, drag blocks, clear e
 });
 
 test('scene graph: true objects to try it, and a clear choice when there are no named clusters', async ({ page }) => {
-  await page.goto('/'); await page.getByTestId('nav-13').click();
+  await page.goto('/'); await page.getByTestId('nav-14').click();
   await page.getByRole('button', { name: '2 Scene graph', exact: true }).click();
   await expect(page.getByTestId('graph-view')).toContainText('Table 1', { timeout: 60000 });
   await expect(page.getByTestId('graph-view')).toContainText('Whiteboard');
@@ -574,7 +574,7 @@ test('scene graph: true objects to try it, and a clear choice when there are no 
 });
 
 test('moving scene: run segmentation on the point clouds, see its name, timing and classes on the canvas', async ({ page }) => {
-  await page.goto('/'); await page.getByTestId('nav-14').click();
+  await page.goto('/'); await page.getByTestId('nav-15').click();
   await expect(page.getByTestId('mv-play')).toBeVisible({ timeout: 120000 });
   await page.getByRole('button', { name: '2 Clouds' }).click();
   await expect(page.getByTestId('seg-card')).toHaveCount(0);
@@ -635,5 +635,135 @@ test.describe('welcome intro', () => {
     await setLast(page, null); await page.emulateMedia({ reducedMotion: 'reduce' }); const t0 = Date.now(); await page.goto('/');
     await expect(page.getByTestId('intro')).toHaveClass(/calm/); await expect(page.getByTestId('intro')).toHaveCount(0, { timeout: 8000 });
     expect(Date.now() - t0).toBeLessThan(2800);
+  });
+});
+
+test.describe('occlusion & sensor placement', () => {
+  const plan = (page: Page) => page.locator('canvas[aria-label="Top-down plan view"]');
+  const clickPlan = async (page: Page, fx: number, fy: number) => { await plan(page).scrollIntoViewIfNeeded(); const b = (await plan(page).boundingBox())!; await page.mouse.click(b.x + b.width * fx, b.y + b.height * fy); };
+  const SPOTS: [number, number][] = [[0.2, 0.2], [0.8, 0.2], [0.2, 0.8], [0.8, 0.8], [0.35, 0.5], [0.65, 0.5], [0.5, 0.25], [0.5, 0.75], [0.25, 0.35], [0.75, 0.65], [0.3, 0.65], [0.7, 0.35]];
+  /** press Add scanner and click free floor until the list has n scanners (some spots are inside furniture and are refused) */
+  const addUntil = async (page: Page, n: number, from = 0) => {
+    for (let i = from; i < SPOTS.length; i++) {
+      if (await page.getByTestId(`occ-pick-${n}`).count()) return i + 1;
+      await page.getByTestId('occ-add').click({ force: true }); await clickPlan(page, SPOTS[i][0], SPOTS[i][1]); await page.waitForTimeout(120);
+    }
+    await expect(page.getByTestId(`occ-pick-${n}`)).toBeVisible(); return SPOTS.length;
+  };
+  test('sits after the Gallery and before Processing', async ({ page }) => {
+    await page.goto('/');
+    await expect(page.getByTestId('nav-4')).toContainText('Occlusion');
+    await expect(page.getByTestId('nav-3')).toContainText('Gallery');
+    await expect(page.getByTestId('nav-5')).toContainText('Processing');
+  });
+  test('explore: the scanner can be moved and the visible share updates', async ({ page }) => {
+    await page.goto('/'); await go(page, 4);
+    await expect(page.getByTestId('stats-card')).toContainText('Visible');
+    const before = await page.getByTestId('stats-card').innerText();
+    await clickPlan(page, 0.2, 0.25); await page.waitForTimeout(900);
+    expect(await page.getByTestId('stats-card').innerText()).not.toBe(before);
+  });
+  test('design: add up to four scanners, select, delete, and coverage is shown', async ({ page }) => {
+    await page.goto('/'); await go(page, 4);
+    await page.getByRole('button', { name: /B · Design/ }).click();
+    const used = await addUntil(page, 4);
+    await expect(page.getByTestId('occ-pick-4')).toBeVisible();
+    await page.getByTestId('occ-add').click({ force: true }).catch(() => undefined);
+    for (let i = used; i < SPOTS.length; i++) { await clickPlan(page, SPOTS[i][0], SPOTS[i][1]); }
+    await expect(page.getByTestId('occ-pick-5')).toHaveCount(0);
+    await page.getByTestId('occ-pick-2').click(); await page.getByTestId('occ-delete').click();
+    await expect(page.getByTestId('occ-pick-4')).toHaveCount(0);
+    await expect(page.getByTestId('stats-card')).toContainText('Observed');
+  });
+  test('design: scanning works and a moved scanner makes its scan stale; changing environment clears everything', async ({ page }) => {
+    await page.goto('/'); await go(page, 4);
+    await page.getByRole('button', { name: /B · Design/ }).click();
+    await addUntil(page, 1);
+    await page.getByTestId('occ-scan-all').click();
+    await expect(page.getByTestId('occ-table')).toContainText('pts', { timeout: 60000 });
+    await clickPlan(page, 0.3, 0.3);
+    await expect(page.getByTestId('occ-stale')).toBeVisible();
+    await page.getByTestId('environment-menu').click(); await page.getByTestId('env-B').click();
+    await expect(page.getByTestId('occ-pick-1')).toHaveCount(0);
+  });
+  test('compare: copy A to B, add a scanner to B and see the improvement', async ({ page }) => {
+    await page.goto('/'); await go(page, 4);
+    await page.getByRole('button', { name: /C · Compare/ }).click();
+    await addUntil(page, 1);
+    await page.getByTestId('occ-copy').click();
+    await page.getByRole('button', { name: /Edit B/ }).click();
+    await expect(page.getByTestId('occ-pick-1')).toBeVisible();
+    await addUntil(page, 2, 6);
+    await expect(page.getByTestId('occ-improvement')).toContainText(/\+|observes|No change/, { timeout: 10000 });
+    await expect(page.getByTestId('occ-compare')).toContainText('Scanners');
+  });
+  test('challenge: shows a goal, progress and completes with the example solution', async ({ page }) => {
+    await page.goto('/'); await go(page, 4);
+    await page.getByRole('button', { name: /B · Design/ }).click();
+    await page.getByTestId('occ-challenge-easy').click();
+    await expect(page.getByTestId('occ-challenge')).toContainText('90 %');
+    await page.getByRole('button', { name: 'Show an example' }).click();
+    await expect(page.getByTestId('occ-challenge')).toContainText('Done', { timeout: 10000 });
+  });
+  test('walkthrough: steps, plays, and the normal controls still work afterwards', async ({ page }) => {
+    await page.goto('/'); await go(page, 4);
+    await page.getByTestId('occ-guide-start').click();
+    await expect(page.getByTestId('occ-guide-title')).toContainText('Step 1 of 5', { timeout: 20000 });
+    await page.getByTestId('occ-guide-next').click(); await expect(page.getByTestId('occ-guide-title')).toContainText('Step 2 of 5');
+    await page.getByTestId('occ-guide-step-5').click(); await expect(page.getByTestId('occ-guide-chart')).toBeVisible();
+    await page.getByTestId('occ-guide-prev').click(); await expect(page.getByTestId('occ-guide-title')).toContainText('Step 4 of 5');
+    await page.getByTestId('occ-guide-restart').click(); await expect(page.getByTestId('occ-guide-title')).toContainText('Step 1 of 5');
+    await page.getByTestId('occ-guide-close').click();
+    await expect(page.getByTestId('occ-guide-start')).toBeVisible();
+  });
+  test('links on to TLS Scanning', async ({ page }) => {
+    await page.goto('/'); await go(page, 4);
+    await page.getByTestId('occ-open-tls').click();
+    await expect(page.getByTestId('nav-8')).toHaveAttribute('aria-current', 'page');
+  });
+});
+
+test.describe('guided ICP and SLAM lessons', () => {
+  test('ICP lesson replays the real iterations, steps, plays and returns to normal use', async ({ page }) => {
+    await page.goto('/'); await go(page, 6);
+    await page.getByTestId('icp-guide-start').click();
+    await expect(page.getByTestId('icp-guide-iter')).toContainText('Iteration 1 /', { timeout: 60000 });
+    await page.getByTestId('icp-guide-next').click(); await expect(page.getByTestId('icp-guide-title')).toContainText('Step 2 of 5');
+    await expect(page.getByTestId('icp-guide-pair')).toContainText('apart');
+    await page.getByTestId('icp-guide-next').click(); await expect(page.getByTestId('icp-guide-delta')).toContainText('Move found');
+    await expect(page.getByTestId('transform-matrix')).toContainText('move');
+    await page.getByTestId('icp-guide-step-5').click(); await expect(page.getByTestId('icp-guide-chart')).toBeVisible();
+    await page.getByTestId('icp-guide-next').click(); await expect(page.getByTestId('icp-guide-iter')).toContainText('Iteration 2 /');
+    await page.getByTestId('icp-guide-restart').click(); await expect(page.getByTestId('icp-guide-iter')).toContainText('Iteration 1 /');
+    await page.getByTestId('icp-guide-close').click(); await expect(page.getByTestId('icp-guide-start')).toBeVisible();
+    await expect(page.getByTestId('run-icp')).toBeVisible();
+  });
+  test('ICP lesson: a poor start can settle in the wrong place', async ({ page }) => {
+    test.setTimeout(420_000);
+    await page.goto('/'); await go(page, 6);
+    await page.getByTestId('icp-guide-start').click();
+    await expect(page.getByTestId('icp-guide-iter')).toContainText('Iteration 1 /', { timeout: 60000 });
+    await page.getByTestId('guide-bad-start').click(); await page.getByTestId('guide-rerun').click();
+    await expect(page.getByTestId('icp-guide-iter')).toContainText('Iteration 1 /', { timeout: 60000 });
+    await page.getByTestId('icp-guide-step-5').click();
+    for (let i = 0; i < 120; i++) { const t = await page.getByTestId('icp-guide-iter').innerText(); const m = t.match(/Iteration (\d+) \/ (\d+)/)!; if (m[1] === m[2]) break; await page.getByTestId('icp-guide-next').click(); }
+    await expect(page.getByText('Settled, but in the wrong place')).toBeVisible();
+    await expect(page.getByTestId('guide-open-slam')).toBeVisible();
+    await page.getByTestId('guide-open-slam').click();
+    await expect(page.getByTestId('nav-9')).toHaveAttribute('aria-current', 'page');
+    await expect(page.getByTestId('slam-guide-start')).toBeVisible({ timeout: 20000 });
+  });
+  test('SLAM lesson: steps through drift, loop closure and the summary', async ({ page }) => {
+    test.setTimeout(420_000);
+    await page.goto('/'); await go(page, 9);
+    await page.getByRole('button', { name: 'SLAM', exact: true }).click();
+    await page.evaluate(() => window.__lab.getState().patch({ slamParams: { ...window.__lab.getState().slamParams, steps: 20 } })); // a short loop keeps the headless run quick
+    await page.getByTestId('slam-guide-start').click();
+    await expect(page.getByTestId('slam-guide-title')).toContainText('Step 1 of 6', { timeout: 150000 });
+    await page.getByTestId('slam-guide-step-3').click({ force: true }); await expect(page.getByTestId('slam-guide-drift')).toContainText('position off by', { timeout: 15000 });
+    await page.getByTestId('slam-guide-step-4').click({ force: true }); await expect(page.getByTestId('slam-guide-verify')).toContainText('overlap');
+    await page.getByTestId('slam-guide-step-5').click({ force: true }); await expect(page.getByTestId('slam-guide-ate')).toContainText('ATE');
+    await page.getByTestId('slam-guide-step-6').click({ force: true }); await expect(page.getByTestId('slam-guide-pipeline')).toContainText('simplified');
+    await page.getByTestId('slam-guide-close').click(); await expect(page.getByTestId('run-slam')).toBeVisible();
   });
 });

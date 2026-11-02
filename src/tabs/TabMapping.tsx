@@ -3,10 +3,13 @@ import { useLab } from '../state/store';
 import { Seg } from '../ui/controls';
 import Tab3 from './Tab3TlsMls';
 import Tab4 from './Tab4Slam';
+import { nav } from '../guide/store';
 
 /** One tab for everything about getting scans into a common frame: scanning stations (TLS / MLS), SLAM drift and loop closure. */
 export default function TabMapping() {
-  const [lab, setLab] = useState<'scan' | 'slam'>('scan');
+  const [lab, setLab] = useState<'scan' | 'slam'>(() => nav.mappingLab ?? 'scan'); // read, not cleared: a suspended first render is thrown away and run again
+  useEffect(() => { nav.mappingLab = null; }, []);
+  useEffect(() => { const f = () => { if (nav.mappingLab) { setLab(nav.mappingLab); nav.mappingLab = null; } }; window.addEventListener('lab-mapping-switch', f); return () => window.removeEventListener('lab-mapping-switch', f); }, []);
   // the city district is the environment for this tab: switch on entry, restore the previous environment on exit
   useEffect(() => {
     const st = useLab.getState();

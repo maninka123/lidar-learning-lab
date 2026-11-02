@@ -16,6 +16,9 @@ import { D2R, R2D, rigidFromEuler, mulR, rotationAngle, rigidApply, Rigid, rigid
 import { evaluateAlignment } from '../registration/icp';
 import { makeRng } from '../core/rng';
 import { Plan2D } from '../ui/Plan2D';
+import { SlamGuidePanel, SlamGuideScene } from '../guide/SlamGuide';
+import { useSlamGuide } from '../guide/store';
+import { tabIndex } from './nav';
 
 const SLAM_SENSOR: SensorConfig = { ...presetToConfig(PRESETS.find((p) => p.id === 'rot16')!), hRes: 2, channels: 5, vMin: -20, vMax: 20, maxRange: 60, noise: 0.005, minRange: 0.3 };
 const REG_SENSOR: SensorConfig = { ...presetToConfig(PRESETS.find((p) => p.id === 'rot64')!), hRes: 1, noise: 0.003 };
@@ -30,10 +33,13 @@ export default function Tab4({ labSwitch }: { lab?: 'slam'; labSwitch?: React.Re
   const slam = s.slam;
   const setP = (patch: Partial<typeof p>) => s.patch({ slamParams: { ...p, ...patch } });
 
-  async function runSlam() {
+  const guideOn = useSlamGuide((g) => g.on);
+  async function runSlam(over: Partial<typeof p> = {}) {
     setBusy(true);
     try {
-      const r = await runTask('slam', { scene, sensor: SLAM_SENSOR, params: p });
+      const params = { ...p, ...over };
+      if (Object.keys(over).length) s.patch({ slamParams: params });
+      const r = await runTask('slam', { scene, sensor: SLAM_SENSOR, params });
       s.patch({ slam: r });
       s.setCloud('slam-map', r.maps.corrected ?? r.maps.est, true);
     } catch (e) { s.notify((e as Error).message, 'error'); } finally { setBusy(false); }
@@ -48,7 +54,8 @@ export default function Tab4({ labSwitch }: { lab?: 'slam'; labSwitch?: React.Re
   const slamView = (
     <>
       <SceneFromStore interactive={false} />
-      {slam && (
+      {guideOn && slam && <SlamGuideScene slam={slam} z={z} sensor={SLAM_SENSOR} pointSize={s.view.pointSize} />}
+      {slam && !guideOn && (
         <>
           {showMap(slam.maps.gt, [140, 150, 170], s.slamShow.mapGt)}
           {showMap(slam.maps.est, [255, 159, 10], s.slamShow.mapEst)}
@@ -73,6 +80,14 @@ export default function Tab4({ labSwitch }: { lab?: 'slam'; labSwitch?: React.Re
   const controls = (
     <>
         <>
+          {guideOn ? (
+            <SlamGuidePanel slam={slam} busy={busy} onRun={() => runSlam()} onRunWith={(o) => runSlam(o as Partial<typeof p>)} openTls={() => { const i = tabIndex('TLS Scanning'); if (i >= 0) s.setTab(i); }} />
+          ) : (
+            <Section title="How SLAM works">
+              <p className="hint">A short guided lesson that builds on ICP: from scan matching to drift to loop closure. All the controls below still work on their own.</p>
+              <Btn variant="primary" icon={<Play size={16} />} onClick={() => { useSlamGuide.getState().start(); if (!slam) void runSlam({ loopClosure: true }); }} testId="slam-guide-start">Start the guided lesson</Btn>
+            </Section>
+          )}
           <Callout kind="warn" title="Teaching approximation">
             The robot follows a known loop. Motion error is <b>injected</b> into the odometry (or ICP scan matching is used). Loop closure here = ICP between the last and first scan + the residual spread along the path. It is <b>not</b> a full pose-graph SLAM back-end, and nothing is prerecorded.
           </Callout>
@@ -89,7 +104,7 @@ export default function Tab4({ labSwitch }: { lab?: 'slam'; labSwitch?: React.Re
           </Section>
           <Section title="Run">
             <div className="btn-row">
-              <Btn variant="primary" icon={<Play size={16} />} onClick={runSlam} busy={busy} testId="run-slam">Run SLAM simulation</Btn>
+              <Btn variant="primary" icon={<Play size={16} />} onClick={() => runSlam()} busy={busy} testId="run-slam">Run SLAM simulation</Btn>
               <Btn icon={<RotateCcw size={16} />} onClick={() => { s.patch({ slam: null }); s.setCloud('slam-map', null); }} disabled={!slam}>Clear</Btn>
             </div>
           </Section>

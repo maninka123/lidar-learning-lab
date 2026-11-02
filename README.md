@@ -25,26 +25,27 @@ Go through the tabs in order, one idea at a time, about five minutes each. Each 
 | 2 | **Scanner Simulator** | Place a scanner, set FOV, resolution, channels, range and noise, pick commercial presets (Velodyne, Ouster, Hesai, Livox…). |
 | 3 | **Compare Sensors** | Two to four sensors scan the same place side by side. |
 | 4 | **Point Cloud Gallery** | Real clouds with play/pause through frames: Velodyne VLP-16, Ouster OS1/OS0, Livox MID-360, RIEGL TLS. Raw file view; open your own file. |
-| 5 | **Point Cloud Processing** | A pipeline of filters on an untouched original: crop, voxel, noise, outliers, normals. |
-| 6 | **Point Cloud Registration** | Two clouds, no scene. Move one by hand or run ICP (point-to-point / point-to-plane); the 4×4 matrix is drawn on the view. |
-| 7 | **Change Detection** | Five ready-made visits to the classroom with editable timestamps; a distance heatmap shows how much changed between any two. |
-| 8 | **TLS Scanning** | Place tripod stations, scan, then register the scans into one cloud. You know the true positions, so you see how close registration gets. |
-| 9 | **SLAM & Mobile Scanning** | Moving scans in a city (handheld, vehicle, UAV) and a SLAM run with drift and loop closure. |
-| 10 | **LiDAR + Camera Fusion** | A colourful hall, a LiDAR and a camera. Move the camera into place with translation and rotation sliders, watch the point cloud colour change, press Calculate to see the errors zoomed in, save the calibration, then map a whole walk in colour in a pop-up. |
-| 11 | **Meshing & Surfaces** | Coloured point clouds (the hall from tab 9, a classroom, a tree) into surfaces: voxel, smoothed, height map, close gaps, simplify, colour from the points, export OBJ. |
-| 12 | **Unsupervised Learning** (clustering & segmentation) | RANSAC plane detection (floor, walls, ceiling taken out with a few settings), then Euclidean clustering or DBSCAN on the same classroom scan, scored against its furniture. |
-| 13 | **Supervised Learning** (train your own model) | Build a small neural network by dragging blocks (Conv, Pool, Upsample, Dense...; the point-cloud versions work the same way) and train it on 10 labelled images and 10 labelled point clouds, side by side: classification, detection (2D box / 3D box) or segmentation (drawn as a U-Net). Three examples are held back to show whether the model really learned. |
-| 14 | **Scene Graphs & 3D AI** | Objects and relations, offline question answering, link to [local-llm-fit](https://maninka123.github.io/local-llm-fit/). |
-| 15 | **Moving Scene & Temporal Graph** | A vehicle drives through a street and scans every 0.8 s (a point cloud series). Each frame is segmented fast (ground out, cluster, name by size), objects are tracked from frame to frame, and the result is a **temporal scene graph** with events (approaching, crossing, passing). A language model answers questions from it. |
+| 5 | **Occlusion & Sensor Placement** | Why a laser cannot see everything: shadows behind objects, field of view and range. Place up to four scanners (click the scene or the plan), see which surfaces each one covers, compare two placements, and take three challenges (Room, Workshop, Street). Coverage counts surface area that is geometrically visible, not point counts. |
+| 6 | **Point Cloud Processing** | A pipeline of filters on an untouched original: crop, voxel, noise, outliers, normals. |
+| 7 | **Point Cloud Registration** | Two clouds, no scene. A guided "How ICP works" lesson replays a real run step by step (matches, move, repeat, and how it can fail). Move one by hand or run ICP (point-to-point / point-to-plane); the 4×4 matrix is drawn on the view. |
+| 8 | **Change Detection** | Five ready-made visits to the classroom with editable timestamps; a distance heatmap shows how much changed between any two. |
+| 9 | **TLS Scanning** | Place tripod stations, scan, then register the scans into one cloud. You know the true positions, so you see how close registration gets. |
+| 10 | **SLAM & Mobile Scanning** | Moving scans in a city (handheld, vehicle, UAV) and a SLAM run with drift and loop closure, plus a guided "How SLAM works" lesson. |
+| 11 | **LiDAR + Camera Fusion** | A colourful hall, a LiDAR and a camera. Move the camera into place with translation and rotation sliders, watch the point cloud colour change, press Calculate to see the errors zoomed in, save the calibration, then map a whole walk in colour in a pop-up. |
+| 12 | **Meshing & Surfaces** | Coloured point clouds (the hall from tab 10, a classroom, a tree) into surfaces: voxel, smoothed, height map, close gaps, simplify, colour from the points, export OBJ. |
+| 13 | **Unsupervised Learning** (clustering & segmentation) | RANSAC plane detection (floor, walls, ceiling taken out with a few settings), then Euclidean clustering or DBSCAN on the same classroom scan, scored against its furniture. |
+| 14 | **Supervised Learning** (train your own model) | Build a small neural network by dragging blocks (Conv, Pool, Upsample, Dense...; the point-cloud versions work the same way) and train it on 10 labelled images and 10 labelled point clouds, side by side: classification, detection (2D box / 3D box) or segmentation (drawn as a U-Net). Three examples are held back to show whether the model really learned. |
+| 15 | **Scene Graphs & 3D AI** | Objects and relations, offline question answering, link to [local-llm-fit](https://maninka123.github.io/local-llm-fit/). |
+| 16 | **Moving Scene & Temporal Graph** | A vehicle drives through a street and scans every 0.8 s (a point cloud series). Each frame is segmented fast (ground out, cluster, name by size), objects are tracked from frame to frame, and the result is a **temporal scene graph** with events (approaching, crossing, passing). A language model answers questions from it. |
 | | **Applications (optional)** | |
-| 16 | **Scan to CAD** | Slice a classroom, find wall lines, square the corners, export a **DXF** floor plan. |
-| 17 | **Image to 3D** | Pick a scene (chair, crate, study desk, living corner, garden), three reconstruction methods, meshing, alignment with scale, error map. |
+| 17 | **Scan to CAD** | Slice a classroom, find wall lines, square the corners, export a **DXF** floor plan. |
+| 18 | **Image to 3D** | Pick a scene (chair, crate, study desk, living corner, garden), three reconstruction methods, meshing, alignment with scale, error map. |
 
 Viewport: left-drag rotates, right-drag or the **Pan** button moves the cloud, wheel zooms.
 
 ## AI in the scene graph tab (optional)
 
-Tab 14 can hand a thinned-out point cloud straight to a language model (DeepSeek V4 Flash) to show why that does not work well. It needs a key: copy `.env.example` to `.env.local` and put your DeepSeek key in it. `.env.local` is ignored by git, and the key is added by the dev / preview server, so it is never in the page or the built site. The live GitHub Pages site has no server, so there you paste your own key into the page (kept only in your browser) or skip this section: everything else works without it.
+Tab 15 can hand a thinned-out point cloud straight to a language model (DeepSeek V4 Flash) to show why that does not work well. It needs a key: copy `.env.example` to `.env.local` and put your DeepSeek key in it. `.env.local` is ignored by git, and the key is added by the dev / preview server, so it is never in the page or the built site. The live GitHub Pages site has no server, so there you paste your own key into the page (kept only in your browser) or skip this section: everything else works without it.
 
 ## Run it yourself
 

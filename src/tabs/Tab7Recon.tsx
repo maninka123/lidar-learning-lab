@@ -148,7 +148,7 @@ export default function Tab7() {
 
   const lidarProps = (c: PointCloud) => ({ cloud: c, mode: (rgbColour ? 'rgb' : 'flat') as 'rgb' | 'flat', colorOpts: { flat: [230, 30, 40] as [number, number, number] }, size: Math.max(2, s.view.pointSize - 1), budget: s.view.renderBudget, pickable: false });
   const reconProps = (c: PointCloud, flat = false) => ({ cloud: c, mode: (rgbColour && !flat ? 'rgb' : 'flat') as 'rgb' | 'flat', colorOpts: { flat: [191, 90, 242] as [number, number, number] }, size: Math.max(2, s.view.pointSize - 1), budget: s.view.renderBudget, pickable: false });
-  const home: [number, number, number] = [info.radius * 1.1, -info.radius * 1.1, info.radius * 0.8], target: [number, number, number] = [0, 0, info.centerZ * 0.9];
+  const home: [number, number, number] = [info.radius * 1.5, -info.radius * 1.5, info.radius * 1.05], target: [number, number, number] = [0, 0, info.centerZ * 0.9];
 
   const content = (which: 'single' | 'lidar' | 'recon') => (
     <>

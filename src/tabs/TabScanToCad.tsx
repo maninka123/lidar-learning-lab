@@ -12,9 +12,10 @@ import { PointCloud } from '../core/pointcloud';
 import { Credit } from '../ui/VideoCard';
 
 const INK = '#16325c', ACCENT = '#0a84ff';
+const HOME: [number, number, number] = [1, -15, 11], TARGET: [number, number, number] = [0, 0, 0.5];
 
 export default function TabScanToCad() {
-  const s = useLab();
+  const pointSize = useLab((st) => st.view.pointSize);
   const { cloud } = useClassroom(0.02);
   const [z, setZ] = useState(1.4), [thick, setThick] = useState(1.6);
   const [tol, setTol] = useState(0.08), [minLen, setMinLen] = useState(1.0), [gap, setGap] = useState(2.5);
@@ -50,7 +51,7 @@ export default function TabScanToCad() {
     for (let i = 0; i < pts.length / 2; i++) { x0 = Math.min(x0, pts[i * 2]); x1 = Math.max(x1, pts[i * 2]); y0 = Math.min(y0, pts[i * 2 + 1]); y1 = Math.max(y1, pts[i * 2 + 1]); }
     if (!isFinite(x0)) { g.fillStyle = '#6e6e73'; g.font = '14px -apple-system, sans-serif'; g.textAlign = 'center'; g.fillText('No points in this slice: move it to where there are walls.', W / 2, H / 2); return; }
     if (bb) { x0 = Math.min(x0, bb.x0); x1 = Math.max(x1, bb.x1); y0 = Math.min(y0, bb.y0); y1 = Math.max(y1, bb.y1); }
-    const pad = 64, top = 44, k = Math.min((W - 2 * pad) / (x1 - x0 || 1), (H - top - pad) / (y1 - y0 || 1));
+    const pad = 50, top = 44, k = Math.min((W - 2 * pad) / (x1 - x0 || 1), (H - top - pad) / (y1 - y0 || 1));
     const ox = (W - k * (x1 - x0)) / 2, oy = top + (H - top - pad - k * (y1 - y0)) / 2;
     const X = (x: number) => ox + (x - x0) * k, Y = (y: number) => oy + (y1 - y) * k;
     // 1 m grid
@@ -62,7 +63,7 @@ export default function TabScanToCad() {
     // the slice, as faint dots
     if (showPts) { const gr = rasterize(pts, 0.04, { x0, y0, x1, y1 }); for (let j = 0; j < gr.h; j++) for (let i = 0; i < gr.w; i++) { const v = gr.count[j * gr.w + i]; if (v) { g.fillStyle = `rgba(80,90,110,${Math.min(0.55, 0.18 + (v / Math.max(6, gr.max)) * 0.6)})`; const px = Math.max(1.5, gr.cell * k); g.fillRect(X(gr.x0 + i * gr.cell), Y(gr.y0 + j * gr.cell) - px, px, px); } } }
     // the walls
-    g.lineCap = 'round'; g.strokeStyle = INK; g.lineWidth = 6;
+    g.lineCap = 'round'; g.strokeStyle = INK; g.lineWidth = 3;
     plan.walls.forEach((w) => { g.beginPath(); g.moveTo(X(w.x1), Y(w.y1)); g.lineTo(X(w.x2), Y(w.y2)); g.stroke(); });
     // dimensions outside the room, with ticks
     g.font = '600 13px -apple-system, sans-serif'; g.textAlign = 'center';
@@ -79,7 +80,8 @@ export default function TabScanToCad() {
     }
     // a wall that is only part of a side (an opening splits it) gets its own length
     g.fillStyle = INK; g.font = '12px -apple-system, sans-serif';
-    plan.walls.forEach((w) => { const L = segLen(w); if (bb && (L > (bb.x1 - bb.x0) * 0.97 || L > (bb.y1 - bb.y0) * 0.97)) return; const mx = (X(w.x1) + X(w.x2)) / 2, my = (Y(w.y1) + Y(w.y2)) / 2; const horiz = Math.abs(w.y2 - w.y1) < 1e-6; g.fillText(`${L.toFixed(1)} m`, mx + (horiz ? 0 : -26), my + (horiz ? -10 : 4)); });
+    const placed: Array<[number, number]> = [];
+    [...plan.walls].sort((a, b) => segLen(b) - segLen(a)).forEach((w) => { const L = segLen(w); if (L < 1.5 || (bb && (L > (bb.x1 - bb.x0) * 0.97 || L > (bb.y1 - bb.y0) * 0.97))) return; const horiz = Math.abs(w.y2 - w.y1) < 1e-6; const mx = (X(w.x1) + X(w.x2)) / 2 + (horiz ? 0 : -26), my = (Y(w.y1) + Y(w.y2)) / 2 + (horiz ? -10 : 4); if (placed.some(([px, py]) => Math.abs(px - mx) < 46 && Math.abs(py - my) < 15)) return; placed.push([mx, my]); g.fillText(`${L.toFixed(1)} m`, mx, my); });
     // scale bar and room summary
     g.strokeStyle = '#1d1d1f'; g.lineWidth = 3; g.beginPath(); g.moveTo(16, H - 22); g.lineTo(16 + k, H - 22); g.stroke();
     g.fillStyle = '#1d1d1f'; g.font = '12px -apple-system, sans-serif'; g.textAlign = 'left'; g.fillText('1 m', 16 + k + 8, H - 18);
@@ -94,10 +96,10 @@ export default function TabScanToCad() {
   const dxfWalls = useMemo(() => (bb ? plan.walls.map((w) => ({ x1: w.x1 - bb.x0, y1: w.y1 - bb.y0, x2: w.x2 - bb.x0, y2: w.y2 - bb.y0 })) : []), [plan, bb]);
 
   const viewport = (
-    <div style={{ position: 'absolute', inset: 0, display: 'grid', gridTemplateColumns: '1fr 1.15fr', gap: 2, background: '#d9d9de' }}>
+    <div style={{ position: 'absolute', inset: 0, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2, background: '#d9d9de' }}>
       <div style={{ position: 'relative' }}>
-        <Viewport id="cad-3d" hideGrid hideAxes bgOverride="#ffffff" label="The scan: the slice is red" labelPos="tl" labelTop={12} home={[8.5, -10, 8]} target={[0, 0, 1]}>
-          {shown && <CloudLayer cloud={shown} mode="rgb" size={Math.max(2, s.view.pointSize)} budget={Math.max(s.view.renderBudget, 300000)} pickable={false} clip={{ on: cutAbove, min: -1, max: zMax + 0.01 }} />}
+        <Viewport id="cad-3d" hideGrid hideAxes bgOverride="#ffffff" label="The scan: the slice is red" labelPos="tl" labelTop={12} home={HOME} target={TARGET}>
+          {shown && <CloudLayer cloud={shown} mode="rgb" size={Math.max(2, pointSize)} budget={200000} pickable={false} clip={{ on: cutAbove, min: -1, max: zMax + 0.01 }} />}
           {plan.world.map((sg, i) => <PolyLine key={i} pts={[[sg.x1, sg.y1, z], [sg.x2, sg.y2, z]]} color={ACCENT} width={5} />)}
         </Viewport>
       </div>
