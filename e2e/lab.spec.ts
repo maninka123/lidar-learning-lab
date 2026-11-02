@@ -704,6 +704,19 @@ test.describe('occlusion & sensor placement', () => {
     await page.getByTestId('occ-guide-close').click();
     await expect(page.getByTestId('occ-guide-start')).toBeVisible();
   });
+  test('point cloud view hides the scene and keeps only points', async ({ page }) => {
+    await page.goto('/'); await go(page, 4);
+    await page.getByRole('button', { name: /B · Design/ }).click();
+    await addUntil(page, 1);
+    await page.getByTestId('occ-scan-all').click();
+    await expect(page.getByTestId('occ-table')).toContainText('pts', { timeout: 60000 });
+    await page.getByRole('button', { name: 'Point cloud' }).click();
+    await expect(page.getByRole('button', { name: 'Point cloud' })).toHaveAttribute('aria-pressed', 'true');
+    await page.getByRole('button', { name: 'Occlusion dots' }).click();
+    await expect(page.getByRole('button', { name: 'Occlusion dots' })).toHaveAttribute('aria-pressed', 'true');
+    await page.getByRole('button', { name: 'Scene', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Scene', exact: true })).toHaveAttribute('aria-pressed', 'true');
+  });
   test('links on to TLS Scanning', async ({ page }) => {
     await page.goto('/'); await go(page, 4);
     await page.getByTestId('occ-open-tls').click();

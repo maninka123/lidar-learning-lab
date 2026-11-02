@@ -9,8 +9,9 @@ import type { SurfaceSamples } from '../scenes/surface';
 import type { SensorConfig } from '../sensor/presets';
 import { Scanner, STATION_COLOURS } from './coverage';
 
-export const STATUS_COLOURS = ['#30d158', '#ff453a', '#af52de', '#8e8e93'];
-export const STATUS_LABELS = ['Visible: the laser can reach it', 'Hidden: something is in the way', 'Outside the field of view', 'Too far (or too close)'];
+/** Seen and hidden stand out; surfaces the sensor does not look at (field of view, range) are pale so they do not read as measured points. */
+export const STATUS_COLOURS = ['#30d158', '#ff453a', '#dcc9ee', '#d8d8dd'];
+export const STATUS_LABELS = ['Visible: the laser can reach it', 'Hidden: something is in the way', 'Outside the field of view (pale)', 'Too far or too close (pale)'];
 const col = (hex: string) => new THREE.Color(hex);
 
 /** The surface samples as coloured dots: the colour says what the scanner(s) can see there. */

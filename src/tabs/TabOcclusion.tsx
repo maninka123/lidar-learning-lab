@@ -9,7 +9,7 @@ import { KindLegend } from '../ui/shared';
 import { SceneFromStore } from './common';
 import { CloudLayer } from '../ui/three';
 import { Plan2D } from '../ui/Plan2D';
-import { Crosshair, Play, Plus, Trash2 } from '../ui/icons';
+import { Crosshair, Dots, EyeOff, Pause, Play, Plus, Trash2 } from '../ui/icons';
 import { PRESETS, PRESET_GROUPS } from '../sensor/presets';
 import { staticPose } from '../sensor/simulate';
 import { runTask } from '../engine/client';
@@ -58,11 +58,12 @@ export default function TabOcclusion() {
   const [slot, setSlot] = useState<'A' | 'B'>('A');
   const [sel, setSel] = useState<number | null>(null);
   const [tool, setTool] = useState(true);
-  const [animate, setAnimate] = useState(true), [showVis, setShowVis] = useState(true), [showFov, setShowFov] = useState(true);
+  const [beams, setBeams] = useState<'play' | 'pause' | 'hide'>('play'), animate = beams === 'play', [showVis, setShowVis] = useState(true), [showFov, setShowFov] = useState(false);
   const [mode, setMode] = useState<Mode>('heat'), [showDiff, setShowDiff] = useState(true);
   const [chal, setChal] = useState<Challenge | null>(null);
   const [scans, setScans] = useState<Record<number, { cloud: PointCloud; key: string }>>({});
   const [showScans, setShowScans] = useState(false), [busy, setBusy] = useState(false);
+  const [look, setLook] = useState<'scene' | 'cloud' | 'dots'>('scene'), pointsOnly = look !== 'scene'; // cloud: scene hidden, only the scanned points (the surface dots when nothing is scanned yet); dots: scene hidden, only the green/red occlusion dots
   const nextId = useRef(1), gen = useRef(0);
   const guideOn = useOccGuide((g) => g.on);
 
@@ -174,22 +175,22 @@ export default function TabOcclusion() {
   const markersFor = (l: Scanner[], selectedId: number | null) => <ScannerMarkers scanners={l} selected={selectedId} sensorOf={scannerSensor} />;
   const sceneBlock = (l: Scanner[], e: ReturnType<typeof evaluate>, col: Float32Array, selectedId: number | null, showRays: boolean) => (
     <>
-      <SceneFromStore interactive={true} />
-      {showVis && <SamplePoints samples={e.samples} colours={col} size={Math.max(3, s.view.pointSize)} />}
+      {!pointsOnly && <SceneFromStore interactive={true} />}
+      {(showVis || look === 'dots') && !(look === 'cloud' && showScans && vAct === 'design' && scanClouds.length > 0) && <SamplePoints samples={e.samples} colours={col} size={Math.max(3, s.view.pointSize)} />}
       {markersFor(l, selectedId)}
       {showFov && l.map((sc, i) => <FovVolume key={sc.id} sc={sc} sensor={sensorOf(sc.preset)} color={STATION_COLOURS[i % 4]} reach={reach} opacity={sc.id === selectedId ? 0.12 : 0.05} />)}
-      {showRays && fan && rayScanner && <RaySweep origin={[rayScanner.x, rayScanner.y, rayScanner.z]} ends={fan.ends} hit={fan.hit} animate={animate} />}
-      {showScans && vAct !== 'explore' && scanClouds.map(({ cloud, i }) => <CloudLayer key={i} cloud={cloud} mode="flat" colorOpts={{ flat: hexRgb(STATION_COLOURS[i % 4]) }} size={Math.max(2, s.view.pointSize - 1)} budget={90000} pickable={false} />)}
+      {showRays && beams !== 'hide' && fan && rayScanner && <RaySweep origin={[rayScanner.x, rayScanner.y, rayScanner.z]} ends={fan.ends} hit={fan.hit} animate={animate} />}
+      {(showScans || look === 'cloud') && look !== 'dots' && vAct !== 'explore' && scanClouds.map(({ cloud, i }) => <CloudLayer key={i} cloud={cloud} mode="flat" colorOpts={{ flat: hexRgb(STATION_COLOURS[i % 4]) }} size={Math.max(2, s.view.pointSize - 1)} budget={90000} pickable={false} />)}
     </>
   );
   const home = scene.cameraHome, target = scene.cameraTarget;
   const viewport = vAct === 'compare' && !gv ? (
     <div style={{ position: 'absolute', inset: 0, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2, background: '#d9d9de' }}>
-      <div style={{ position: 'relative' }}><Viewport id="o-a" group="occ" primary home={home} target={target} label={`Arrangement A · ${pct(evA.stats.coverage)} observed`} labelPos="tl" labelTop={12} hideAxes>{sceneBlock(dArr.A, evA, heatA, null, false)}</Viewport></div>
-      <div style={{ position: 'relative' }}><Viewport id="o-b" group="occ" primary={false} home={home} target={target} label={`Arrangement B · ${pct(evB.stats.coverage)} observed`} labelPos="tl" labelTop={12} hideAxes>{sceneBlock(dArr.B, evB, showDiff ? diffColours : heatB, null, false)}</Viewport></div>
+      <div style={{ position: 'relative' }}><Viewport id="o-a" group="occ" primary bgOverride={pointsOnly ? '#ffffff' : undefined} hideGrid={pointsOnly} home={home} target={target} label={`Arrangement A · ${pct(evA.stats.coverage)} observed`} labelPos="tl" labelTop={12} hideAxes>{sceneBlock(dArr.A, evA, heatA, null, false)}</Viewport></div>
+      <div style={{ position: 'relative' }}><Viewport id="o-b" group="occ" primary={false} bgOverride={pointsOnly ? '#ffffff' : undefined} hideGrid={pointsOnly} home={home} target={target} label={`Arrangement B · ${pct(evB.stats.coverage)} observed`} labelPos="tl" labelTop={12} hideAxes>{sceneBlock(dArr.B, evB, showDiff ? diffColours : heatB, null, false)}</Viewport></div>
     </div>
   ) : (
-    <Viewport home={home} target={target} hideAxes>{sceneBlock(dispList, vAct === 'explore' ? exEval : evSlot, colours, selId, vAct === 'explore' || selId !== null)}</Viewport>
+    <Viewport home={home} target={target} hideAxes={true} bgOverride={pointsOnly ? '#ffffff' : undefined} hideGrid={pointsOnly}>{sceneBlock(dispList, vAct === 'explore' ? exEval : evSlot, colours, selId, vAct === 'explore' || selId !== null)}</Viewport>
   );
 
   // ---- numbers
@@ -242,7 +243,7 @@ export default function TabOcclusion() {
   const guideSteps: GuideStep[] = [
     { title: 'What is occlusion?', text: <>A laser travels in a straight line. It stops at the <b>first</b> thing it hits. Anything behind that is in the <b>shadow</b> and is never measured. <b style={{ color: '#ff453a' }}>Red</b> dots are in a shadow.</>, tech: 'The test is one ray from the scanner to each surface sample: if it hits another object first (or the surface faces away), the sample is hidden.' },
     { title: 'Why does placement matter?', text: <>The scanner slides to a new spot. The shadows move, and surfaces that were hidden are now <b style={{ color: '#30d158' }}>visible</b>.</>, tech: 'Same room, same sensor. Only the position changes, and the hidden share changes with it.' },
-    { title: 'Blind spots', text: <>Three things leave a surface unseen: something in the way (<b style={{ color: '#ff453a' }}>red</b>), a direction the sensor does not look (<b style={{ color: '#af52de' }}>violet</b>), or a distance it cannot reach (grey).</>, tech: 'Now a Velodyne Puck: it sees all around but only ±15° up and down, so the ceiling and the floor near it fall outside its field of view.' },
+    { title: 'Blind spots', text: <>Three things leave a surface unseen: something in the way (<b style={{ color: '#ff453a' }}>red</b>), a direction the sensor does not look (<b style={{ color: '#af52de' }}>pale violet</b>), or a distance it cannot reach (pale grey).</>, tech: 'Now a Velodyne Puck: it sees all around but only ±15° up and down, so the ceiling and the floor near it fall outside its field of view.' },
     { title: 'Use more than one scanner', text: <>A second scanner stands where the first one is blind. <span style={{ color: STATION_COLOURS[1] }}>Its colour</span> shows the surface only it can see.</>, tech: 'Coverage = share of surface area seen by at least one scanner.' },
     { title: 'A good setup', text: <>Each new scanner adds less than the one before. Some <b style={{ color: '#0a84ff' }}>overlap</b> is good, because it lets scans be joined together later. Aim for enough coverage with as few scanners as you can.</>, tech: 'Overlap = share of surface seen by two or more scanners. Too little overlap makes registration hard (see TLS Scanning); too much wastes time.' },
   ];
@@ -272,7 +273,6 @@ export default function TabOcclusion() {
           <Callout kind="edu" title="Where can the laser not go?">Move the scanner. The dots on the surfaces show what it can reach. Walls and furniture throw <b>shadows</b>.</Callout>
           <Btn sm variant={tool ? 'primary' : ''} icon={<Crosshair size={15} />} onClick={() => setTool((v) => !v)} testId="occ-move-tool">{tool ? 'Click the scene or plan to move it' : 'Move the scanner by clicking'}</Btn>
           {editor}
-          <Toggle label="Animate the laser beams" checked={animate} onChange={setAnimate} />
           <Toggle label="Show the field of view" checked={showFov} onChange={setShowFov} />
           <Toggle label="Colour the surfaces" checked={showVis} onChange={setShowVis} />
           <p className="hint">Orange dots are laser hits. Faint lines that stop in the air are beams that hit nothing within range.</p>
@@ -348,7 +348,8 @@ export default function TabOcclusion() {
     </>
   );
 
-  return <TabFrame title="Occlusion & Sensor Placement" tab={4} viewport={viewport} controls={controls} learn={null} noPanelTabs envIds={['A', 'B', 'C']} stats={stats} overlays={<KindLegend items={legend} />} />;
+  return <TabFrame title="Occlusion & Sensor Placement" tab={4} viewport={viewport} controls={controls} learn={null} noPanelTabs envIds={['A', 'B', 'C']} stats={stats} overlays={<KindLegend items={legend} />}
+    viewExtras={<><Seg block={false} value={beams} onChange={setBeams} label="Laser beams" options={[{ value: 'play', label: <><Play size={13} /> Play</> }, { value: 'pause', label: <><Pause size={13} /> Pause</> }, { value: 'hide', label: <><EyeOff size={13} /> Hide</> }]} /><Seg block={false} value={look} onChange={setLook} label="View" options={[{ value: 'scene', label: 'Scene' }, { value: 'cloud', label: <><Dots size={13} /> Point cloud</> }, { value: 'dots', label: 'Occlusion dots' }]} /></>} />;
 }
 
 function hexRgb(h: string): [number, number, number] { const v = parseInt(h.slice(1), 16); return [(v >> 16) & 255, (v >> 8) & 255, v & 255]; }
