@@ -3,7 +3,7 @@ import { runScenario, RunConfig } from '../src/twin/runner';
 import { DEFAULT_SETTINGS, EMPTY_DESIGN } from '../src/twin/catalogue';
 import { newBlock } from '../src/twin/pipeline';
 import { buildSubmission, validIndex } from '../src/twin/submit';
-import { initialSave, parseSave, DEFAULT_PIPELINE } from '../src/twin/store';
+import { initialSave, parseSave } from '../src/twin/store';
 import { submitChallengeScore, setWorkshopApi } from '../src/apps/workshop';
 import { feedbackFor, reportMarkdown } from '../src/twin/feedback';
 
@@ -46,7 +46,7 @@ describe('workspace save and restore', () => {
     const s = { ...initialSave(), team: 'Team X', design: cfg.design, pipeline: cfg.pipeline, student: { name: 'Ada', index: 'z1' } };
     const back = parseSave(JSON.stringify(s))!; expect(back.team).toBe('Team X'); expect(back.design.lidars).toHaveLength(1); expect(back.pipeline.map((b) => b.kind)).toEqual(['icp', 'crop', 'voxel', 'euclid', 'classify']); expect(back.student.name).toBe('Ada');
     expect(parseSave('not json')).toBeNull(); expect(parseSave(JSON.stringify({ version: 2 }))).toBeNull(); expect(parseSave(JSON.stringify({ version: 1 }))).toBeNull();
-    expect(initialSave().settings.maxSubmissions).toBe(0); expect(DEFAULT_PIPELINE().length).toBeGreaterThan(5);
+    expect(initialSave().settings.maxSubmissions).toBe(0); expect(initialSave().pipeline).toEqual([]);
   });
   it('feedback quotes the measured numbers, and the report lists every task', () => {
     const fb = feedbackFor(run); expect(fb.twin[0]).toMatch(/% of the surface/); expect(fb.detect[0]).toContain(`of ${run.tasks.detect.refs}`);

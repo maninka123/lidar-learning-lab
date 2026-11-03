@@ -1,6 +1,6 @@
 import type { Deps } from './env';
 
-export interface Req { method: string; path: string; headers: Record<string, string>; ip: string; body: unknown; tooLarge?: boolean }
+export interface Req { method: string; path: string; /** the query string as key → value (first value wins) */ query?: Record<string, string>; headers: Record<string, string>; ip: string; body: unknown; tooLarge?: boolean }
 export interface Res { status: number; headers?: Record<string, string>; body?: unknown; cookies?: string[] }
 
 export const json = (status: number, body: unknown, extra: Partial<Res> = {}): Res => ({ status, body, ...extra });

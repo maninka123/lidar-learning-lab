@@ -14,8 +14,7 @@ export interface TwinSave {
 export const STAGES = ['Mission', 'Equipment', 'Deploy', 'Calibrate', 'Acquire', 'Pipeline', 'Digital twin', 'Tasks', 'Evaluate'] as const;
 const KEY = 'lidar-lab-twin';
 
-export const DEFAULT_PIPELINE = (): Block[] => ['icp', 'crop', 'voxel', 'sor', 'ground', 'planes', 'euclid', 'classify'].map((k) => { const b = newBlock(k as never); if (k === 'crop') b.params.zmax = 3; return b; });
-export const initialSave = (): TwinSave => ({ version: 1, team: '', members: [], settings: DEFAULT_SETTINGS, design: EMPTY_DESIGN, pipeline: DEFAULT_PIPELINE(), saved: [], attempts: [], finalSubmitted: null, stage: 0, student: { name: '', index: '' }, startedAt: Date.now(), sent: [] });
+export const initialSave = (): TwinSave => ({ version: 1, team: '', members: [], settings: DEFAULT_SETTINGS, design: EMPTY_DESIGN, pipeline: [], saved: [], attempts: [], finalSubmitted: null, stage: 0, student: { name: '', index: '' }, startedAt: Date.now(), sent: [] });
 
 function load(): TwinSave {
   try { const v = localStorage.getItem(KEY); if (v) { const o = JSON.parse(v) as TwinSave; if (o.version === 1) return { ...initialSave(), ...o, settings: { ...DEFAULT_SETTINGS, ...o.settings, weights: { ...DEFAULT_SETTINGS.weights, ...o.settings?.weights }, enabled: { ...DEFAULT_SETTINGS.enabled, ...o.settings?.enabled } } }; } } catch { /* private window: start empty */ }

@@ -5,7 +5,7 @@
  */
 export const HALL = { w: 10, depth: 12, h: 5 };
 /** Colour classes: 0-5 run from deep blue (low) to teal (high); 6 amber; 7 green; 8 rose; 9 the bright cyan-white of a point the scan has just passed. */
-export const CLASS_RGB: [number, number, number][] = [[70, 130, 255], [60, 160, 255], [56, 190, 255], [60, 214, 255], [70, 226, 236], [90, 236, 214], [255, 190, 90], [110, 228, 140], [255, 140, 165], [200, 248, 255]];
+export const CLASS_RGB: [number, number, number][] = [[120, 165, 255], [140, 178, 255], [165, 188, 250], [195, 194, 242], [226, 200, 228], [255, 206, 204], [255, 190, 96], [255, 214, 140], [240, 150, 164], [236, 244, 255]]; // blue to warm peach: the colours of the app and of the Thank You page together
 
 export const SENSOR = { x: 0, z: -0.5 }; // where the floor rings are centred
 export const ORB = { x: 2.1, y: 1.7, z: 5.6 };

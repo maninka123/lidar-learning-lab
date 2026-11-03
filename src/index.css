@@ -354,3 +354,71 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 .stats-row .stat .v { font-size: 1.1rem; }
 
 .plan-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 0 4px 4px; font-size: 0.78rem; }
+
+/* the pipeline builder: phases joined by arrows, blocks one after another or side by side */
+.pipe-stack { display: grid; gap: 4px; }
+.pipe-lane { display: grid; gap: 6px; border-left: 3px solid var(--sep, #d2d2d7); padding: 2px 0 2px 10px; align-content: start; }
+.pipe-lane.has { border-left-color: #0a84ff; }
+.pipe-link { text-align: center; color: var(--accent, #0a84ff); font-size: 1.4rem; line-height: 1; font-weight: 700; }
+.pipe-arrow { text-align: center; color: var(--accent, #0a84ff); font-size: 1.1rem; line-height: 1; }
+.pipe-par { display: grid; gap: 4px; border: 1.5px dashed var(--accent, #0a84ff); border-radius: 14px; padding: 6px; background: rgba(10,132,255,.05); }
+.pipe-par-label { font-size: 0.7rem; font-weight: 650; letter-spacing: .04em; color: var(--accent, #0a84ff); text-align: center; }
+.pipe-par-row { display: grid; gap: 6px; align-items: start; }
+.pipe-overlay { position: fixed; inset: 14px; z-index: 60; display: flex; flex-direction: column; gap: 12px; padding: 18px 20px 14px; border-radius: 22px; background: var(--bg, #fbfbfd); box-shadow: 0 24px 80px rgba(0,0,0,.4), 0 0 0 1px rgba(0,0,0,.1); overflow: hidden; }
+.pipe-overlay-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding-bottom: 12px; border-bottom: 1px solid var(--sep, #d2d2d7); }
+.pipe-chips { display: flex; gap: 6px; flex-wrap: wrap; } .pipe-chip { font-size: .78rem; padding: 3px 10px; border-radius: 999px; background: var(--fill, #eee); color: var(--text2, #555); } .pipe-chip.ok { background: rgba(48,209,88,.16); color: #1f8a3b; }
+.pipe-lane-head b { font-size: 1rem; } .pipe-req { margin-left: 8px; font-size: .68rem; font-weight: 650; letter-spacing: .04em; text-transform: uppercase; color: #ff9f0a; }
+.pipe-link span { display: inline-grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; background: rgba(10,132,255,.14); }
+/* the expanded board: equal-height columns, the arrow sits beside each column's header */
+.pipe-cols { display: flex; align-items: stretch; gap: 0; overflow: auto; padding: 2px 2px 10px; flex: 1; min-height: 0; }
+.pipe-cols .pipe-lane { flex: 1 1 240px; min-width: 240px; align-content: start; gap: 10px; padding: 14px 14px 16px; border: 1px solid var(--sep, #d2d2d7); border-top: 3px solid var(--sep, #d2d2d7); border-radius: 16px; background: var(--fill, rgba(120,120,128,.1)); }
+.pipe-cols .pipe-lane.has { border-top-color: #0a84ff; background: color-mix(in srgb, #0a84ff 5%, var(--fill, rgba(120,120,128,.1))); }
+.pipe-cols .pipe-link { flex: none; width: 36px; display: flex; justify-content: center; align-items: flex-start; padding-top: 18px; font-size: 1.05rem; }
+.pipe-cols .pipe-lane:not(.has) select { min-height: 6rem; border: 2px dashed var(--sep, #c7c7cc); background: transparent; text-align-last: center; cursor: pointer; }
+.pipe-cols .pipe-lane:not(.has) select:hover { border-color: #0a84ff; }
+
+/* camera ↔ LiDAR pairing board: cameras left, LiDARs right, wires between them */
+.pairboard { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 2.6rem; width: 100%; max-width: 100%; padding: .25rem 0 .5rem; touch-action: none; user-select: none; }
+.pairboard-wires { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible; z-index: 1; }
+.pairboard-wires path { fill: none; stroke: color-mix(in srgb, var(--text) 38%, transparent); stroke-width: 2.5; stroke-linecap: round; }
+.pairboard-wires path.sel { stroke: #ff9f0a; stroke-width: 3.5; } .pairboard-wires path.live { stroke-dasharray: 2 6; }
+.pairboard-col { display: grid; grid-template-columns: minmax(0, 1fr); gap: .5rem; align-content: start; min-width: 0; } .pairboard-col .caption span { font-weight: 400; opacity: .7; }
+.pairnode { position: relative; display: flex; align-items: center; min-width: 0; border: 2px solid color-mix(in srgb, var(--text) 18%, transparent); border-radius: .85rem; background: var(--fill); transition: border-color .15s, background .15s, transform .15s; }
+.pairnode.cam { border-color: #0a84ff66; } .pairnode.cam.on { border-color: #0a84ff; background: color-mix(in srgb, #0a84ff 14%, var(--fill)); }
+.pairnode.lid.on { border-color: #ff9f0a; background: color-mix(in srgb, #ff9f0a 14%, var(--fill)); } .pairnode.lid.target { border-color: #ff9f0a; transform: scale(1.03); }
+.pairnode-main { flex: 1 1 0; min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr); text-align: left; gap: 1px; padding: .5rem .7rem; background: none; border: 0; color: inherit; font: inherit; cursor: pointer; }
+.pairnode-main:disabled { cursor: default; opacity: .7; } .pairnode-main b { font-size: .92rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } .pairnode-main span { font-size: .78rem; opacity: .72; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pairport { position: absolute; top: 50%; width: 18px; height: 18px; margin-top: -9px; border-radius: 50%; background: var(--bg-elev, #fff); border: 3px solid #0a84ff; z-index: 2; }
+.pairnode.cam .pairport { right: -11px; cursor: crosshair; } .pairnode.cam .pairport:hover { transform: scale(1.25); } .pairnode.lid .pairport { left: -11px; border-color: #ff9f0a; }
+
+/* the Test pipeline pill on the 3D view */
+.canvas-run { right: 12px; bottom: 12px; display: flex; align-items: center; flex-wrap: wrap; gap: 8px 10px; padding: 6px 12px 6px 6px; border-radius: 18px; max-width: max(320px, calc(100% - 27.5rem)); width: max-content; justify-content: flex-end; }
+.canvas-run-auto { display: inline-flex; align-items: center; gap: 5px; font-size: .78rem; color: var(--text2); cursor: pointer; user-select: none; } .canvas-run-auto input { width: .95rem; height: .95rem; accent-color: var(--accent); margin: 0; }
+.canvas-run-steps { display: inline-flex; align-items: center; gap: 4px; min-width: 0; }
+.canvas-run-note { font-size: .78rem; color: var(--text2); max-width: 22rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .canvas-run-note b { color: var(--text); font-weight: 650; } .canvas-run-note.warn { color: var(--orange, #d97a00); white-space: normal; }
+.canvas-run-nav { width: 26px; height: 26px; border-radius: 50%; border: 0; background: var(--fill); color: var(--text); font-size: 1.1rem; line-height: 1; cursor: pointer; display: grid; place-items: center; padding: 0 0 2px; } .canvas-run-nav:hover:not(:disabled) { background: var(--fill-hover); } .canvas-run-nav:disabled { opacity: .35; cursor: default; }
+/* the score: ring and verdict on the left, a thin bar per task on the right */
+.scoremeter { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 12px 16px; margin-top: 2px; white-space: normal; }
+.scoremeter-main { display: flex; align-items: center; gap: 10px; } .scoremeter svg { flex: none; }
+.scoremeter-text { display: grid; line-height: 1.15; min-width: 0; } .scoremeter-text b { font-size: 1.55rem; font-weight: 700; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+.scoremeter-text small { font-size: .7rem; color: var(--text3); } .scoremeter-text em { font-style: normal; font-size: .74rem; font-weight: 600; color: var(--text2); margin-top: 1px; max-width: 7.5rem; }
+.scoremeter-bars { display: grid; gap: 3px; min-width: 0; } .sb { display: grid; grid-template-columns: 3.1rem minmax(0, 1fr) 1.6rem; gap: 6px; align-items: center; font-size: .68rem; color: var(--text2); }
+.sb-t { height: 5px; border-radius: 4px; background: rgba(120, 120, 128, .2); overflow: hidden; } .sb-t i { display: block; height: 100%; border-radius: 4px; transition: width .5s ease; } .sb-n { text-align: right; font-variant-numeric: tabular-nums; color: var(--text3); }
+.pointchange.stale { opacity: .6; filter: grayscale(.4); }
+
+/* "this block changed the number of points": one tidy line inside the block */
+.pointchange { display: grid; gap: 5px; padding: 2px 0 0; }
+.pointchange .pc-line { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.pointchange .pc-badge { display: inline-flex; align-items: center; gap: 4px; padding: 2px 9px; border-radius: 999px; font-size: .74rem; font-weight: 700; font-variant-numeric: tabular-nums; color: #b36200; background: rgba(217, 122, 0, .14); }
+.pointchange.up .pc-badge { color: #17803a; background: rgba(31, 157, 61, .14); }
+.pointchange .pc-nums { font-size: .76rem; color: var(--text2); font-variant-numeric: tabular-nums; }
+.pointchange .pc-bar { display: block; height: 4px; border-radius: 3px; background: rgba(120, 120, 128, .2); overflow: hidden; } .pointchange .pc-bar i { display: block; height: 100%; border-radius: 3px; background: #e08a14; } .pointchange.up .pc-bar i { background: #2eae4f; }
+.pointchange.stale { opacity: .55; }
+
+/* planes and clusters a block found: tick the ones to remove or keep */
+.picklist { display: grid; gap: 4px; padding: 8px 10px; border-radius: 12px; background: var(--fill); }
+.picklist-head { display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; font-size: .8rem; } .picklist-head b { font-size: .82rem; } .picklist-head span { color: var(--text3); flex: 1; min-width: 6rem; }
+.picklist-all { border: 0; background: none; color: var(--accent); font: inherit; font-size: .76rem; font-weight: 600; cursor: pointer; padding: 0 2px; } .picklist-all:hover { text-decoration: underline; }
+.picklist ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 1px; max-height: 9.5rem; overflow: auto; }
+.picklist label { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 8px; align-items: center; padding: 3px 2px; font-size: .78rem; cursor: pointer; border-radius: 6px; } .picklist label:hover { background: rgba(120, 120, 128, .12); }
+.picklist .pk-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .picklist small { color: var(--text3); font-variant-numeric: tabular-nums; }

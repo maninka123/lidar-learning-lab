@@ -123,6 +123,17 @@ export async function submitChallengeScore(body: unknown, timeoutMs = 10000): Pr
   } catch { return { ok: false, message: 'Could not reach the server. Check your connection and try again.' }; } finally { clearTimeout(timer); }
 }
 
+/** Send anonymous feedback from the Thank You page. It needs no access code and no AI key. Only a clear "ok" from the server counts as sent. */
+export async function submitFeedback(body: unknown, timeoutMs = 10000): Promise<{ ok: boolean; message: string; duplicate?: boolean }> {
+  if (!workshopConfigured()) return { ok: false, message: 'Sending feedback is not set up for this copy of the lab.' };
+  const ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), timeoutMs);
+  try {
+    const r = await fetch(`${api}/api/student/feedback`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal: ctl.signal });
+    const j = (await r.json().catch(() => ({}))) as { ok?: boolean; message?: string; duplicate?: boolean };
+    return r.ok && j.ok ? { ok: true, message: 'Sent.', duplicate: !!j.duplicate } : { ok: false, message: j.message || (r.status === 429 ? 'Too many responses were sent from this network. Try again later.' : r.status === 413 ? 'Your comment is too long.' : 'The feedback could not be saved. Please try again.') };
+  } catch { return { ok: false, message: 'Could not reach the server. Check your connection and try again.' }; } finally { clearTimeout(timer); }
+}
+
 /** The grading settings the instructor chose in the admin page. Anything odd is ignored (the built-in defaults stay). */
 export function readSettings(v: unknown): ChallengeSettings | undefined {
   if (!v || typeof v !== 'object') return undefined;

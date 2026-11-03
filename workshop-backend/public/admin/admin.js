@@ -1,4 +1,5 @@
 import { sydneyToEpoch, epochToSydneyInput, fmtSydney, fmtDuration } from './tz.js';
+import { initFeedback, loadFeedback } from './feedback.js';
 
 const $ = (id) => document.getElementById(id);
 let csrf = '', data = null, skew = 0, timer = 0, poll = 0;
@@ -24,7 +25,7 @@ const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&
 function toast(text, bad) { const t = $('toast'); t.textContent = text; t.className = 'msg ' + (bad ? 'bad' : 'good'); clearTimeout(toast.h); toast.h = setTimeout(() => t.classList.add('hidden'), 5000); }
 const run = async (f) => { try { await f(); } catch (e) { toast(e.message, true); } };
 
-function showLogin() { $('login').classList.remove('hidden'); $('app').classList.add('hidden'); $('viewBar').classList.add('hidden'); $('chView').classList.add('hidden'); $('logout').classList.add('hidden'); clearInterval(timer); clearInterval(poll); mon = null; }
+function showLogin() { $('login').classList.remove('hidden'); $('app').classList.add('hidden'); $('viewBar').classList.add('hidden'); $('chView').classList.add('hidden'); $('fbView').classList.add('hidden'); $('logout').classList.add('hidden'); clearInterval(timer); clearInterval(poll); mon = null; }
 // ---- Passkeys (WebAuthn): Touch ID, Face ID, Windows Hello, a phone or a security key. Binary fields travel as base64url text.
 const b64 = { enc: (buf) => btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''),
   dec: (s) => Uint8Array.from(atob(s.replace(/-/g, '+').replace(/_/g, '/').padEnd(Math.ceil(s.length / 4) * 4, '=')), (c) => c.charCodeAt(0)).buffer };
@@ -229,7 +230,9 @@ function setView(v) {
   document.querySelectorAll('[data-view]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.view === v)));
   $('app').style.display = v === 'workshop' ? '' : 'none';
   $('chView').classList.toggle('hidden', v !== 'challenge');
+  $('fbView').classList.toggle('hidden', v !== 'feedback');
   if (v === 'challenge') run(loadChallenge);
+  if (v === 'feedback') run(loadFeedback);
 }
 $('viewBar').addEventListener('click', (e) => { const b = e.target.closest('[data-view]'); if (b) setView(b.dataset.view); });
 async function loadChallenge() { const r = await api('GET', 'challenge'); ch = { subs: r.submissions || [], labels: r.labels || {}, accept: r.accept || { accepting: false, until: null }, settings: r.settings || DEFAULT_SET }; skew = r.now - Date.now(); renderChallenge(); if (!document.activeElement || !$('chSettings').contains(document.activeElement)) renderSettings(ch.settings); }
@@ -239,12 +242,13 @@ const place = (s) => [s.geo && s.geo.city, s.geo && s.geo.country].filter(Boolea
 function sharing() {
   const byIp = new Map(), byDev = new Map();
   for (const s of ch.subs) { const k = s.index.toLowerCase(); if (s.ip) { if (!byIp.has(s.ip)) byIp.set(s.ip, new Set()); byIp.get(s.ip).add(k); } if (s.device) { if (!byDev.has(s.device)) byDev.set(s.device, new Set()); byDev.get(s.device).add(k); } }
-  return { ip: (s) => (s.ip && byIp.get(s.ip) ? byIp.get(s.ip).size : 1), dev: (s) => (s.device && byDev.get(s.device) ? byDev.get(s.device).size : 1) };
+  const ip = (s) => (s.ip && byIp.get(s.ip) ? byIp.get(s.ip).size : 1), dev = (s) => (s.device && byDev.get(s.device) ? byDev.get(s.device).size : 1);
+  return { ip, dev, n: (s) => Math.max(ip(s), dev(s)) };
 }
 function visibleSubs() {
   const q = $('chSearch').value.trim().toLowerCase(), kind = $('chKind').value, mode = $('chMode').value;
   const sh = sharing(), shared = $('chShare').value === 'shared';
-  let list = ch.subs.filter((s) => (!kind || s.kind === kind) && (!q || s.name.toLowerCase().includes(q) || s.index.toLowerCase().includes(q)) && (!shared || sh.ip(s) > 1 || sh.dev(s) > 1));
+  let list = ch.subs.filter((s) => (!kind || s.kind === kind) && (!q || s.name.toLowerCase().includes(q) || s.index.toLowerCase().includes(q)) && (!shared || sh.n(s) > 1));
   if (mode === 'latest') { const best = new Map(); for (const s of list) { const k = s.index.toLowerCase(), b = best.get(k); if (!b || s.total > b.total || (s.total === b.total && s.at > b.at)) best.set(k, s); } list = [...best.values()].sort((a, b) => b.at - a.at); }
   return list;
 }
@@ -299,11 +303,8 @@ function renderChallenge() {
       <div><b>Key results:</b> ${esc(Object.entries(s.metrics).map(([k, v]) => k + ' ' + v).join(' · ') || '—')}</div>
       <div><b>Points:</b> ${esc(Object.keys(TASK_SHORT).map((k) => TASK_SHORT[k] + ' ' + (s.points[k] ?? 0)).join(' · '))} · <b>Budget used:</b> ${s.cost} / ${s.budget} credits</div>
       <div class="faint">Started ${s.startedAt ? esc(fmtSydney(s.startedAt)) : '—'}${mins !== null ? ' (about ' + mins + ' min before sending)' : ''} · time zone ${esc(s.client.tz || '—')} · language ${esc(s.client.lang || '—')} · from ${esc(s.origin || '—')}</div></div></td></tr>` : '';
-    return `<tr><td>${esc(fmtSydney(s.at))}</td><td>${esc(s.name)}</td><td class="mono">${esc(s.index)}</td><td>${esc(place(s))}<br><span class="faint">${esc(netName(s))}</span><br><span class="mono faint">${esc(s.ip || 'no IP')}${s.device ? ' · ' + esc(s.device.slice(0, 6)) : ''}</span>${sh.dev(s) > 1 ? ` <span class="chip bad" title="This browser sent scores under ${sh.dev(s)} different index numbers">same browser · ${sh.dev(s)} index numbers</span>` : sh.ip(s) > 1 ? ` <span class="chip warn" title="This IP address sent scores under ${sh.ip(s)} different index numbers">same IP · ${sh.ip(s)} index numbers</span>` : ''}</td><td class="num"><b>${s.total.toFixed(1)}</b><br><span class="faint">${esc(s.kind)}</span></td><td>${chips}</td><td class="num">${s.cost}</td><td class="num">${s.attempts.practice}+${s.attempts.final}</td><td><button class="btn sm" data-open="${esc(s.id)}">${openRows.has(s.id) ? 'Hide' : 'Details'}</button> <button class="btn sm danger" data-del="${esc(s.id)}" title="Delete this record">✕</button></td></tr>${det}`;
+    return `<tr class="${sh.n(s) > 1 ? 'shared' : ''}"><td>${esc(fmtSydney(s.at))}</td><td>${esc(s.name)}</td><td class="mono">${esc(s.index)}</td><td>${esc(place(s))}<br><span class="faint">${esc(netName(s))}</span> <button class="btn sm" data-label="${esc(s.net)}" title="Name this network (for example Campus Wi-Fi or Home)">Name</button><br><span class="mono faint">${esc(s.ip || 'no IP')}</span>${sh.n(s) > 1 ? ` <span class="chip bad" title="This computer sent scores under ${sh.n(s)} different index numbers">shared · ${sh.n(s)} index numbers</span>` : ''}</td><td class="num"><b>${s.total.toFixed(1)}</b><br><span class="faint">${esc(s.kind)}</span></td><td>${chips}</td><td class="num">${s.cost}</td><td class="num">${s.attempts.practice}+${s.attempts.final}</td><td><button class="btn sm" data-open="${esc(s.id)}">${openRows.has(s.id) ? 'Hide' : 'Details'}</button> <button class="btn sm danger" data-del="${esc(s.id)}" title="Delete this record">✕</button></td></tr>${det}`;
   }).join('') : '<tr><td colspan="9" class="faint">No scores to show.</td></tr>';
-  // networks: how many distinct students and records came from each
-  const nets = new Map(); for (const s of all) { const n = nets.get(s.net) || { tag: s.net, st: new Set(), n: 0, place: place(s), ip: s.ip }; n.st.add(s.index.toLowerCase()); n.n++; nets.set(s.net, n); }
-  $('chNets').innerHTML = [...nets.values()].sort((a, b) => b.st.size - a.st.size).map((n) => `<tr><td class="mono">${esc(n.tag.slice(0, 8))}</td><td class="mono">${esc(n.ip || '—')}</td><td>${esc(ch.labels[n.tag] || '—')}</td><td>${esc(n.place)}</td><td class="num">${n.st.size}</td><td class="num">${n.n}</td><td><button class="btn sm" data-label="${esc(n.tag)}">Label</button></td></tr>`).join('') || '<tr><td colspan="7" class="faint">None yet.</td></tr>';
 }
 ['chSearch', 'chMode', 'chKind', 'chShare'].forEach((id) => $(id).addEventListener('input', renderChallenge));
 $('chRefresh').addEventListener('click', () => run(loadChallenge));
@@ -316,8 +317,10 @@ $('chView').addEventListener('click', (e) => {
 $('chClear').addEventListener('click', () => { if (confirm('Delete ALL challenge score records? This cannot be undone.')) run(async () => { await api('POST', 'challenge-clear', {}); await loadChallenge(); }); });
 $('chCsv').addEventListener('click', () => {
   const q = (v) => '"' + String(v ?? '').replace(/"/g, '""') + '"';
-  const head = ['sent (Sydney)', 'name', 'index', 'place', 'network', 'ip address', 'browser id', 'index numbers on this IP', 'index numbers on this browser', 'kind', 'score', ...Object.values(TASK_SHORT).map((n) => n + ' (0-1)'), 'cost', 'budget', 'practice runs', 'final runs', 'equipment', 'pipeline'];
-  const sh = sharing(), rows = visibleSubs().map((s) => [fmtSydney(s.at), s.name, s.index, place(s), netName(s), s.ip || '', s.device || '', sh.ip(s), sh.dev(s), s.kind, s.total, ...Object.keys(TASK_SHORT).map((k) => s.tasks[k] ?? 0), s.cost, s.budget, s.attempts.practice, s.attempts.final, [...s.equipment.lidars, ...s.equipment.cameras].join('; '), s.pipeline.join(' > ')]);
+  const head = ['sent (Sydney)', 'name', 'index', 'place', 'network', 'ip address', 'browser id', 'index numbers on this computer', 'kind', 'score', ...Object.values(TASK_SHORT).map((n) => n + ' (0-1)'), 'cost', 'budget', 'practice runs', 'final runs', 'equipment', 'pipeline'];
+  const sh = sharing(), rows = visibleSubs().map((s) => [fmtSydney(s.at), s.name, s.index, place(s), netName(s), s.ip || '', s.device || '', sh.n(s), s.kind, s.total, ...Object.keys(TASK_SHORT).map((k) => s.tasks[k] ?? 0), s.cost, s.budget, s.attempts.practice, s.attempts.final, [...s.equipment.lidars, ...s.equipment.cameras].join('; '), s.pipeline.join(' > ')]);
   const csv = [head, ...rows].map((r) => r.map(q).join(',')).join('\n');
   const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' })); a.download = 'challenge_scores.csv'; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
 });
+
+initFeedback({ api, esc, run, toast, fmtSydney, sydneyToEpoch });

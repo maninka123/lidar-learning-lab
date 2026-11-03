@@ -13,6 +13,8 @@ export interface ScanData {
   index: number; unit: string; name: string; mobile: boolean;
   /** points in the world frame, placed using the pose the team RECORDED (installation error or dead-reckoning drift included) */
   cloud: PointCloud;
+  /** the same points in the scanner's OWN coordinate system: what the scanner actually delivers */
+  local: PointCloud;
   /** the recorded sensor pose (sensor → world) */
   pose: Rigid;
 }
@@ -104,7 +106,7 @@ export function acquireSurvey(f: Factory, d: TwinDesign, scenarioSeed: number): 
       const rec = { x: u.x + 0.02 * er.gauss(), y: u.y + 0.02 * er.gauss(), z: u.z + 0.01 * er.gauss(), yaw: u.yaw + 0.25 * D2R * er.gauss(), pitch: u.pitch + 0.15 * D2R * er.gauss() };
       const n = raysFor(u); rays += n;
       const local = scanFrom(f, u, u, n, seed, idx, tb), Trec = toRigid(rec.x, rec.y, rec.z, rec.yaw, rec.pitch);
-      scans.push({ index: idx, unit: u.id, name: `LiDAR ${ui + 1}`, mobile: false, cloud: place(local, Trec), pose: Trec });
+      scans.push({ index: idx, unit: u.id, name: `LiDAR ${ui + 1}`, mobile: false, cloud: place(local, Trec), local, pose: Trec });
       truePoses.push(toRigid(u.x, u.y, u.z, u.yaw, u.pitch)); idx++;
       return;
     }
@@ -121,7 +123,7 @@ export function acquireSurvey(f: Factory, d: TwinDesign, scenarioSeed: number): 
       const mv = d.distortion && sp > 0 ? { to: { x: p.x + Math.cos(p.yaw) * Math.min(0.12, sp), y: p.y + Math.sin(p.yaw) * Math.min(0.12, sp) }, distort: true } : undefined;
       rays += n;
       const local = scanFrom(f, u, { ...p, pitch: 0 }, n, hashSeed('mob', seed, k), idx, tb, mv), Trec = toRigid(est.x, est.y, p.z, est.yaw, 0);
-      scans.push({ index: idx, unit: u.id, name: `Mobile ${k + 1}`, mobile: true, cloud: place(local, Trec), pose: Trec });
+      scans.push({ index: idx, unit: u.id, name: `Mobile ${k + 1}`, mobile: true, cloud: place(local, Trec), local, pose: Trec });
       truePoses.push(toRigid(p.x, p.y, p.z, p.yaw, 0)); idx++; mobileScans++;
     });
   });

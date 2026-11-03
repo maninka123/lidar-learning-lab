@@ -19,6 +19,7 @@ export const Filter = mk(<path d="M3 5h18l-7 8.5V20l-4-2v-4.5z" />);
 export const Network = mk(<><circle cx="12" cy="5" r="2.2" /><circle cx="5" cy="18" r="2.2" /><circle cx="19" cy="18" r="2.2" /><path d="M12 7.2v4M12 11.2l-6 5M12 11.2l6 5" /></>);
 export const Camera = mk(<><path d="M4 8h3l2-3h6l2 3h3v11H4z" /><circle cx="12" cy="13.2" r="3.5" /></>);
 export const Share2 = mk(<><circle cx="18" cy="5" r="2.4" /><circle cx="6" cy="12" r="2.4" /><circle cx="18" cy="19" r="2.4" /><path d="M8.2 10.9l7.6-4.8M8.2 13.1l7.6 4.8" /></>);
+export const Heart = mk(<path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.5A4 4 0 0 1 19 10c0 5.6-7 10-7 10z" />);
 export const Trophy = mk(<path d="M8 4h8v6a4 4 0 0 1-8 0zM8 6H4v2a4 4 0 0 0 4 4M16 6h4v2a4 4 0 0 1-4 4M12 14v4M8 21h8" />);
 export const Check = mk(<path d="M5 12.5l4.5 4.5L19 7.5" />);
 export const ChevronDown = mk(<path d="M6 9l6 6 6-6" />);
