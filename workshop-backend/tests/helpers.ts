@@ -33,13 +33,13 @@ export function setup(): Ctx {
   return { deps: { store, env, now: () => clock.t, fetch: fetchMock }, store, clock, fetchCalls, upstream };
 }
 
-export const mk = (method: string, path: string, o: { headers?: Record<string, string>; body?: unknown; ip?: string; tooLarge?: boolean } = {}): Req => ({ method, path, headers: { host: 'admin.example', ...(o.headers ?? {}) }, ip: o.ip ?? '1.1.1.1', body: o.body ?? null, tooLarge: o.tooLarge });
+export const mk = (method: string, path: string, o: { headers?: Record<string, string>; body?: unknown; ip?: string; tooLarge?: boolean; query?: Record<string, string> } = {}): Req => ({ method, path, query: o.query ?? {}, headers: { host: 'admin.example', ...(o.headers ?? {}) }, ip: o.ip ?? '1.1.1.1', body: o.body ?? null, tooLarge: o.tooLarge });
 
 /** An admin client that keeps its session cookie and CSRF token, like the dashboard. */
 export function admin(ctx: Ctx, ip = '9.9.9.9') {
   const h = adminHandler(ctx.deps); let cookie = '', csrf = '';
-  const call = async (method: string, path: string, body?: unknown, extra: Record<string, string> = {}): Promise<Res> => {
-    const res = await h(mk(method, '/api/admin/' + path, { body, ip, headers: { ...(cookie ? { cookie } : {}), ...(csrf ? { 'x-csrf-token': csrf } : {}), ...extra } }));
+  const call = async (method: string, path: string, body?: unknown, extra: Record<string, string> = {}, query: Record<string, string> = {}): Promise<Res> => {
+    const res = await h(mk(method, '/api/admin/' + path, { body, ip, query, headers: { ...(cookie ? { cookie } : {}), ...(csrf ? { 'x-csrf-token': csrf } : {}), ...extra } }));
     return res;
   };
   return {

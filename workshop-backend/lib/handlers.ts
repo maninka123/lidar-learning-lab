@@ -7,6 +7,7 @@ import * as W from './workshop';
 import * as L from './live';
 import * as P from './passkeys';
 import * as CH from './challenge';
+import * as FB from './feedback';
 import { createHash, timingSafeEqual } from 'node:crypto';
 
 const DEEPSEEK_URL = 'https://api.deepseek.com/chat/completions';
@@ -77,10 +78,11 @@ export const studentHandler = (deps: Deps) => async (req: Req): Promise<Res> => 
   const origin = req.headers['origin'];
   if (origin && !originAllowed(origin, deps)) return err(403, 'origin_not_allowed');
   const route = req.path.replace(/^\/api\/student\/?/, '').replace(/\/$/, '');
-  if (req.method !== 'POST' || (route !== 'validate' && route !== 'chat' && route !== 'submit')) return err(404, 'not_found');
+  if (req.method !== 'POST' || (route !== 'validate' && route !== 'chat' && route !== 'submit' && route !== 'feedback')) return err(404, 'not_found');
   return guarded(req, deps, async () => {
     if (req.tooLarge) return err(413, 'too_large', 'The request is too large.');
     if (route === 'submit') return submitChallenge(req, deps);
+    if (route === 'feedback') return submitFeedback(req, deps);
     const now = deps.now(), c = await W.loadConfig(deps.store), st = W.statusOf(c, now);
     // Expiry is decided here, on every request: no timer or scheduled job is involved.
     if (st !== 'active') return err(403, st === 'expired' ? 'expired' : 'workshop_inactive', st === 'expired' ? 'The workshop has ended.' : 'There is no workshop running right now.');
@@ -146,6 +148,14 @@ async function submitChallenge(req: Req, deps: Deps): Promise<Res> {
   if (!p.ok) return err(400, 'bad_request', p.message);
   const r = await CH.addSubmission(deps.store, p.value, { now: deps.now(), headers: req.headers, ip: clientIp(req.headers, req.ip), secret: deps.env.authSecret });
   return r.ok ? json(200, { ok: true, id: r.id }) : err(429, 'too_many', 'Too many scores were sent from this network. Try again later.');
+}
+
+/** A student sends anonymous feedback from the Thank You page. No code, no workshop and no AI key is needed; it is rate-limited by network address. */
+async function submitFeedback(req: Req, deps: Deps): Promise<Res> {
+  const p = FB.parseFeedback(req.body);
+  if (!p.ok) return err(400, 'bad_request', p.message);
+  const r = await FB.addFeedback(deps.store, p, { now: deps.now(), ip: clientIp(req.headers, req.ip) });
+  return r.ok ? json(200, { ok: true, duplicate: r.duplicate }) : err(429, 'too_many', 'Too many responses were sent from this network. Try again later.');
 }
 
 // ================================================================== admin
@@ -224,6 +234,15 @@ export const adminHandler = (deps: Deps) => async (req: Req): Promise<Res> => {
       case 'POST challenge-label': return (await CH.setNetLabel(deps.store, String(body.tag ?? ''), CH.cleanLabel(body.label))) ? ok() : err(400, 'bad_request', 'Unknown network.');
       case 'POST challenge-delete': return (await CH.deleteSubmission(deps.store, String(body.id ?? ''))) ? ok() : err(404, 'not_found');
       case 'POST challenge-clear': await CH.clearSubmissions(deps.store); return ok();
+      case 'GET feedback': { const f = FB.parseFilter(req.query), q = req.query ?? {}; return json(200, { ...FB.page(FB.applyFilter(await FB.allFeedback(deps.store), f), Number(q.page), Number(q.pageSize)), modules: FB.MODULES, retention: FB.RETAIN_NOTE }); }
+      case 'GET feedback-summary': return json(200, FB.summarise(await FB.allFeedback(deps.store)));
+      case 'GET feedback-export': { const list = FB.applyFilter(await FB.allFeedback(deps.store), FB.parseFilter(req.query)); return json(200, { csv: FB.toCsv(list), count: list.length }); }
+      case 'POST feedback-delete': {
+        const ids = Array.isArray(body.ids) ? body.ids.filter((x): x is string => typeof x === 'string' && /^[0-9a-f]{12}$/.test(x)).slice(0, 500) : [];
+        if (!ids.length) return err(400, 'bad_request', 'Choose at least one response.');
+        const n = await FB.deleteFeedback(deps.store, ids); return n ? ok({ deleted: n }) : err(404, 'not_found');
+      }
+      case 'POST feedback-clear': if (body.confirm !== 'DELETE') return err(400, 'bad_request', 'Type DELETE to confirm.'); await FB.clearFeedback(deps.store); return ok();
       case 'POST data-delete': await W.purgeWorkshop(deps.store, c.workshopId); return ok();
       case 'POST codes-revoke': return (await W.revokeCode(deps.store, c.workshopId, String(body.id ?? ''))) ? ok() : err(404, 'not_found');
       default: return err(404, 'not_found');

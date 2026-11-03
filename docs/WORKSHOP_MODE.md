@@ -123,3 +123,8 @@ Tests: `cd workshop-backend && npm test` (backend) and `npm test` in the root (s
 ## Challenge scores (separate from AI access)
 
 The admin page has a second tab, **Challenge scores**. Switch **Receiving scores** on (unlimited, or for a number of hours or days) and students can send the score of the Industrial Digital Twin Challenge with their name and index number. It does not depend on AI access being on. See [DIGITAL_TWIN_CHALLENGE.md](DIGITAL_TWIN_CHALLENGE.md).
+
+
+## Feedback (separate from AI access)
+
+The last tab of the lab, **Thank You**, has an optional anonymous feedback form. The admin page has a third tab, **Feedback & Insights**, with the before/after charts, a searchable list, CSV export and deletion. It needs no access code and no AI key. See [FEEDBACK.md](FEEDBACK.md).

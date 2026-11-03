@@ -5,6 +5,7 @@ import { runPipeline, Block, BLOCKS, StepInfo, DetObject, ChangeFound, SafetyFou
 import { TwinDesign, ChallengeSettings, costOf, CostReport, HW_SEED, TASK_KEYS, TaskKey } from './catalogue';
 import { scoreTwin, scoreDetection, scoreColour, scoreChange, scoreSafety, safetyTruth, scoreQuality, combine, Grade, TaskScores, TwinScore, DetectionScore, ColourScore, ChangeScore, SafetyScore, QualityScore, SafetyTruth } from './grade';
 import { selectPoints, PointCloud } from '../core/pointcloud';
+import type { RegReport } from './register';
 
 /** One complete evaluation of a team's system on one scenario: acquire → calibrate-and-colour → process → grade.
  *  It is a pure function of (design, pipeline, settings, seed), so the same input always gives the same grade. */
@@ -16,7 +17,7 @@ export const FINAL_SEEDS = [101, 202];
 export interface RunResult {
   seed: number; ok: boolean; error?: string; cost: CostReport; grade: Grade;
   tasks: { twin: TwinScore; detect: DetectionScore; colour: ColourScore; change: ChangeScore; quality: QualityScore; safety: SafetyScore };
-  steps: StepInfo[]; twinPreview?: PointCloud; objects: DetObject[]; refs: Target[]; found: { changes: ChangeFound[]; safety?: SafetyFound[] }; truth: { changes: ChangeTruth[]; safety: SafetyTruth[] };
+  steps: StepInfo[]; /** how well the team's registration fitted the scans (RMSE and overlap): the settings are part of the pipeline, so the final evaluation uses them too */ registration?: RegReport; twinPreview?: PointCloud; objects: DetObject[]; refs: Target[]; found: { changes: ChangeFound[]; safety?: SafetyFound[] }; truth: { changes: ChangeTruth[]; safety: SafetyTruth[] };
   stats: { rays: number; raysA: number; points: number; acquireMs: number; pipelineMs: number };
 }
 
@@ -49,7 +50,7 @@ export function runScenario(cfg: RunConfig, seed: number): RunResult {
   const scores: TaskScores = { twin: tasks.twin.score, detect: detect.score, colour: colour.score, change: tasks.change.score, quality: tasks.quality.score, safety: tasks.safety.score };
   const grade = combine(scores, cfg.settings, cost.total, A.visible.stats.rays);
   return {
-    ...base, ok: true, grade, tasks, steps: out.steps.map((s) => ({ ...s, preview: thin(s.preview, 20000) })), twinPreview: thin(out.A.twin, 40000),
+    ...base, ok: true, grade, tasks, steps: out.steps.map((s) => ({ ...s, preview: thin(s.preview, 20000) })), registration: out.registration, twinPreview: thin(out.A.twin, 40000),
     objects: preds.map((p) => ({ ...p, idx: new Int32Array(0) })), found: { changes: out.changes ?? [], safety: out.safety },
     stats: { rays: A.visible.stats.rays + (B?.visible.stats.rays ?? 0), raysA: A.visible.stats.rays, points: rawN, acquireMs: t1 - t0, pipelineMs: t2 - t1 },
   };

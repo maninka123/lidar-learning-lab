@@ -4,7 +4,8 @@ The small Vercel service behind **Workshop Mode** of the LiDAR Learning Lab: it 
 
 - **Admin dashboard** (`/admin`): start, schedule, extend or stop a workshop; set two limits; choose open access or personal codes; see who joined, live usage and spend. Sign in with username and password, or a passkey (Touch ID, Face ID, Windows Hello) once set up.
 - **API** (`/api/...`): checks codes, enforces quotas and expiry on the server, and forwards chat requests to DeepSeek. The DeepSeek key lives only in Vercel's environment variables.
-- **Data**: Upstash Redis (settings, codes, usage). Participant records stay until the instructor deletes them from the dashboard.
+- **Feedback**: anonymous student feedback from the Thank You tab (`POST /api/student/feedback`) and the admin **Feedback & Insights** tab (summary, list, CSV export, delete). See `docs/FEEDBACK.md`.
+- **Data**: Upstash Redis (settings, codes, usage, feedback). Participant records stay until the instructor deletes them from the dashboard.
 
 Live: <https://lidar-learning-lab-workshop-backend.vercel.app> · deployed from this folder (Vercel root directory `workshop-backend`) on every push to `main`.
 

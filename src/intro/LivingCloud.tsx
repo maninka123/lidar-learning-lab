@@ -44,7 +44,7 @@ export function LivingCloud({ calm, par, paused = false }: { calm: boolean; par:
         ctx!.fill();
       }
       // a soft halo around points that are lit right now
-      ctx!.fillStyle = 'rgba(150,236,255,0.16)'; ctx!.beginPath();
+      ctx!.fillStyle = 'rgba(200,218,255,0.16)'; ctx!.beginPath();
       for (let i = 0; i < n; i++) if (vis[i] && lit[i] > 0.45) { const s = sz[i] * 3.2; ctx!.rect(sx[i] - s / 2, sy[i] - s / 2, s, s); }
       ctx!.fill();
       // the scan plane itself: a thin, soft cyan sheet standing across the hall
@@ -52,22 +52,22 @@ export function LivingCloud({ calm, par, paused = false }: { calm: boolean; par:
         const q: [number, number][] = []; let ok = true;
         for (const [y, z] of [[0, 0.8], [HALL.h, 0.8], [HALL.h, HALL.depth], [0, HALL.depth]]) { if (!project(cam, planeX, y, z, cx, cyy, tmp)) { ok = false; break; } q.push([tmp.x, tmp.y]); }
         if (ok) {
-          const g = ctx!.createLinearGradient(q[0][0], 0, q[3][0], 0); g.addColorStop(0, `rgba(90,216,255,${(0.075 * active).toFixed(3)})`); g.addColorStop(1, `rgba(90,216,255,${(0.025 * active).toFixed(3)})`);
+          const g = ctx!.createLinearGradient(q[0][0], 0, q[3][0], 0); g.addColorStop(0, `rgba(170,196,255,${(0.075 * active).toFixed(3)})`); g.addColorStop(1, `rgba(170,196,255,${(0.025 * active).toFixed(3)})`);
           ctx!.fillStyle = g; ctx!.beginPath(); ctx!.moveTo(q[0][0], q[0][1]); for (let k = 1; k < 4; k++) ctx!.lineTo(q[k][0], q[k][1]); ctx!.closePath(); ctx!.fill();
-          ctx!.strokeStyle = `rgba(170,240,255,${(0.4 * active).toFixed(3)})`; ctx!.lineWidth = 1.2; ctx!.beginPath(); ctx!.moveTo(q[0][0], q[0][1]); ctx!.lineTo(q[1][0], q[1][1]); ctx!.moveTo(q[3][0], q[3][1]); ctx!.lineTo(q[2][0], q[2][1]); ctx!.stroke();
-          ctx!.strokeStyle = `rgba(200,248,255,${(0.65 * active).toFixed(3)})`; ctx!.lineWidth = 1.6; ctx!.beginPath(); ctx!.moveTo(q[0][0], q[0][1]); ctx!.lineTo(q[3][0], q[3][1]); ctx!.stroke(); // where the sheet cuts the floor
+          ctx!.strokeStyle = `rgba(205,222,255,${(0.4 * active).toFixed(3)})`; ctx!.lineWidth = 1.2; ctx!.beginPath(); ctx!.moveTo(q[0][0], q[0][1]); ctx!.lineTo(q[1][0], q[1][1]); ctx!.moveTo(q[3][0], q[3][1]); ctx!.lineTo(q[2][0], q[2][1]); ctx!.stroke();
+          ctx!.strokeStyle = `rgba(236,244,255,${(0.65 * active).toFixed(3)})`; ctx!.lineWidth = 1.6; ctx!.beginPath(); ctx!.moveTo(q[0][0], q[0][1]); ctx!.lineTo(q[3][0], q[3][1]); ctx!.stroke(); // where the sheet cuts the floor
         }
       }
       // the radar pulse on the floor: a faint expanding ring
       if (pulseA > 0.02) {
-        ctx!.strokeStyle = `rgba(140,230,255,${(0.2 * pulseA * (1 - pp * 0.6)).toFixed(3)})`; ctx!.lineWidth = 1.2; ctx!.beginPath(); let started = false;
+        ctx!.strokeStyle = `rgba(255,200,150,${(0.2 * pulseA * (1 - pp * 0.6)).toFixed(3)})`; ctx!.lineWidth = 1.2; ctx!.beginPath(); let started = false;
         for (let k = 0; k <= 72; k++) { const a = -Math.PI / 2 + (k / 72) * Math.PI; if (project(cam, SENSOR.x + Math.sin(a) * pulseR, 0, SENSOR.z + Math.cos(a) * pulseR, cx, cyy, tmp)) { if (started) ctx!.lineTo(tmp.x, tmp.y); else { ctx!.moveTo(tmp.x, tmp.y); started = true; } } }
         ctx!.stroke();
       }
       ctx!.globalCompositeOperation = 'source-over';
       // small instrument readouts in the corners
       let shown = 0; for (let i = 0; i < n; i++) shown += vis[i];
-      ctx!.font = '500 11px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace'; ctx!.fillStyle = 'rgba(150,205,235,0.55)'; ctx!.textBaseline = 'alphabetic';
+      ctx!.font = '500 11px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace'; ctx!.fillStyle = 'rgba(92,104,150,0.7)'; ctx!.textBaseline = 'alphabetic';
       ctx!.textAlign = 'left'; ctx!.fillText('LIDAR  ·  905 nm  ·  10 Hz', 64, H - 40);
       ctx!.textAlign = 'right'; ctx!.fillText(`${shown.toLocaleString('en-US')} points in view`, W - 64, H - 40);
     }

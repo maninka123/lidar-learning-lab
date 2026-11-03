@@ -4,7 +4,8 @@ import { LIDARS, CAMERAS, DEFAULT_SETTINGS, EMPTY_DESIGN, TwinDesign, LidarUnit,
 import { acquireSurvey, routePoses, raysFor } from '../src/twin/acquire';
 import { evaluate } from '../src/occlusion/coverage';
 import { makeSampler, renderPreview, calibrationTarget, residuals, rmsOf, autoCalibrate, calibrationError, trueExtrinsic, nominalOf, colourPoints, labelVote, sensitivity } from '../src/twin/camera';
-import { newBlock, checkPipeline, runPipeline, Block, classifyShape } from '../src/twin/pipeline';
+import { newBlock, checkPipeline, runPipeline, Block, classifyShape, PHASES, BLOCKS, phaseIndex, insertBlock, parallelGroups, canRunParallel, BlockKind } from '../src/twin/pipeline';
+import { registerScans, DEFAULT_REG } from '../src/twin/register';
 import { assign, iou3, matchObjects, scoreDetection, scoreColour, scoreChange, scoreSafety, safetyTruth, lin, combine, poseError, referenceOf } from '../src/twin/grade';
 import { runScenario, runFinal, needsSurveyB, PRACTICE_SEED } from '../src/twin/runner';
 import { HW_SEED } from '../src/twin/catalogue';
@@ -212,6 +213,46 @@ describe('pipeline blocks', () => {
   });
 });
 
+describe('registration and the pipeline builder', () => {
+  const f = buildFactory(11, 'A'), sv = acquireSurvey(f, design({ lidars: [lidar('rot32', -6, -0.3), lidar('rot32', 6, -0.3)] }), 11);
+  it('scans arrive in their own coordinate systems, and registration reports an RMSE', () => {
+    const [a, b] = sv.visible.scans;
+    expect(Math.abs(a.local.positions[0]) + Math.abs(a.local.positions[1])).toBeLessThan(40); // around the scanner, not the building
+    const meanX = (c: { positions: Float32Array; count: number }) => { let s = 0; for (let i = 0; i < c.count; i++) s += c.positions[i * 3]; return s / c.count; };
+    expect(Math.abs(meanX(a.local) - meanX(b.local))).toBeLessThan(3); // both piled around their own origin
+    expect(Math.abs(meanX(a.cloud) - meanX(b.cloud))).toBeGreaterThan(8); // placed at the scanner positions they are far apart
+    const placed = registerScans(sv.visible.scans, { ...DEFAULT_REG, mode: 'merge' }), icpR = registerScans(sv.visible.scans, DEFAULT_REG);
+    expect(placed.report.scans).toHaveLength(1); expect(icpR.report.rmse).toBeLessThanOrEqual(placed.report.rmse + 1e-9); expect(icpR.report.overlap).toBeGreaterThan(0.1);
+    expect(icpR.report.scans[0].accepted).toBe(true);
+  });
+  it('without a starting guess ICP cannot find the other scanner: the RMSE stays poor', () => {
+    const good = registerScans(sv.visible.scans, DEFAULT_REG), lost = registerScans(sv.visible.scans, { ...DEFAULT_REG, guess: false });
+    expect(lost.report.rmse > good.report.rmse || lost.report.overlap < good.report.overlap || !lost.report.scans[0].accepted).toBe(true);
+  });
+  it('the registration tuned in the pipeline is what the evaluation uses, and its RMSE is reported', () => {
+    const r1 = runScenario({ design: design({ lidars: [lidar('rot32', -6, -0.3), lidar('rot32', 6, -0.3)] }), pipeline: pipe(['icp', 'voxel', 'euclid', 'classify']), settings: DEFAULT_SETTINGS }, 11);
+    const r2 = runScenario({ design: design({ lidars: [lidar('rot32', -6, -0.3), lidar('rot32', 6, -0.3)] }), pipeline: pipe(['merge', 'voxel', 'euclid', 'classify']), settings: DEFAULT_SETTINGS }, 11);
+    expect(Number.isFinite(r1.registration!.rmse)).toBe(true); expect(r1.registration!.mode).toBe('first'); expect(r2.registration!.mode).toBe('merge');
+    expect(r1.steps[0].reg).toBeDefined(); expect(r1.tasks.twin.poseErrCm).toBeLessThan(r2.tasks.twin.poseErrCm);
+  }, 120000);
+  it('phases cover every block once and keep a new block in its place', () => {
+    const all = PHASES.flatMap((p) => p.kinds).sort(), kinds = (Object.keys(BLOCKS) as BlockKind[]).sort(); expect(all).toEqual(kinds);
+    let p: Block[] = []; for (const k of ['classify', 'crop', 'icp', 'euclid'] as BlockKind[]) p = insertBlock(p, newBlock(k));
+    expect(p.map((b) => b.kind)).toEqual(['icp', 'crop', 'euclid', 'classify'].map((k) => k)); // sorted by phase
+    expect(phaseIndex('icp')).toBe(0); expect(phaseIndex('safety')).toBe(4);
+  });
+  it('blocks set to parallel form a side-by-side group, and their results are joined', () => {
+    const p = pipe(['icp', 'crop', 'sor', 'ror', 'euclid']); p[2].parallel = true; p[3].parallel = true;
+    expect(parallelGroups(p)).toEqual([-1, -1, 0, 0, -1]); expect(canRunParallel('voxel')).toBe(false); expect(canRunParallel('sor')).toBe(true);
+    const lone = pipe(['icp', 'sor']); lone[1].parallel = true; expect(parallelGroups(lone)).toEqual([-1, -1]); // a parallel block needs a neighbour
+    const par = runPipeline(p, { A: sv.visible, camerasA: [] }), seq = runPipeline(pipe(['icp', 'crop', 'sor', 'ror', 'euclid']), { A: sv.visible, camerasA: [] });
+    const cs = par.A.cloud!; expect(par.steps.filter((s) => s.group === 0)).toHaveLength(2);
+    // every point that survives the parallel pair survived each filter on the same input: it never keeps more than either filter alone
+    const sorOnly = runPipeline(pipe(['icp', 'crop', 'sor']), { A: sv.visible, camerasA: [] }).A.cloud!.count, rorOnly = runPipeline(pipe(['icp', 'crop', 'ror']), { A: sv.visible, camerasA: [] }).A.cloud!.count;
+    expect(cs.count).toBeLessThanOrEqual(Math.min(sorOnly, rorOnly)); expect(seq.A.cloud!.count).toBeGreaterThan(0);
+  }, 120000);
+});
+
 describe('grading', () => {
   it('Hungarian assignment is optimal (compared with brute force on small cases)', () => {
     const cost = [[4, 1, 3], [2, 0, 5], [3, 2, 2]];
@@ -303,3 +344,23 @@ describe('complete example systems', () => {
   });
 });
 void LIDARS; void ZONES;
+
+describe('choosing which planes and clusters to keep', () => {
+  const cfg = (blocks: Block[]) => ({ design: design({ lidars: [lidar('rot32', -6, -0.3), lidar('rot32', 6, -0.3)] }), pipeline: blocks, settings: DEFAULT_SETTINGS });
+  it('the planes block lists what it found, and a plane switched off is left in the cloud', () => {
+    const base = pipe(['icp', 'voxel', 'planes'], { voxel: { size: 0.1 } }), r1 = runScenario(cfg(base), 11), st1 = r1.steps[2];
+    expect(st1.pick?.mode).toBe('remove'); expect(st1.pick!.items.length).toBeGreaterThanOrEqual(2); expect(st1.pick!.items.every((i) => i.on)).toBe(true);
+    expect(st1.pick!.items.map((i) => i.key)).toContain('floor'); expect(new Set(st1.pick!.items.map((i) => i.key)).size).toBe(st1.pick!.items.length);
+    const keepFloor = base.map((b) => (b.kind === 'planes' ? { ...b, off: ['floor'] } : b)), r2 = runScenario(cfg(keepFloor), 11), st2 = r2.steps[2];
+    expect(st2.after).toBeGreaterThan(st1.after); // the floor points stay
+    expect(st2.pick!.items.find((i) => i.key === 'floor')!.on).toBe(false); expect(st2.pick!.items.map((i) => i.key)).toEqual(st1.pick!.items.map((i) => i.key)); // the same list, so the choice is stable
+  });
+  it('the clustering blocks list the biggest clusters, and a cluster switched off is dropped', () => {
+    for (const kind of ['euclid', 'dbscan'] as const) {
+      const base = pipe(['icp', 'voxel', 'ground', 'planes', kind, 'classify'], { voxel: { size: 0.08 } }), r1 = runScenario(cfg(base), 11), st = r1.steps[4];
+      expect(st.pick?.mode).toBe('keep'); expect(st.pick!.items.length).toBeGreaterThan(3); expect(st.pick!.items[0].pts).toBeGreaterThanOrEqual(st.pick!.items[1].pts);
+      const key = st.pick!.items[0].key, drop = base.map((b) => (b.kind === kind ? { ...b, off: [key] } : b)), r2 = runScenario(cfg(drop), 11);
+      expect(r2.steps[4].pick!.items.find((i) => i.key === key)!.on).toBe(false); expect(r2.objects.length).toBeLessThan(r1.objects.length);
+    }
+  });
+});

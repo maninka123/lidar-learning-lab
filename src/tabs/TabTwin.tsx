@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState, ReactNode } from 'react';
 import { useLab } from '../state/store';
 import { Viewport } from '../ui/Viewport';
 import { TabFrame } from '../ui/TabFrame';
@@ -12,18 +12,21 @@ import { downloadBlob } from '../io/load';
 import { buildFactory, ZONES, SAFETY_ZONES, TWIN_CLASSES } from '../twin/factory';
 import { LIDARS, CAMERAS, LIGHT_UNIT, LOWLIGHT_KIT, MOBILE_PLATFORM, RES_TIERS, INSTALL, TASK_KEYS, TASK_NAMES, LIMITS, costOf, lidarItem, cameraItem, newId, isMobile, HW_SEED, ResTier, TwinDesign, LidarUnit, CameraUnit, TaskKey } from '../twin/catalogue';
 import { raysFor, acquireSurvey, Survey } from '../twin/acquire';
-import { camPose, nominalOf, calibrationTarget, residuals, rmsOf, autoCalibrate, renderPreview } from '../twin/camera';
+import { camPose, nominalOf, calibrationTarget, residuals, rmsOf, autoCalibrate, renderPreview, makeSampler, colourPoints } from '../twin/camera';
 import { project } from '../apps/fusion';
-import { BLOCKS, GROUPS, newBlock, checkPipeline, BlockKind } from '../twin/pipeline';
+import { BLOCKS, BLOCK_TAB, PickList, PHASES, phaseIndex, insertBlock, regParamsOf, newBlock, checkPipeline, canRunParallel, parallelGroups, BlockKind, Block } from '../twin/pipeline';
+import { registerScans, RegReport } from '../twin/register';
 import { PRACTICE_SEED, RunResult } from '../twin/runner';
-import { useTwin, STAGES, snapshot, parseSave, DEFAULT_PIPELINE } from '../twin/store';
+import { createPortal } from 'react-dom';
+import { useTwin, STAGES, snapshot, parseSave } from '../twin/store';
 import { evaluate } from '../occlusion/coverage';
 import { FovVolume, ScannerMarkers, SamplePoints, paint, STATUS_COLOURS } from '../occlusion/OccView';
 import { cameraView, lidarAsScanner } from '../twin/coverage';
+import { fovOverlap } from '../twin/overlap';
 import { insideSolid } from '../occlusion/coverage';
 import { feedbackFor, reportMarkdown } from '../twin/feedback';
 import { sensorOf } from '../occlusion/coverage';
-import { PointCloud } from '../core/pointcloud';
+import { PointCloud, concatClouds } from '../core/pointcloud';
 import { D2R, Vec3 } from '../core/math';
 import { tabIndex } from './nav';
 import { workshopConfigured, submitChallengeScore, challengeAccepting } from '../apps/workshop';
@@ -48,6 +51,105 @@ const hexRgb = (h: string): [number, number, number] => { const v = parseInt(h.s
 const cloudOf = (pos: Float32Array): PointCloud => ({ id: 'x', name: 'x', count: pos.length / 3, positions: pos, meta: { kind: 'processed', source: 'overlay', units: 'm' } });
 
 /** A camera calibration workspace: the photo, the board markers found in it (green) and where your current calibration says they should be (red). */
+/** Cameras on the left, LiDARs on the right. Drag from the dot of a camera to a LiDAR to connect them (or pick a camera and click a LiDAR). One wire per camera; many cameras may share a LiDAR. */
+interface PairCam { id: string; label: string; sub: string; done: boolean; to: string | null }
+interface PairLid { id: string; label: string; sub: string; nearestOf: string[] }
+function PairBoard({ cams, lids, selected, onSelect, onPair }: { cams: PairCam[]; lids: PairLid[]; selected: string | null; onSelect: (id: string) => void; onPair: (camId: string, lidId: string) => void }) {
+  const box = useRef<HTMLDivElement>(null), [geo, setGeo] = useState<Record<string, { x: number; y: number }>>({}), [drag, setDrag] = useState<{ cam: string; x: number; y: number; over: string | null } | null>(null);
+  const measure = () => {
+    const root = box.current; if (!root) return; const r0 = root.getBoundingClientRect(), g: Record<string, { x: number; y: number }> = {};
+    root.querySelectorAll<HTMLElement>('[data-port]').forEach((el) => { const r = el.getBoundingClientRect(); g[el.dataset.port!] = { x: r.left + r.width / 2 - r0.left, y: r.top + r.height / 2 - r0.top }; });
+    setGeo((o) => (JSON.stringify(o) === JSON.stringify(g) ? o : g));
+  };
+  useEffect(() => { measure(); const ro = new ResizeObserver(measure); if (box.current) ro.observe(box.current); window.addEventListener('resize', measure); return () => { ro.disconnect(); window.removeEventListener('resize', measure); }; }); // eslint-disable-line react-hooks/exhaustive-deps
+  const at = (e: { clientX: number; clientY: number }) => { const r = box.current!.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; };
+  const lidarUnder = (e: { clientX: number; clientY: number }) => (document.elementFromPoint(e.clientX, e.clientY) as HTMLElement | null)?.closest<HTMLElement>('[data-lidar]')?.dataset.lidar ?? null;
+  const wire = (a: { x: number; y: number }, b: { x: number; y: number }) => { const k = Math.max(30, Math.abs(b.x - a.x) * 0.5); return `M${a.x},${a.y} C${a.x + k},${a.y} ${b.x - k},${b.y} ${b.x},${b.y}`; };
+  const camNo = (id: string) => cams.findIndex((c) => c.id === id) + 1, lidNo = (id: string | null) => lids.findIndex((l) => l.id === id) + 1;
+  return (
+    <div ref={box} data-testid="twin-pair-board" className="pairboard" onPointerMove={(e) => { if (drag) setDrag({ ...drag, ...at(e), over: lidarUnder(e) }); }} onPointerUp={(e) => { if (!drag) return; const l = lidarUnder(e); if (l) { onPair(drag.cam, l); onSelect(drag.cam); } setDrag(null); }} onPointerCancel={() => setDrag(null)}>
+      <svg className="pairboard-wires" aria-hidden="true">
+        {cams.map((c) => { const a = geo[`c:${c.id}`], b = c.to ? geo[`l:${c.to}`] : null; if (!a || !b || drag?.cam === c.id) return null; return <path key={c.id} d={wire(a, b)} className={c.id === selected ? 'sel' : ''} />; })}
+        {drag && geo[`c:${drag.cam}`] && <path d={wire(geo[`c:${drag.cam}`], drag.over && geo[`l:${drag.over}`] ? geo[`l:${drag.over}`] : { x: drag.x, y: drag.y })} className="sel live" />}
+      </svg>
+      <div className="pairboard-col" data-testid="twin-cal-list" role="group" aria-label="Cameras">
+        <div className="caption"><b>1 · Cameras</b></div>
+        {cams.map((c) => (
+          <div key={c.id} className={`pairnode cam ${c.id === selected ? 'on' : ''}`}>
+            <button className="pairnode-main" aria-pressed={c.id === selected} onClick={() => onSelect(c.id)} data-testid={`twin-unit-c${camNo(c.id)}`}>
+              <b>{c.label}{c.done ? ' ✓' : ''}</b><span>→ {c.to ? `LiDAR ${lidNo(c.to)}` : 'no LiDAR'}</span>
+            </button>
+            <span className="pairport" data-port={`c:${c.id}`} data-testid={`twin-port-c${camNo(c.id)}`} role="presentation" title="Drag to a LiDAR" onPointerDown={(e) => { e.preventDefault(); onSelect(c.id); (box.current as HTMLElement).setPointerCapture?.(e.pointerId); setDrag({ cam: c.id, ...at(e), over: null }); }} />
+          </div>
+        ))}
+      </div>
+      <div className="pairboard-col lids" role="group" aria-label="LiDARs">
+        <div className="caption"><b>2 · LiDARs</b> <span>several cameras can share one</span></div>
+        {lids.map((l) => {
+          const mine = selected && cams.find((c) => c.id === selected)?.to === l.id;
+          return (
+            <div key={l.id} className={`pairnode lid ${mine ? 'on' : ''} ${drag?.over === l.id ? 'target' : ''}`} data-lidar={l.id}>
+              <span className="pairport" data-port={`l:${l.id}`} role="presentation" />
+              <button className="pairnode-main" aria-pressed={!!mine} disabled={!selected} onClick={() => selected && onPair(selected, l.id)} data-testid={`twin-pair-l${lidNo(l.id)}`} title={`${l.sub}${selected ? '' : ' — pick a camera first'}`}>
+                <b>{l.label}</b><span>{cams.some((c) => c.to === l.id) ? cams.filter((c) => c.to === l.id).map((c) => `Cam ${camNo(c.id)}`).join(' + ') : l.nearestOf.length ? 'no camera yet' : 'no camera'}</span>
+              </button>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+const blockSig = (b: Block) => JSON.stringify([b.kind, b.params, b.bypass]);
+/** The practice score as a ring that fills and changes colour as it grows, a short word for where the team stands, and one thin bar per task so the weak spot is easy to see. */
+const SCORE_SHORT: Record<string, string> = { twin: 'Twin', detect: 'Objects', colour: 'Colour', change: 'Change', quality: 'Noise', safety: 'Safety', budget: 'Budget' };
+const scoreHue = (x: number) => `hsl(${Math.round(8 + Math.max(0, Math.min(1, x)) * 120)} 72% 44%)`;
+function ScoreMeter({ value, tasks }: { value: number; tasks: { key: string; score: number; weight: number }[] }) {
+  const v = Math.max(0, Math.min(100, value)), R = 21, C = 2 * Math.PI * R, col = scoreHue(v / 100);
+  const verdict = v < 20 ? 'Just getting started' : v < 45 ? 'Taking shape' : v < 70 ? 'Good progress' : v < 85 ? 'Strong result' : 'Excellent';
+  return (
+    <span className="scoremeter" data-testid="twin-score-meter" role="img" aria-label={`Practice score ${v.toFixed(1)} out of 100: ${verdict}. ${tasks.map((t) => `${SCORE_SHORT[t.key] ?? t.key} ${Math.round(t.score * 100)} percent`).join(', ')}`}>
+      <span className="scoremeter-main">
+        <svg width="54" height="54" viewBox="0 0 54 54" aria-hidden="true"><circle cx="27" cy="27" r={R} fill="none" stroke="rgba(120,120,128,.22)" strokeWidth="6" /><circle cx="27" cy="27" r={R} fill="none" stroke={col} strokeWidth="6" strokeLinecap="round" strokeDasharray={`${(v / 100) * C} ${C}`} transform="rotate(-90 27 27)" style={{ transition: 'stroke-dasharray .6s ease' }} /></svg>
+        <span className="scoremeter-text"><b style={{ color: col }}>{v.toFixed(1)}</b><small>out of 100</small><em>{verdict}</em></span>
+      </span>
+      <span className="scoremeter-bars" aria-hidden="true">
+        {tasks.filter((t) => t.weight > 0).map((t) => <span key={t.key} className="sb"><span>{SCORE_SHORT[t.key] ?? t.key}</span><span className="sb-t"><i style={{ width: `${Math.max(2, Math.round(t.score * 100))}%`, background: scoreHue(t.score) }} /></span><span className="sb-n">{Math.round(t.score * 100)}</span></span>)}
+      </span>
+    </span>
+  );
+}
+
+/** The two fields of view cut by a flat screen `dist` metres in front of the camera: the camera's rectangle against the LiDAR's reach. */
+function FovOverlapChart({ cam, lid, camNo, lidNo, dist, onDist }: { cam: CameraUnit; lid: LidarUnit; camNo: number; lidNo: number; dist: number; onDist: (v: number) => void }) {
+  const ref = useRef<HTMLCanvasElement>(null), o = useMemo(() => fovOverlap(cam, lid, dist), [cam.x, cam.y, cam.z, cam.yaw, cam.pitch, cam.item, lid.x, lid.y, lid.z, lid.yaw, lid.pitch, lid.item, dist]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    const cv = ref.current; if (!cv) return; const g = cv.getContext('2d'); if (!g) return;
+    const css = getComputedStyle(cv), ink = css.color || '#888', W = 340, Hh = Math.max(150, Math.min(260, Math.round((W * o.winH) / o.winW))), dpr = Math.min(2, window.devicePixelRatio || 1);
+    cv.width = W * dpr; cv.height = Hh * dpr; cv.style.height = `${Hh}px`; g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, W, Hh);
+    const pad = 26, pw = W - pad - 8, ph = Hh - pad - 8, X = (a: number) => pad + ((a + o.winW) / (2 * o.winW)) * pw, Y = (b: number) => 8 + ((o.winH - b) / (2 * o.winH)) * ph;
+    g.fillStyle = 'rgba(10,132,255,0.28)'; const cw = pw / o.nx, ch = ph / o.ny;
+    for (let j = 0; j < o.ny; j++) for (let i = 0; i < o.nx; i++) if (o.lidar[j * o.nx + i]) g.fillRect(pad + i * cw, 8 + j * ch, cw + 0.6, ch + 0.6);
+    g.strokeStyle = ink; g.globalAlpha = 0.18; g.lineWidth = 1; g.beginPath(); g.moveTo(X(0), 8); g.lineTo(X(0), 8 + ph); g.moveTo(pad, Y(0)); g.lineTo(pad + pw, Y(0)); g.stroke(); g.globalAlpha = 0.5; g.strokeRect(pad, 8, pw, ph); g.globalAlpha = 1;
+    g.strokeStyle = '#ff9f0a'; g.lineWidth = 2.5; g.strokeRect(X(-o.halfW), Y(o.halfH), X(o.halfW) - X(-o.halfW), Y(-o.halfH) - Y(o.halfH));
+    if (o.lidarAt && Math.abs(o.lidarAt.a) <= o.winW && Math.abs(o.lidarAt.b) <= o.winH) { g.fillStyle = '#0a84ff'; g.fillRect(X(o.lidarAt.a) - 3, Y(o.lidarAt.b) - 3, 6, 6); }
+    g.fillStyle = ink; g.font = '11px system-ui, sans-serif'; g.textAlign = 'center'; g.globalAlpha = 0.8;
+    g.fillText(`${(-o.halfW).toFixed(1)}`, X(-o.halfW), Hh - 12); g.fillText('0', X(0), Hh - 12); g.fillText(`${o.halfW.toFixed(1)} m`, X(o.halfW), Hh - 12);
+    g.textAlign = 'right'; g.fillText(`${o.halfH.toFixed(1)}`, pad - 3, Y(o.halfH) + 4); g.fillText(`${(-o.halfH).toFixed(1)}`, pad - 3, Y(-o.halfH) + 4); g.globalAlpha = 1;
+  }, [o]);
+  const pct = Math.round(o.coverage * 1000) / 10;
+  return (
+    <div data-testid="twin-fov-overlap" style={{ marginTop: 10 }}>
+      <div className="caption" style={{ marginBottom: 2 }}><b>Where Camera {camNo} and LiDAR {lidNo} look at the same time</b>, on a flat screen {dist} m in front of the camera</div>
+      <div data-testid="twin-fov-pct" style={{ fontWeight: 650 }}>LiDAR covers {pct} % of the camera's view</div>
+      <canvas ref={ref} role="img" aria-label={`Fields of view of camera ${camNo} and LiDAR ${lidNo} at ${dist} metres. The LiDAR covers ${pct} percent of the camera view.`} style={{ width: '100%', maxWidth: 340, display: 'block', color: 'var(--text)' }} data-testid="twin-fov-canvas" />
+      <div className="caption" style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}><span><i style={{ display: 'inline-block', width: 12, height: 8, border: '2px solid #ff9f0a', marginRight: 4 }} />camera view</span><span><i style={{ display: 'inline-block', width: 12, height: 8, background: 'rgba(10,132,255,.4)', marginRight: 4 }} />LiDAR reach</span><span>screen width {(2 * o.halfW).toFixed(1)} m</span></div>
+      <Slider label="Distance from the camera" value={dist} min={1} max={30} step={0.5} unit=" m" onChange={onDist} hint="Slide to compare the two fields of view nearer or farther away. Up close a camera sees little; far away the LiDAR may reach only part of what the camera sees." />
+    </div>
+  );
+}
+
 function CalPanel({ unit, index, lights, onChange }: { unit: CameraUnit; index: number; lights: TwinDesign['lights']; onChange: (c: CameraUnit) => void }) {
   const cv = useRef<HTMLCanvasElement>(null);
   const it = cameraItem(unit.item);
@@ -102,6 +204,20 @@ export default function TabTwin() {
   const [survey, setSurvey] = useState<Survey | null>(null);
   const [routeMode, setRouteMode] = useState(false), [placeMode, setPlaceMode] = useState(false);
   const [taskTab, setTaskTab] = useState<'detect' | 'colour' | 'change' | 'quality' | 'safety'>('detect');
+  const [fovDist, setFovDist] = useState(5); // metres in front of the camera at which the two fields of view are compared
+  const [calPair, setCalPair] = useState<Record<string, string>>({}); // camera id → the LiDAR chosen to check it against (a camera need not pair with the LiDAR of the same number)
+  const [calCloud, setCalCloud] = useState<{ cloud: PointCloud; coloured: number; total: number } | null>(null), [calBusy, setCalBusy] = useState(false);
+  const calCache = useRef<{ key: string; cloud: PointCloud } | null>(null);
+  const [ownFrames, setOwnFrames] = useState(true); // acquired scans are shown as delivered: each in its own scanner's coordinate system
+  const [camColour, setCamColour] = useState(true); // in the survey view: points a camera sees take its colours
+  const [surveyView, setSurveyView] = useState<{ cloud: PointCloud; base: Uint8Array; cam: Uint8Array | null; coloured: number }[] | null>(null);
+  const [openBlock, setOpenBlock] = useState<string | null>(null); // which block's settings are open
+  const [regTest, setRegTest] = useState<{ id: string; report: RegReport; clouds: PointCloud[] } | null>(null), [regBusy, setRegBusy] = useState(false);
+  const [pipeExpanded, setPipeExpanded] = useState(false); // the builder can fill the whole window
+  const [lastRun, setLastRun] = useState<Record<string, { before: number; after: number; sig: string }>>({}); // what each block did to the point count in the latest test, kept until that block is changed
+  const [lastPick, setLastPick] = useState<Record<string, PickList>>({}); // the planes and clusters each block found in the latest test, kept while the team ticks and unticks them
+  const [rerunAt, setRerunAt] = useState(0); // set when a tick changes: the test runs again a moment later so the 3D view follows
+  const [autoTest, setAutoTest] = useState(false); // in the pipeline stage: run the practice again a moment after every change to the blocks
   const [planOpen, setPlanOpen] = useState(true); // the plan in the corner of the view can be folded away and brought back
   const [viewMode, setViewMode] = useState<'both' | 'scene' | 'points'>('both'); // what the 3D view shows: the factory, the points, or both at once
   const [pname, setPname] = useState('Pipeline 1');
@@ -111,7 +227,9 @@ export default function TabTwin() {
 
   useEffect(() => { const st = useLab.getState(); return () => { st.patch({ interaction: 'select' }); }; }, []);
   useEffect(() => { lab.patch({ interaction: (placeMode || routeMode) && stage === 2 ? 'add-station' : 'select' }); }, [placeMode, routeMode, stage]); // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => { setSurvey(null); }, [d.lidars.length, d.routeSteps, d.route, d.platform]);
+  useEffect(() => { if (stage !== 5) setPipeExpanded(false); }, [stage]);
+  useEffect(() => { setRegTest(null); }, [d.lidars, d.cameras, d.route, d.routeSteps, d.platform]);
+  useEffect(() => { setSurvey(null); setSurveyView(null); }, [d.lidars, d.cameras, d.lights, d.routeSteps, d.route, d.platform]);
 
   /** Every change to the equipment goes through here. A change that raises the cost is refused when it would go over the budget: the budget can never be exceeded. */
   const setDesign = (f: (x: TwinDesign) => TwinDesign): boolean => {
@@ -166,12 +284,24 @@ export default function TabTwin() {
   const chk = useMemo(() => checkPipeline(T.pipeline, { cameras: d.cameras.length, hasB: true }), [T.pipeline, d.cameras.length]);
   async function runPractice() {
     if (!cost.ok) { lab.notify(cost.errors.join(' '), 'warn'); return; }
+    setViewMode((m) => (m === 'scene' ? 'both' : m)); // the result is points: make sure the view shows them
     T.set({ busy: 'Running the practice survey and your pipeline…' });
     try {
       const r = await runTask('twinRun', { config: cfg, seed: PRACTICE_SEED });
-      useTwin.getState().set({ practice: r, selectedStep: -1, attempts: [...useTwin.getState().attempts, { at: Date.now(), kind: 'practice', seed: PRACTICE_SEED, total: r.grade.total, tasks: Object.fromEntries(r.grade.perTask.map((x) => [x.key, x.score])), cost: r.cost.total }] });
+      setLastPick(Object.fromEntries(r.steps.filter((x) => x.pick).map((x) => [x.id, x.pick as PickList])));
+      setLastRun(Object.fromEntries(r.steps.filter((x) => !x.bypassed && !x.error).map((x) => { const b = T.pipeline.find((q) => q.id === x.id); return [x.id, { before: x.before, after: x.after, sig: b ? blockSig(b) : '' }]; })));
+      useTwin.getState().set({ practice: r, selectedStep: r.steps.reduce((last, x, i) => (x.preview && !x.error && !x.bypassed ? i : last), -1), attempts: [...useTwin.getState().attempts, { at: Date.now(), kind: 'practice', seed: PRACTICE_SEED, total: r.grade.total, tasks: Object.fromEntries(r.grade.perTask.map((x) => [x.key, x.score])), cost: r.cost.total }] });
     } catch (e) { lab.notify((e as Error).message, 'error'); } finally { useTwin.getState().set({ busy: null }); }
   }
+  const pipeSig = JSON.stringify(T.pipeline.map((b) => [b.kind, b.bypass, b.params, b.parallel]));
+  useEffect(() => { // "test as I add": a short wait after the last change, then the practice run shows the result in the 3D view
+    if (stage !== 5 || !autoTest || !chk.ok || !cost.ok || useTwin.getState().busy) return;
+    const id = setTimeout(() => { if (!useTwin.getState().busy) void runPractice(); }, 1200); return () => clearTimeout(id);
+  }, [pipeSig, autoTest, stage]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (!rerunAt || stage !== 5 || !chk.ok || !cost.ok) return;
+    const id = setTimeout(() => { if (!useTwin.getState().busy) void runPractice(); }, 700); return () => clearTimeout(id);
+  }, [rerunAt]); // eslint-disable-line react-hooks/exhaustive-deps
   const finalsUsed = T.attempts.filter((a) => a.kind === 'final').length;
   async function submitFinal() {
     if (!cost.ok) { lab.notify(cost.errors.join(' '), 'warn'); return; }
@@ -186,7 +316,29 @@ export default function TabTwin() {
   async function acquire() {
     if (!cost.ok) { lab.notify(cost.errors.join(' '), 'warn'); return; }
     T.set({ busy: 'Acquiring the survey…' }); await new Promise((r) => setTimeout(r, 30));
-    try { setSurvey(acquireSurvey(factory, d, PRACTICE_SEED)); } finally { T.set({ busy: null }); }
+    try {
+      const sv = acquireSurvey(factory, d, PRACTICE_SEED); setSurvey(sv);
+      // where a camera sees a point, the point takes the camera's colour (with the calibration as set); all other points keep their scanner colour
+      const cams = d.cameras.map((c, i) => ({ unit: c, image: makeSampler(factory, c, HW_SEED, i, d.lights), e: c.cal.est, fov: c.cal.fov }));
+      setSurveyView(sv.visible.scans.map((s2, i) => {
+        const n = s2.cloud.count, [r, g, b] = hexRgb(UNIT_COLOURS[(s2.mobile ? 0 : i) % 6]), base = new Uint8Array(n * 3);
+        for (let k = 0; k < n; k++) { base[k * 3] = r; base[k * 3 + 1] = g; base[k * 3 + 2] = b; }
+        if (!cams.length) return { cloud: s2.cloud, base, cam: null, coloured: 0 };
+        const col = colourPoints(s2.cloud.positions, n, cams), cam = base.slice();
+        for (let k = 0; k < n; k++) if (col.valid[k]) cam.set(col.colors.subarray(k * 3, k * 3 + 3), k * 3);
+        return { cloud: s2.cloud, base, cam, coloured: col.count };
+      }));
+    } finally { T.set({ busy: null }); }
+  }
+  /** Try one registration block on the acquired survey and show its RMSE straight away, so the settings can be tuned without running everything */
+  async function testRegistration(b: Block) {
+    setViewMode((m) => (m === 'scene' ? 'both' : m));
+    setRegBusy(true); await new Promise((r) => setTimeout(r, 30));
+    try {
+      const sv = survey ?? acquireSurvey(factory, d, PRACTICE_SEED); if (!survey) setSurvey(sv);
+      const r = registerScans(sv.visible.scans, regParamsOf(b.kind, { ...Object.fromEntries(BLOCKS[b.kind].params.map((p2) => [p2.key, p2.def])), ...b.params }));
+      setRegTest({ id: b.id, report: r.report, clouds: r.clouds }); useTwin.getState().set({ selectedStep: -1 }); // show this test in the 3D view, not an older run
+    } finally { setRegBusy(false); }
   }
   const exportConfig = () => downloadBlob(new Blob([JSON.stringify(snapshot(useTwin.getState()), null, 1)], { type: 'application/json' }), `${(T.team || 'team').replace(/\W+/g, '_')}_twin_challenge.json`);
   const exportReport = () => downloadBlob(new Blob([reportMarkdown(T.team, T.members, T.practice, T.final ? { total: T.final.grade.total, perTask: T.final.grade.perTask.map((x) => ({ key: x.key, points: x.points, weight: x.weight })) } : null, cost.total, T.settings.budget)], { type: 'text/markdown' }), `${(T.team || 'team').replace(/\W+/g, '_')}_twin_report.md`);
@@ -219,6 +371,28 @@ export default function TabTwin() {
   }
   const importConfig = (f: File | undefined) => { if (!f) return; f.text().then((t) => { const s = parseSave(t); if (s) { T.importSave(s); lab.notify('Challenge configuration loaded.', 'ok'); } else lab.notify('That file is not a challenge configuration.', 'error'); }); };
 
+  // ---- calibration check: the points of one LiDAR, coloured by the selected camera with the calibration as it is now
+  const nearestLidar = (c: CameraUnit) => d.lidars.reduce<LidarUnit | null>((b, u) => (!b || Math.hypot(u.x - c.x, u.y - c.y) < Math.hypot(b.x - c.x, b.y - c.y) ? u : b), null);
+  const pairedLidar = (c: CameraUnit) => d.lidars.find((u) => u.id === calPair[c.id]) ?? nearestLidar(c);
+  const calLid = selC ? pairedLidar(selC) : null;
+  /** every camera wired to that LiDAR: they all colour its points, each with its own calibration */
+  const connected = calLid ? d.cameras.filter((c) => pairedLidar(c)?.id === calLid.id) : [];
+  const connSig = JSON.stringify(connected.map((c) => [c.id, c.cal.est, c.cal.fov, c.x, c.y, c.z, c.yaw, c.pitch, c.kit, c.item]));
+  useEffect(() => {
+    if (stage !== 3 || !selC || !calLid) { setCalCloud(null); return; }
+    setCalBusy(true);
+    const id = setTimeout(() => {
+      try {
+        const key = JSON.stringify([calLid, d.platform, d.route, d.routeSteps, d.distortion]);
+        if (calCache.current?.key !== key) { const sv = acquireSurvey(factory, { ...d, lidars: [calLid] }, PRACTICE_SEED); calCache.current = { key, cloud: concatClouds(sv.visible.scans.map((s2) => s2.cloud), 'Calibration check') }; }
+        const cloud = calCache.current.cloud, col = colourPoints(cloud.positions, cloud.count, connected.map((c) => ({ unit: c, image: makeSampler(factory, c, HW_SEED, d.cameras.findIndex((x) => x.id === c.id), d.lights), e: c.cal.est, fov: c.cal.fov })));
+        const colors = new Uint8Array(cloud.count * 3); for (let i = 0; i < cloud.count; i++) { if (col.valid[i]) colors.set(col.colors.subarray(i * 3, i * 3 + 3), i * 3); else colors.fill(110, i * 3, i * 3 + 3); } // grey: no connected camera sees the point
+        setCalCloud({ cloud: { ...cloud, colors, instances: undefined }, coloured: col.count, total: cloud.count });
+      } finally { setCalBusy(false); }
+    }, 250); // wait for the slider to settle
+    return () => clearTimeout(id);
+  }, [stage, selC?.id, connSig, calLid?.id, d.lidars, d.lights]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // ---- planning aids
   const scanners = useMemo(() => d.lidars.map(lidarAsScanner), [d.lidars]);
   const cov = useMemo(() => (stage === 2 && scanners.length ? evaluate(scene, scanners) : null), [stage, scanners, scene]);
@@ -239,7 +413,7 @@ export default function TabTwin() {
   const showScene = viewMode !== 'points', showPts = viewMode !== 'scene';
   const viewport = (
     <Viewport home={scene.cameraHome} target={scene.cameraTarget} bgOverride={!showScene ? '#ffffff' : undefined} hideGrid={!showScene} hideAxes>
-      {showScene && <SceneLayer scene={scene} opacity={viewMode === 'both' && stage >= 4 && stage <= 6 ? 0.18 : 0.4} showCeiling={false} interactive={stage === 2} />}
+      {showScene && <SceneLayer scene={scene} opacity={viewMode === 'both' && stage >= 3 && stage <= 6 ? 0.18 : 0.4} showCeiling={false} interactive={stage === 2} />}
       {showPts && stage === 2 && cov && covColours && <SamplePoints samples={cov.samples} colours={covColours} size={3} />}
       {stage <= 3 && <ScannerMarkers scanners={scanners} selected={scanners.findIndex((s2) => d.lidars[s2.id].id === sel) >= 0 ? scanners.findIndex((s2) => d.lidars[s2.id].id === sel) : null} sensorOf={(s2) => sensorOf(s2.preset)} />}
       {stage <= 3 && d.cameras.map((c, i) => <group key={c.id}><Marker p={[c.x, c.y, c.z]} color="#0a84ff" r={0.18} label={`Cam ${i + 1}`} />{c.id === sel && frustum(c, '#0a84ff')}</group>)}
@@ -247,7 +421,12 @@ export default function TabTwin() {
       {stage === 2 && selL && <FovVolume sc={lidarAsScanner(selL, 0)} sensor={sensorOf(lidarItem(selL.item).preset)} color={UNIT_COLOURS[d.lidars.indexOf(selL) % 6]} reach={14} opacity={0.08} />}
       {stage === 2 && d.lidars.some(isMobile) && d.route.length > 1 && <PolyLine pts={d.route.map(([x, y]) => [x, y, 0.2] as Vec3)} color="#ff9f0a" width={3} dashed />}
       {stage === 2 && d.route.map(([x, y], i) => (d.lidars.some(isMobile) || routeMode) ? <Marker key={i} p={[x, y, 0.2]} color="#ff9f0a" r={0.2} label={`${i + 1}`} /> : null)}
-      {showPts && stage === 4 && survey && survey.visible.scans.map((s2, i) => <CloudLayer key={i} cloud={{ ...s2.cloud, scanIds: undefined }} mode="flat" colorOpts={{ flat: hexRgb(UNIT_COLOURS[(s2.mobile ? 0 : i) % 6]) }} size={2} budget={120000} pickable={false} />)}
+      {showPts && stage === 4 && survey && ownFrames && survey.visible.scans.map((s2, i) => { const v = surveyView?.[i]; return v && s2.local.count === v.base.length / 3 ? <CloudLayer key={`o${i}`} cloud={{ ...s2.local, instances: undefined, colors: camColour && v.cam ? v.cam : v.base }} mode="rgb" size={2.5} budget={120000} pickable={false} /> : <CloudLayer key={`o${i}`} cloud={{ ...s2.local, instances: undefined }} mode="flat" colorOpts={{ flat: hexRgb(UNIT_COLOURS[(s2.mobile ? 0 : i) % 6]) }} size={2.5} budget={120000} pickable={false} />; })}
+      {showPts && stage === 4 && surveyView && !ownFrames && surveyView.map((v, i) => <CloudLayer key={i} cloud={{ ...v.cloud, instances: undefined, colors: camColour && v.cam ? v.cam : v.base }} mode="rgb" size={2.5} budget={120000} pickable={false} />)}
+      {showPts && stage === 3 && calCloud && <CloudLayer cloud={calCloud.cloud} mode="rgb" size={3} budget={150000} pickable={false} />}
+      {stage === 3 && selC && calLid && <PolyLine pts={[[selC.x, selC.y, selC.z], [calLid.x, calLid.y, calLid.z]]} color="#ff9f0a" width={3} dashed />}
+      {showPts && stage === 5 && !step && regTest && regTest.clouds.map((c2, i) => <CloudLayer key={i} cloud={{ ...c2, instances: undefined }} mode="flat" colorOpts={{ flat: hexRgb(UNIT_COLOURS[i % 6]) }} size={2.5} budget={120000} pickable={false} />)}
+      {showPts && stage === 5 && !step && !regTest && survey && survey.visible.scans.map((s2, i) => <CloudLayer key={`in${i}`} cloud={{ ...s2.cloud, instances: undefined }} mode="flat" colorOpts={{ flat: hexRgb(UNIT_COLOURS[(s2.mobile ? 0 : i) % 6]) }} size={2.5} budget={60000} pickable={false} />)}
       {showPts && stage === 5 && step?.preview && <CloudLayer cloud={step.preview} mode="height" size={2.5} budget={40000} pickable={false} />}
       {showPts && stage === 6 && practice?.twinPreview && <CloudLayer cloud={practice.twinPreview} mode="height" size={2.5} budget={40000} pickable={false} />}
       {showPts && stage === 6 && showMissing && practice?.tasks.twin.missing && practice.tasks.twin.missing.length > 0 && <CloudLayer cloud={cloudOf(practice.tasks.twin.missing)} mode="flat" colorOpts={{ flat: [255, 69, 58] }} size={3} budget={20000} pickable={false} />}
@@ -423,12 +602,24 @@ export default function TabTwin() {
       case 3: return (
         <>
           <div className="btn-row"><Btn sm onClick={() => T.set({ stage: 1 })}>← Change equipment</Btn></div>
-          <Callout kind="edu" title="Calibrate each camera">
-            <b>Only the cameras are calibrated.</b> The LiDAR knows where each camera <b>should</b> be, but real mounting is never perfect. Calibration finds the camera's <b>position and angles</b> relative to the LiDAR frame (extrinsic) and its <b>field of view</b> (intrinsic). Make the red crosses land on the green squares of the calibration board. A wrong calibration puts the wrong colours on the wrong points. (A LiDAR's own small mounting error is not calibrated here: registering the scans fixes it.)
+          <Callout kind="edu" title="How calibration works: 4 steps">
+            <ol style={{ margin: 0, paddingLeft: '1.2rem', display: 'grid', gap: 3 }}>
+              <li><b>Connect a camera to a LiDAR:</b> drag a wire from the dot of a camera to a LiDAR (or pick a camera and click a LiDAR). Each camera has one LiDAR, and several cameras can share the same one. The pair is your choice (the nearest by default; the orange dashed line in the view joins them). Camera 1 can go with LiDAR 2 if those two are close together.</li>
+              <li><b>Match the red crosses to the green squares</b> on the calibration board (or press the automatic button).</li>
+              <li><b>Watch the view:</b> that LiDAR's points are coloured by this camera. When it is right, colours (the red, green and yellow labels) land on the right objects.</li>
+            </ol>
+            <div className="hint" style={{ marginTop: 6 }}>Only cameras are calibrated. After registration all LiDARs share one frame, so a camera is calibrated once for the whole system; the LiDAR you choose is only the one you watch.</div>
           </Callout>
           {d.cameras.length === 0 ? <p className="hint">You have no cameras. They are optional, but colour-coded labels cannot be read without one.</p> : (
             <>
-              <div className="btn-row" style={{ flexWrap: 'wrap' }} data-testid="twin-cal-list">{d.cameras.map((u, i) => <button key={u.id} className="btn sm" aria-pressed={u.id === sel} onClick={() => T.set({ selectedUnit: u.id })} data-testid={`twin-unit-c${i + 1}`} style={{ borderColor: '#0a84ff', borderWidth: 2, borderStyle: 'solid' }}>Camera {i + 1}{u.cal.done ? ' ✓' : ''}</button>)}</div>
+              <PairBoard cams={d.cameras.map((u) => ({ id: u.id, label: `Camera ${d.cameras.indexOf(u) + 1}`, sub: cameraItem(u.item).name, done: u.cal.done, to: pairedLidar(u)?.id ?? null }))} lids={d.lidars.map((u, i) => ({ id: u.id, label: `LiDAR ${i + 1}`, sub: lidarItem(u.item).name, nearestOf: d.cameras.filter((c) => nearestLidar(c)?.id === u.id).map((c) => c.id) }))} selected={sel} onSelect={(id) => T.set({ selectedUnit: id })} onPair={(cid, lid) => setCalPair((q) => ({ ...q, [cid]: lid }))} />
+              {selC && d.lidars.length > 0 && (
+                <>
+
+                  {calLid && <FovOverlapChart cam={selC} lid={calLid} camNo={d.cameras.indexOf(selC) + 1} lidNo={d.lidars.indexOf(calLid) + 1} dist={fovDist} onDist={setFovDist} />}
+                  <div className="caption" data-testid="twin-cal-colour">{calBusy ? 'Preparing the LiDAR scan and the colours…' : calCloud ? `${connected.length > 1 ? `Cameras ${connected.map((c) => d.cameras.indexOf(c) + 1).join(' + ')} together colour` : `Camera ${d.cameras.indexOf(selC) + 1} colours`} ${calCloud.coloured.toLocaleString()} of ${calCloud.total.toLocaleString()} points of LiDAR ${calLid ? d.lidars.indexOf(calLid) + 1 : ''} (${calCloud.total ? Math.round((100 * calCloud.coloured) / calCloud.total) : 0} %). Grey points are not in ${connected.length > 1 ? 'any of their' : "this camera's"} view.` : ''}</div>
+                </>
+              )}
               {selC ? <CalPanel key={selC.id + JSON.stringify([selC.x, selC.y, selC.z, selC.yaw, selC.pitch, selC.kit])} unit={selC} index={d.cameras.indexOf(selC)} lights={d.lights} onChange={(c) => setDesign((q) => ({ ...q, cameras: q.cameras.map((x) => (x.id === c.id ? c : x)) }))} /> : <p className="hint">Pick a camera above. A ✓ means it is calibrated.</p>}
             </>
           )}
@@ -437,63 +628,164 @@ export default function TabTwin() {
       case 4: return (
         <>
           {budgetBox}
-          <Callout kind="edu" title="Acquire a survey">Every LiDAR measures with range noise, lost returns and a few floating points. Fixed scanners are recorded where you put them, with a small installation error. A mobile scanner only knows its route by dead reckoning, so its scans drift apart. Registration (next stage) can fix both.</Callout>
+          <Callout kind="edu" title="Acquire a survey">Every LiDAR measures with range noise, lost returns and a few floating points. Fixed scanners are recorded where you put them, with a small installation error. A mobile scanner only knows its route by dead reckoning, so its scans drift apart. Registration (a block in your pipeline) joins the scans into one frame.</Callout>
           <Btn variant="primary" icon={<Play size={16} />} onClick={acquire} busy={T.busy === 'Acquiring the survey…'} disabled={!cost.ok} testId="twin-acquire">Acquire the practice survey</Btn>
           {survey && (
-            <table className="table" data-testid="twin-survey"><thead><tr><td>Scan</td><td>Points</td></tr></thead><tbody>
-              {survey.visible.scans.map((s2) => <tr key={s2.index}><td>{s2.name}</td><td className="mono">{s2.cloud.count.toLocaleString()}</td></tr>)}
-              <tr><td><b>All</b></td><td className="mono"><b>{survey.visible.stats.points.toLocaleString()}</b></td></tr>
+            <table className="table" data-testid="twin-survey"><thead><tr><td>Scan</td><td>Points</td><td>Coloured by a camera</td></tr></thead><tbody>
+              {survey.visible.scans.map((s2, i) => <tr key={s2.index}><td>{s2.name}</td><td className="mono">{s2.cloud.count.toLocaleString()}</td><td className="mono">{surveyView?.[i]?.cam ? `${surveyView[i].coloured.toLocaleString()} (${Math.round((100 * surveyView[i].coloured) / Math.max(1, s2.cloud.count))} %)` : d.cameras.length ? '…' : 'no camera'}</td></tr>)}
+              <tr><td><b>All</b></td><td className="mono"><b>{survey.visible.stats.points.toLocaleString()}</b></td><td className="mono"><b>{surveyView ? surveyView.reduce((a, v) => a + v.coloured, 0).toLocaleString() : ''}</b></td></tr>
             </tbody></table>
           )}
+          {survey && <Toggle label="As delivered: each scan in its own coordinate system" checked={ownFrames} onChange={setOwnFrames} hint="A scanner knows nothing about the building: every scan is centred on its own scanner, so they pile up around one point. Turn this off to place them where you put the scanners (roughly). Registration, in the pipeline, joins them properly." />}
+          {survey && d.cameras.length > 0 && <Toggle label="Colour the points that a camera sees" checked={camColour} onChange={setCamColour} hint="Only those points take the camera's colours (with your calibration). The rest stay in their scanner's colour. A camera that is badly calibrated puts the colours in the wrong places." />}
           <p className="hint">Practice survey = Time A. A second survey (Time B, after changes) is taken automatically when your pipeline compares surveys.</p>
         </>
       );
-      case 5: return (
-        <>
-          <Callout kind="edu" title="Build the pipeline">Blocks run in order on the data you measured. Registration first, then cleaning, then objects, then comparisons. A block that needs something earlier tells you what is missing.</Callout>
-          <Section title="Add a block">
-            {GROUPS.map((g) => <div key={g} className="btn-row" style={{ flexWrap: 'wrap', alignItems: 'center' }}><span className="caption" style={{ width: 78 }}>{g}</span>{(Object.keys(BLOCKS) as BlockKind[]).filter((k) => BLOCKS[k].group === g).map((k) => <Btn key={k} sm onClick={() => T.set({ pipeline: [...T.pipeline, newBlock(k)], practice: null })} testId={`twin-add-${k}`} title={BLOCKS[k].help}>{BLOCKS[k].name.replace(/ \(.*\)$/, '')}</Btn>)}</div>)}
-          </Section>
-          <Section title="Your pipeline">
-            {chk.global.map((g) => <div key={g} className="caption" style={{ color: '#ff453a' }}>⚠ {g}</div>)}
-            {T.pipeline.map((b, i) => {
-              const info = BLOCKS[b.kind], err = chk.perBlock[i], st = practice?.steps.find((x) => x.id === b.id);
-              return (
-                <div key={b.id} data-testid={`twin-block-${i + 1}`} style={{ border: `1px solid ${err ? '#ff453a' : 'var(--sep)'}`, borderRadius: 12, padding: 8, display: 'grid', gap: 4, opacity: b.bypass ? 0.55 : 1 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <b style={{ flex: 1, fontSize: '0.875rem' }}>{i + 1}. {info.name}</b>
-                    <button className="btn sm" aria-label="Move up" disabled={i === 0} onClick={() => { const p = [...T.pipeline]; [p[i - 1], p[i]] = [p[i], p[i - 1]]; T.set({ pipeline: p, practice: null }); }}>↑</button>
-                    <button className="btn sm" aria-label="Move down" disabled={i === T.pipeline.length - 1} onClick={() => { const p = [...T.pipeline]; [p[i + 1], p[i]] = [p[i], p[i + 1]]; T.set({ pipeline: p, practice: null }); }}>↓</button>
-                    <button className="btn sm" aria-pressed={!!b.bypass} onClick={() => T.set({ pipeline: T.pipeline.map((x) => (x.id === b.id ? { ...x, bypass: !x.bypass } : x)), practice: null })} data-testid={`twin-bypass-${i + 1}`}>{b.bypass ? 'Bypassed' : 'Bypass'}</button>
-                    <button className="btn sm" aria-label="Remove block" onClick={() => T.set({ pipeline: T.pipeline.filter((x) => x.id !== b.id), practice: null })} data-testid={`twin-remove-${i + 1}`}>✕</button>
+      case 5: {
+        const names = (ks: BlockKind[]) => ks.map((k) => BLOCKS[k].name.replace(/ \(.*\)$/, ''));
+        const has = (kinds: BlockKind[]) => T.pipeline.some((x) => kinds.includes(x.kind) && !x.bypass);
+        const checklist: { ok: boolean; text: string }[] = [
+          { ok: has(['icp', 'mobileicp', 'merge']), text: 'The scans are joined (registration)' },
+          { ok: has(['euclid', 'dbscan']), text: 'Points are grouped into objects' },
+          { ok: has(['classify']), text: 'Objects are named' },
+          { ok: has(['diff', 'objmatch']), text: 'Changes are compared (optional)' },
+          { ok: has(['safety']), text: 'Safety zones are checked (optional)' },
+        ];
+        const setParam = (id: string, k: string, v: number) => T.set({ pipeline: T.pipeline.map((x) => (x.id === id ? { ...x, params: { ...x.params, [k]: v } } : x)), practice: null });
+        const blockCard = (b: (typeof T.pipeline)[number]) => {
+          const i = T.pipeline.indexOf(b), info = BLOCKS[b.kind], err = chk.perBlock[i], st = practice?.steps.find((x) => x.id === b.id), isReg = phaseIndex(b.kind) === 0, open = openBlock === b.id;
+          const phase = phaseIndex(b.kind), samePhase = T.pipeline.filter((x) => phaseIndex(x.kind) === phase), pos = samePhase.indexOf(b);
+          const swap = (d2: number) => { const o = samePhase[pos + d2]; if (!o) return; const p = [...T.pipeline], a2 = p.indexOf(b), b2 = p.indexOf(o); [p[a2], p[b2]] = [p[b2], p[a2]]; T.set({ pipeline: p, practice: null }); };
+          const reg = isReg ? (regTest?.id === b.id ? regTest.report : st?.reg) : undefined;
+          return (
+            <div key={b.id} data-testid={`twin-block-${i + 1}`} style={{ border: `1px solid ${err ? '#ff453a' : 'var(--sep)'}`, borderRadius: 12, padding: 8, display: 'grid', gap: 4, opacity: b.bypass ? 0.55 : 1, background: 'var(--bg-elev, #fff)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <div style={{ flex: 1, minWidth: 0 }}><b style={{ fontSize: '0.875rem' }} title={`From the ${BLOCK_TAB[b.kind]} tab`}>{info.name}</b></div>
+                <button className="btn sm" aria-label="Move up" disabled={pos === 0} onClick={() => swap(-1)} title="Earlier in this phase">↑</button>
+                <button className="btn sm" aria-label="Move down" disabled={pos === samePhase.length - 1} onClick={() => swap(1)} title="Later in this phase">↓</button>
+                <button className="btn sm" aria-pressed={!!b.bypass} onClick={() => T.set({ pipeline: T.pipeline.map((x) => (x.id === b.id ? { ...x, bypass: !x.bypass } : x)), practice: null })} data-testid={`twin-bypass-${i + 1}`} title="Keep it in the list but skip it">{b.bypass ? 'Off' : 'On'}</button>
+                <button className="bill-x" aria-label={`Remove ${info.name}`} title="Remove this block" onClick={() => T.set({ pipeline: T.pipeline.filter((x) => x.id !== b.id), practice: null })} data-testid={`twin-remove-${i + 1}`}>✕</button>
+              </div>
+              <div className="caption">{info.help}</div>
+              {(() => { const cur = st && !st.bypassed && !st.error ? { before: st.before, after: st.after, stale: false } : lastRun[b.id] && !b.bypass ? { ...lastRun[b.id], stale: lastRun[b.id].sig !== blockSig(b) } : null; if (!cur || cur.before === cur.after) return null; const drop = cur.after < cur.before, share = cur.after / Math.max(1, cur.before), pc = Math.round(Math.abs(cur.after - cur.before) / Math.max(1, cur.before) * 100); return (
+                <div className={`pointchange ${drop ? 'down' : 'up'} ${cur.stale ? 'stale' : ''}`} data-testid={`twin-points-${i + 1}`} title={`${cur.before.toLocaleString()} points before this block, ${cur.after.toLocaleString()} after`}>
+                  <span className="pc-line"><span className="pc-badge">{drop ? '▼' : '▲'} {drop ? '−' : '+'}{pc} %</span><span className="pc-nums">{cur.before.toLocaleString()} → {cur.after.toLocaleString()} points{cur.stale ? ' · test again' : ''}</span></span>
+                  <span className="pc-bar" aria-hidden="true"><i style={{ width: `${Math.max(2, Math.min(100, share * 100))}%` }} /></span>
+                </div>); })()}
+              {(() => {
+                const pk = st && !st.bypassed ? st.pick : lastPick[b.id]; if (!pk || b.bypass || !pk.items.length) return null;
+                const off = b.off ?? [], setOff = (n: string[]) => { T.set({ pipeline: T.pipeline.map((x) => (x.id === b.id ? { ...x, off: n } : x)), practice: null }); setRerunAt(Date.now()); };
+                return (
+                  <div className="picklist" data-testid={`twin-pick-${i + 1}`}>
+                    <div className="picklist-head"><b>{pk.mode === 'remove' ? `${pk.items.length} planes found` : `${pk.items.length + pk.hidden} clusters found`}</b><span>tick the ones to {pk.mode === 'remove' ? 'remove' : 'keep'}</span>
+                      <button type="button" className="picklist-all" onClick={() => setOff([])}>All</button><button type="button" className="picklist-all" onClick={() => setOff(pk.items.map((x) => x.key))} data-testid={`twin-pick-none-${i + 1}`}>None</button></div>
+                    <ul>{pk.items.map((it, k) => <li key={it.key}><label><input type="checkbox" checked={!off.includes(it.key)} onChange={(e) => setOff(e.target.checked ? off.filter((x) => x !== it.key) : [...off, it.key])} data-testid={`twin-pick-${i + 1}-${k + 1}`} /><span className="pk-name">{it.label}</span><small>{it.pts.toLocaleString()} pts</small></label></li>)}</ul>
+                    {pk.hidden > 0 && <div className="caption">{pk.hidden} smaller clusters are not listed.</div>}
                   </div>
-                  <div className="caption">{info.in} → {info.out}</div>
-                  {err && <div className="caption" style={{ color: '#ff453a' }} data-testid={`twin-block-error-${i + 1}`}>⚠ {err}</div>}
-                  {st && !st.bypassed && st.note && <div className="caption">{st.before.toLocaleString()} → {st.after.toLocaleString()} points · {st.note} · {st.ms.toFixed(0)} ms</div>}
-                  {info.params.map((p) => p.options
-                    ? <Select<string> key={p.key} label={p.label} value={String(b.params[p.key] ?? p.def)} options={p.options.map((o) => ({ value: String(o.value), label: o.label }))} onChange={(v) => T.set({ pipeline: T.pipeline.map((x) => (x.id === b.id ? { ...x, params: { ...x.params, [p.key]: Number(v) } } : x)), practice: null })} hint={p.hint} />
-                    : <Slider key={p.key} label={p.label} value={b.params[p.key] ?? p.def} min={p.min} max={p.max} step={p.step} unit={p.unit} format={(v) => (p.step < 1 ? v.toFixed(p.step < 0.05 ? 2 : 1) : String(v))} onChange={(v) => T.set({ pipeline: T.pipeline.map((x) => (x.id === b.id ? { ...x, params: { ...x.params, [p.key]: v } } : x)), practice: null })} hint={p.hint} />)}
+                );
+              })()}
+              {canRunParallel(b.kind) && (
+                <div className="seg" role="group" aria-label="How this block runs" style={{ justifySelf: 'start' }}>
+                  <button aria-pressed={!b.parallel} onClick={() => T.set({ pipeline: T.pipeline.map((x) => (x.id === b.id ? { ...x, parallel: false } : x)), practice: null })} data-testid={`twin-seq-${i + 1}`} title="Runs after the block before it">In sequence</button>
+                  <button aria-pressed={!!b.parallel} onClick={() => T.set({ pipeline: T.pipeline.map((x) => (x.id === b.id ? { ...x, parallel: true } : x)), practice: null })} data-testid={`twin-par-${i + 1}`} title="Runs at the same time as the parallel blocks next to it; their results are joined">In parallel</button>
                 </div>
-              );
-            })}
-            <div className="btn-row"><Btn sm onClick={() => T.set({ pipeline: DEFAULT_PIPELINE(), practice: null })}>Start-up pipeline</Btn><Btn sm onClick={() => T.set({ pipeline: [], practice: null })}>Clear</Btn></div>
-          </Section>
-          <Btn variant="primary" icon={<Play size={16} />} onClick={runPractice} busy={!!T.busy} disabled={!cost.ok || !chk.ok} testId="twin-run">Run practice</Btn>
-          {!chk.ok && <p className="hint">Fix the warnings above to run.</p>}
-          {practice && (
-            <Section title="Step by step">
-              <table className="table" data-testid="twin-steps"><thead><tr><td>Block</td><td>Points</td></tr></thead><tbody>
-                {practice.steps.map((s2, i) => <tr key={i} style={{ cursor: s2.preview ? 'pointer' : 'default', background: T.selectedStep === i ? 'rgba(10,132,255,.12)' : undefined }} onClick={() => s2.preview && T.set({ selectedStep: i })}><td>{BLOCKS[s2.kind].name.replace(/ \(.*\)$/, '')}{s2.error ? ' ⚠' : ''}</td><td className="mono">{s2.bypassed ? 'bypassed' : `${s2.before.toLocaleString()} → ${s2.after.toLocaleString()}`}</td></tr>)}
-              </tbody></table>
-              <p className="hint">Click a row to see the cloud after that block.</p>
+              )}
+              {err && <div className="caption" style={{ color: '#ff453a' }} data-testid={`twin-block-error-${i + 1}`}>⚠ {err}</div>}
+              {st && !st.bypassed && st.note && <div className="caption" style={{ color: '#30a14e' }}>Last run: {st.before === st.after ? `${st.after.toLocaleString()} points (unchanged) · ` : ''}{st.note}</div>}
+              {info.params.length > 0 && <button className="btn sm" onClick={() => setOpenBlock(open ? null : b.id)} aria-expanded={open} data-testid={`twin-settings-${i + 1}`} style={{ justifySelf: 'start' }}>{open ? '▾ Hide settings' : '▸ Settings'}</button>}
+              {open && info.params.map((p) => p.options
+                ? <Select<string> key={p.key} label={p.label} value={String(b.params[p.key] ?? p.def)} options={p.options.map((o) => ({ value: String(o.value), label: o.label }))} onChange={(v) => setParam(b.id, p.key, Number(v))} hint={p.hint} />
+                : <Slider key={p.key} label={p.label} value={b.params[p.key] ?? p.def} min={p.min} max={p.max} step={p.step} unit={p.unit} format={(v) => (p.step < 1 ? v.toFixed(p.step < 0.05 ? 2 : 1) : String(v))} onChange={(v) => setParam(b.id, p.key, v)} hint={p.hint} />)}
+              {isReg && (
+                <div style={{ display: 'grid', gap: 4 }}>
+                  <Btn sm variant="primary" onClick={() => testRegistration(b)} busy={regBusy} disabled={b.bypass || !!err} testId={`twin-test-reg-${i + 1}`}>Test this registration</Btn>
+                  {reg && Number.isFinite(reg.rmse) && (
+                    <div data-testid="twin-reg-result" style={{ display: 'grid', gap: 3 }}>
+                      <div style={{ fontWeight: 650 }}>RMSE <span className="mono">{(reg.rmse * 100).toFixed(1)} cm</span> · overlap <span className="mono">{Math.round(reg.overlap * 100)} %</span> · <span style={{ color: reg.rmse < 0.03 && reg.overlap > 0.3 ? '#30a14e' : reg.rmse < 0.06 ? '#b36b00' : '#ff453a' }}>{reg.rmse < 0.03 && reg.overlap > 0.3 ? 'Excellent' : reg.rmse < 0.06 ? 'Fair: keep tuning' : 'Poor: scans do not fit'}</span></div>
+                      <table className="table"><thead><tr><td>Scan</td><td>RMSE before → after</td><td>Overlap</td></tr></thead><tbody>{reg.scans.map((s2) => <tr key={s2.name}><td>{s2.name}{!s2.accepted && reg.mode !== 'merge' ? ' ⚠' : ''}</td><td className="mono">{(s2.rmseBefore * 100).toFixed(1)} → {(s2.rmseAfter * 100).toFixed(1)} cm</td><td className="mono">{Math.round(s2.overlapAfter * 100)} %</td></tr>)}</tbody></table>
+                      <div className="caption">RMSE = how far apart matching points of two scans still are. Lower is better. Judged the same way whatever match distance you choose. These settings are used in your evaluation.</div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        };
+        const groups = parallelGroups(T.pipeline);
+        /** one phase: its blocks one after the other (↓), with runs of parallel blocks side by side between a fork and a join */
+        const laneBody = (ph: (typeof PHASES)[number], pi: number) => {
+          const inPhase = T.pipeline.filter((x) => phaseIndex(x.kind) === pi), items: ReactNode[] = [];
+          for (let k = 0; k < inPhase.length;) {
+            const g = groups[T.pipeline.indexOf(inPhase[k])];
+            if (g >= 0) {
+              let j = k; while (j < inPhase.length && groups[T.pipeline.indexOf(inPhase[j])] === g) j++;
+              items.push(<div key={`g${k}`} className="pipe-par" data-testid="twin-parallel-group"><div className="pipe-par-label">⑂ at the same time · results joined</div><div className="pipe-par-row" style={{ gridTemplateColumns: `repeat(${j - k}, minmax(0, 1fr))` }}>{inPhase.slice(k, j).map(blockCard)}</div><div className="pipe-par-label">⑃ joined: {ph.id === 'compare' ? 'findings combined' : 'points kept by every block'}</div></div>);
+              k = j;
+            } else { items.push(blockCard(inPhase[k])); k++; }
+            if (k < inPhase.length) items.push(<div key={`a${k}`} className="pipe-arrow" aria-hidden="true">↓</div>);
+          }
+          return (
+            <>
+              {items}
+              <select aria-label={`Add to phase ${pi + 1}`} value="" onChange={(e) => { if (e.target.value) T.set({ pipeline: insertBlock(T.pipeline, newBlock(e.target.value as BlockKind)), practice: null }); }} data-testid={`twin-add-phase-${pi + 1}`}>
+                <option value="">+ Add a block…</option>
+                {[...new Set(ph.kinds.map((k) => BLOCK_TAB[k]))].map((tab) => <optgroup key={tab} label={`From ${tab}`}>{ph.kinds.filter((k) => BLOCK_TAB[k] === tab).map((k) => <option key={k} value={k}>{BLOCKS[k].name}</option>)}</optgroup>)}
+              </select>
+            </>
+          );
+        };
+        const lanesView = (wide: boolean) => (
+          <div className={wide ? 'pipe-cols' : 'pipe-stack'} data-testid={wide ? 'twin-lanes-wide' : 'twin-lanes'}>
+            {PHASES.map((ph, pi) => (
+              <Fragment key={ph.id}>
+                <div className={`pipe-lane ${T.pipeline.some((x) => phaseIndex(x.kind) === pi) ? 'has' : ''}`} data-testid={`twin-phase-${pi + 1}`}>
+                  <div className="pipe-lane-head"><b>{ph.title}</b>{ph.required && <span className="pipe-req">required</span>}<div className="caption">{ph.why}</div></div>
+                  {laneBody(ph, pi)}
+                </div>
+                {pi < PHASES.length - 1 && <div className="pipe-link" aria-hidden="true"><span>{wide ? '→' : '↓'}</span></div>}
+              </Fragment>
+            ))}
+          </div>
+        );
+        const expandedView = pipeExpanded && createPortal(
+          <div className="pipe-overlay" role="dialog" aria-label="Pipeline builder (expanded)" data-testid="twin-pipe-overlay">
+            <div className="pipe-overlay-head">
+              <div style={{ flex: 1, minWidth: 260 }}><b style={{ fontSize: '1.15rem' }}>Your pipeline</b>
+                <div className="caption">Each phase feeds the next (→). Inside a phase, blocks run one after another (↓), or side by side when you set them to parallel.</div></div>
+              <Btn sm variant="primary" icon={<Play size={14} />} onClick={runPractice} busy={!!T.busy} disabled={!cost.ok || !chk.ok} testId="twin-run-wide">Run practice</Btn>
+              <Btn sm onClick={() => setPipeExpanded(false)} testId="twin-collapse-builder">Collapse ⤡</Btn>
+            </div>
+            <div data-testid="twin-checklist-wide" className="pipe-chips">{checklist.map((c) => <span key={c.text} className={`pipe-chip ${c.ok ? 'ok' : ''}`}>{c.ok ? '✓' : '○'} {c.text}</span>)}</div>
+            {lanesView(true)}
+          </div>, document.body);
+        return (
+          <>
+            {expandedView}
+            <Callout kind="edu" title="Build your pipeline: 5 phases, top to bottom">You build it yourself, block by block. Work down the phases. Each block does one job; the phases keep the blocks in a sensible order for you. Registration is first because every scan arrives in <b>its own scanner's coordinate system</b>. When the checklist is ready, press <b>Run practice</b>.</Callout>
+            <div className="btn-row" style={{ flexWrap: 'wrap' }}>
+              <Btn variant="primary" icon={<Play size={16} />} onClick={runPractice} busy={!!T.busy} disabled={!cost.ok || !chk.ok} testId="twin-run">Run practice</Btn>
+              <Btn sm onClick={() => setPipeExpanded(true)} testId="twin-expand-builder" title="Open the builder full size">Expand ⤢</Btn>
+              <Btn sm onClick={() => T.set({ pipeline: [], practice: null })}>Clear</Btn>
+            </div>
+            <div data-testid="twin-checklist" style={{ display: 'grid', gap: 2 }}>{checklist.map((c) => <div key={c.text} className="caption" style={{ color: c.ok ? '#30a14e' : undefined }}>{c.ok ? '✓' : '○'} {c.text}</div>)}</div>
+            {chk.global.map((g) => <div key={g} className="caption" style={{ color: '#ff453a' }}>⚠ {g}</div>)}
+            {!chk.ok && !chk.global.length && <p className="hint">Fix the ⚠ messages in the blocks below to run.</p>}
+            {pipeExpanded ? <p className="hint" data-testid="twin-expanded-note">The builder is open full size. Press Collapse to bring it back here.</p> : lanesView(false)}
+            {practice && (
+              <Section title="What each block did">
+                <table className="table" data-testid="twin-steps"><thead><tr><td>Block</td><td>Points</td></tr></thead><tbody>
+                  {practice.steps.map((s2, i) => <tr key={i} style={{ cursor: s2.preview ? 'pointer' : 'default', background: T.selectedStep === i ? 'rgba(10,132,255,.12)' : undefined }} onClick={() => s2.preview && T.set({ selectedStep: i })}><td>{BLOCKS[s2.kind].name.replace(/ \(.*\)$/, '')}{s2.error ? ' ⚠' : ''}</td><td className="mono">{s2.bypassed ? 'off' : `${s2.before.toLocaleString()} → ${s2.after.toLocaleString()}`}</td></tr>)}
+                </tbody></table>
+                <p className="hint">Click a row to see the points after that block, in the 3D view.</p>
+              </Section>
+            )}
+            <Section title="Saved pipelines" open={false}>
+              <div className="btn-row"><input aria-label="Pipeline name" value={pname} onChange={(e) => setPname(e.target.value)} style={{ flex: 1 }} /><Btn sm onClick={() => T.set({ saved: [...T.saved.filter((x) => x.name !== pname), { name: pname, blocks: T.pipeline }] })} testId="twin-save-pipe">Save</Btn></div>
+              {T.saved.map((sv) => <div key={sv.name} className="btn-row"><Btn sm onClick={() => T.set({ pipeline: sv.blocks, practice: null })}>{sv.name}</Btn><Btn sm onClick={() => T.set({ saved: T.saved.filter((x) => x.name !== sv.name) })}>✕</Btn></div>)}
             </Section>
-          )}
-          <Section title="Saved pipelines" open={false}>
-            <div className="btn-row"><input aria-label="Pipeline name" value={pname} onChange={(e) => setPname(e.target.value)} style={{ flex: 1 }} /><Btn sm onClick={() => T.set({ saved: [...T.saved.filter((x) => x.name !== pname), { name: pname, blocks: T.pipeline }] })} testId="twin-save-pipe">Save</Btn></div>
-            {T.saved.map((sv) => <div key={sv.name} className="btn-row"><Btn sm onClick={() => T.set({ pipeline: sv.blocks, practice: null })}>{sv.name}</Btn><Btn sm onClick={() => T.set({ saved: T.saved.filter((x) => x.name !== sv.name) })}>✕</Btn></div>)}
-          </Section>
-        </>
-      );
+          </>
+        );
+      }
       case 6: return !practice ? <><p className="hint">Run the practice pipeline first (stage 6).</p><Btn onClick={() => T.set({ stage: 5 })}>Go to the pipeline</Btn></> : (
         <>
           <Callout kind="edu" title="Your digital twin">The cloud before any wall or object removal, compared with the true surfaces below 3 m. <b style={{ color: '#ff453a' }}>Red dots</b> are true surfaces your cloud does not cover.</Callout>
@@ -604,13 +896,30 @@ export default function TabTwin() {
     : taskTab === 'change' ? [...practice.truth.changes.map((c) => ({ x: c.centre[0], y: c.centre[1], color: '#30d158', r: 5 })), ...practice.found.changes.map((c) => ({ x: c.centre[0], y: c.centre[1], color: '#ff9f0a', r: 3 }))] : []) : [];
   const planLayers = { ...basePlan, markers: [...basePlan.markers, ...taskMarks] };
   const stats = stage >= 1 ? [
-    { group: 'Budget', k: 'Cost', v: `${cost.total}`, s: `of ${T.settings.budget} credits` }, { group: 'Budget', k: 'Left', v: `${cost.remaining}`, s: 'credits' },
-    { group: 'Equipment', k: 'LiDARs', v: String(d.lidars.length) }, { group: 'Equipment', k: 'Cameras', v: String(d.cameras.length) },
+    { group: 'Budget & equipment', k: 'Cost', v: `${cost.total}`, s: `of ${T.settings.budget}` }, { group: 'Budget & equipment', k: 'Left', v: `${cost.remaining}`, s: 'credits' },
+    { group: 'Budget & equipment', k: 'LiDARs', v: String(d.lidars.length) }, { group: 'Budget & equipment', k: 'Cameras', v: String(d.cameras.length) },
     ...(stage === 2 && cov ? [{ group: 'LiDAR coverage', k: 'Observed', v: pct(cov.stats.coverage) }, { group: 'LiDAR coverage', k: 'Seen twice+', v: pct(cov.stats.overlap) }, { group: 'LiDAR coverage', k: 'Unobserved', v: pct(cov.stats.unobserved) }] : []),
-    ...(practice ? [{ group: 'Result', k: 'Practice score', v: practice.grade.total.toFixed(1), s: 'out of 100' }] : []),
+    ...(practice ? [{ group: 'Result', k: 'Practice score', v: <ScoreMeter value={practice.grade.total} tasks={practice.grade.perTask} /> }] : []),
   ] : undefined;
   const legend = stage === 2 ? [{ color: HEAT[0], label: 'No LiDAR sees it' }, { color: HEAT[1], label: 'One LiDAR' }, { color: HEAT[2], label: 'Two or more' }] : stage === 6 ? [{ color: '#ff453a', label: 'True surface not covered' }] : stage === 7 ? [{ color: '#30d158', label: 'Found' }, { color: '#ff9f0a', label: 'Misnamed' }, { color: '#ff453a', label: 'Missed' }] : ZONES.map((z, i) => ({ color: ['#c7a28a', '#9ab', '#8ac', '#bb9', '#667'][i], label: z.name }));
   void STATUS_COLOURS;
-  return <TabFrame title="Industrial Digital Twin Challenge" tab={17} viewport={viewport} controls={controls} learn={null} noPanelTabs noEnv stats={stats} overlays={<>{stage >= 2 && <div className="overlay glass card" style={{ left: 12, top: 10, width: planOpen ? 268 : 'auto', padding: 6 }} data-testid="twin-plan"><div className="plan-head"><b>Plan</b><button className="stats-toggle" onClick={() => setPlanOpen((o) => !o)} aria-expanded={planOpen} title={planOpen ? 'Fold the plan away' : 'Show the plan'} data-testid="twin-plan-toggle">{planOpen ? 'Hide' : 'Show'}</button></div>{planOpen && <Plan2D scene={scene} height={176} onClick={stage === 2 ? place : undefined} layers={planLayers} />}</div>}<KindLegend items={legend} top={66} side={stage >= 2 ? 'right' : 'left'} /></>}
+  return <TabFrame title="Industrial Digital Twin Challenge" tab={17} viewport={viewport} controls={controls} learn={null} noPanelTabs noEnv stats={stats} overlays={<>{stage === 5 && (() => {
+    const why = !cost.ok ? cost.errors[0] : chk.global[0] ?? (chk.perBlock.find(Boolean) as string | undefined) ?? (T.pipeline.length ? '' : 'Add a registration block to begin.'), withView = practice ? practice.steps.map((x, i) => (x.preview ? i : -1)).filter((i) => i >= 0) : [], at = withView.indexOf(T.selectedStep), go = (d2: number) => { if (!withView.length) return; const n = at < 0 ? (d2 > 0 ? 0 : withView.length - 1) : at + d2; if (n >= 0 && n < withView.length) T.set({ selectedStep: withView[n] }); };
+    const cur = practice && T.selectedStep >= 0 ? practice.steps[T.selectedStep] : null;
+    return (
+      <div className="overlay glass card canvas-run" data-testid="twin-canvas-run">
+        <Btn variant="primary" sm icon={<Play size={14} />} onClick={runPractice} busy={!!T.busy} disabled={!cost.ok || !chk.ok} testId="twin-run-canvas" title={why || 'Run the practice survey through your blocks and see the result here'}>Test pipeline</Btn>
+        <label className="canvas-run-auto" title="Run the test again a moment after every change to your blocks"><input type="checkbox" checked={autoTest} onChange={(e) => setAutoTest(e.target.checked)} data-testid="twin-auto-test" /> Auto</label>
+        {why ? <span className="canvas-run-note warn" data-testid="twin-canvas-why">{why}</span>
+          : practice && withView.length ? (
+            <span className="canvas-run-steps" data-testid="twin-canvas-steps">
+              <button className="canvas-run-nav" aria-label="Previous block" disabled={at <= 0 && T.selectedStep >= 0} onClick={() => go(-1)}>‹</button>
+              <span className="canvas-run-note">{cur ? <>After <b>{BLOCKS[cur.kind].name.replace(/ \(.*\)$/, '')}</b>: {cur.after.toLocaleString()} points</> : 'Step through the blocks'}</span>
+              <button className="canvas-run-nav" aria-label="Next block" disabled={at >= withView.length - 1} onClick={() => go(1)}>›</button>
+            </span>
+          ) : <span className="canvas-run-note">Add blocks, then test them here.</span>}
+      </div>
+    );
+  })()}{stage >= 2 && <div className="overlay glass card" style={{ left: 12, top: 10, width: planOpen ? 268 : 'auto', padding: 6 }} data-testid="twin-plan"><div className="plan-head"><b>Plan</b><button className="stats-toggle" onClick={() => setPlanOpen((o) => !o)} aria-expanded={planOpen} title={planOpen ? 'Fold the plan away' : 'Show the plan'} data-testid="twin-plan-toggle">{planOpen ? 'Hide' : 'Show'}</button></div>{planOpen && <Plan2D scene={scene} height={176} onClick={stage === 2 ? place : undefined} layers={planLayers} />}</div>}<KindLegend items={legend} top={66} side={stage >= 2 ? 'right' : 'left'} /></>}
     viewExtras={<Seg<'scene' | 'points' | 'both'> value={viewMode} onChange={setViewMode} block={false} label="What the 3D view shows" options={[{ value: 'scene', label: 'Scene' }, { value: 'points', label: 'Points' }, { value: 'both', label: 'Both' }]} />} />;
 }

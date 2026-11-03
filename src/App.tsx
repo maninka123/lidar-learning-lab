@@ -1,5 +1,5 @@
 import { Fragment, Suspense, lazy, useState, ReactNode } from 'react';
-import { Layers, PanelLeft, Radar, Info, Boxes, Route, GitMerge, Filter, Network, Camera, Share2, Ruler, Eye, Wand, Crosshair, Target, Trophy } from './ui/icons';
+import { Layers, PanelLeft, Radar, Info, Boxes, Route, GitMerge, Filter, Network, Camera, Share2, Ruler, Eye, Wand, Crosshair, Target, Trophy, Heart } from './ui/icons';
 import { useLab } from './state/store';
 import { Toast } from './ui/shared';
 import { ReadySignal } from './intro/ready';
@@ -11,6 +11,7 @@ const TabCmp = lazy(() => import('./tabs/TabCompareSensors'));
 import { registerTabLabels } from './tabs/nav';
 const TabOcc = lazy(() => import('./tabs/TabOcclusion'));
 const TabTwin = lazy(() => import('./tabs/TabTwin'));
+const TabThanks = lazy(() => import('./tabs/TabThanks'));
 const TabMap = lazy(() => import('./tabs/TabMapping'));
 const TabTls = lazy(() => import('./tabs/TabTls'));
 const TabFusion = lazy(() => import('./tabs/TabFusion'));
@@ -45,6 +46,7 @@ const TABS: { label: string; icon: ReactNode; el: ReactNode }[] = [
   { label: 'Scan to CAD', icon: <Ruler size={18} />, el: <TabCad /> },
   { label: 'Image to 3D', icon: <Camera size={18} />, el: <Tab7 /> },
   { label: 'Industrial Digital Twin Challenge', icon: <Trophy size={18} />, el: <TabTwin /> },
+  { label: 'Thank You', icon: <Heart size={18} />, el: <TabThanks /> },
 ];
 
 /** From this tab on, the lessons are applications: optional extras that put the earlier ideas to work. */
@@ -52,6 +54,7 @@ registerTabLabels(TABS.map((x) => x.label));
 const APPS_FROM = TABS.findIndex((x) => x.label === 'Scan to CAD');
 /** The final challenge stands apart: a line above it, no group label. */
 const FINAL_AT = TABS.findIndex((x) => x.label === 'Industrial Digital Twin Challenge');
+const THANKS_AT = TABS.findIndex((x) => x.label === 'Thank You');
 
 export default function App() {
   const tab = useLab((s) => s.tab);
@@ -72,6 +75,7 @@ export default function App() {
         {TABS.map((t, i) => (
           <Fragment key={t.label}>
             {i === FINAL_AT && <div className="nav-sep" data-testid="nav-final-sep" />}
+            {i === THANKS_AT && <div className="nav-sep" data-testid="nav-thanks-sep" />}
             {i === APPS_FROM && <><div className="nav-sep" /><div className="nav-group nav-label" data-testid="nav-apps"><b>Applications</b><span>optional</span></div></>}
             <button className="nav-item" aria-current={tab === i ? 'page' : undefined} onClick={() => setTab(i)} data-testid={`nav-${i}`} title={t.label}>
             <span className="nav-num">{i + 1}</span>

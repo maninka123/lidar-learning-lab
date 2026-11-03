@@ -13,7 +13,7 @@
 <header>
   <div class="brand"><span class="logo" aria-hidden="true"></span><div><h1>Workshop control</h1><small>LiDAR Learning Lab · times in Australia/Sydney</small></div></div>
   <div class="tools">
-    <div class="seg" role="group" aria-label="Theme" id="themeSeg"><button data-theme-set="system" aria-pressed="true">System</button><button data-theme-set="light" aria-pressed="false">Light</button><button data-theme-set="dark" aria-pressed="false">Dark</button></div>
+    <div class="seg" role="group" aria-label="Theme" id="themeSeg"><button data-theme-set="system" aria-pressed="true" aria-label="Match the system" title="System"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg></button><button data-theme-set="light" aria-pressed="false" aria-label="Light" title="Light"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg></button><button data-theme-set="dark" aria-pressed="false" aria-label="Dark" title="Dark"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg></button></div>
     <button id="logout" class="btn sm hidden">Log out</button>
   </div>
 </header>
@@ -29,7 +29,11 @@
     </form>
   </section>
 
-  <nav id="viewBar" class="hidden" aria-label="Sections" style="margin-bottom:14px"><div class="seg" role="group" aria-label="Section"><button data-view="workshop" aria-pressed="true">Workshop</button><button data-view="challenge" aria-pressed="false" id="chTab">Challenge scores</button></div></nav>
+  <nav id="viewBar" class="hidden" aria-label="Sections"><div class="seg tabs" role="group" aria-label="Section">
+    <button data-view="workshop" aria-pressed="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12a8 8 0 0 1 16 0"/><path d="M7.5 12a4.5 4.5 0 0 1 9 0"/><circle cx="12" cy="12" r="1.2"/><path d="M12 13.5V20"/></svg><span class="full">Workshop</span><span class="short">Workshop</span></button>
+    <button data-view="challenge" aria-pressed="false" id="chTab"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 4h8v6a4 4 0 0 1-8 0z"/><path d="M8 6H4v2a4 4 0 0 0 4 4M16 6h4v2a4 4 0 0 1-4 4M12 14v4M8 21h8"/></svg><span class="full">Challenge scores</span><span class="short">Scores</span></button>
+    <button data-view="feedback" aria-pressed="false" id="fbTab"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20.5l1.4-4.6A8 8 0 1 1 21 12z"/><path d="M8.5 11h7M8.5 14h4"/></svg><span class="full">Feedback &amp; Insights</span><span class="short">Feedback</span></button>
+  </div></nav>
 
   <div id="app" class="hidden layout">
   <div class="stack">
@@ -129,9 +133,50 @@
       </div>
       <div class="row"><button id="chRefresh" class="btn sm">Refresh</button><button id="chCsv" class="btn sm">Download CSV</button><button id="chClear" class="btn sm danger">Delete all scores</button></div>
       <div class="scroll"><table id="chTable"><thead><tr><th>Sent</th><th>Name</th><th>Index</th><th>From</th><th class="num">Score</th><th>Tasks</th><th class="num">Cost</th><th class="num">Tries</th><th></th></tr></thead><tbody id="chRows"></tbody></table></div>
-      <p class="faint">“From” shows the IP address of the computer that sent it, the approximate city and country, and the network name. A red mark means that computer (same IP address, or the same browser) sent scores under more than one index number: use it to spot one person submitting for several students. A shared IP address can also be a whole lab or a campus network, so check the browser mark (the second one) before drawing conclusions. Same network = same tag: label it once (for example “Campus Wi-Fi” or “Home”) in the Networks table and every record from it shows that name, so you can see at a glance who sent from the university and who from home. Scores are kept until you delete them.</p>
+      <p class="faint">A red row means the same computer (same IP address or browser) sent scores under more than one index number: look for one person sending for several students. A whole lab or campus can share an IP address, so check the names. “Name” labels a network once (for example “Campus Wi-Fi” or “Home”) and every record from it shows that name. Scores are kept until you delete them.</p>
     </section>
-    <section class="card"><div class="card-head"><h2>Networks</h2><span class="faint">where scores came from</span></div><div class="scroll"><table><thead><tr><th>Network</th><th>IP address</th><th>Label</th><th>Place</th><th class="num">Students</th><th class="num">Records</th><th></th></tr></thead><tbody id="chNets"></tbody></table></div></section>
+  </section>
+  <section id="fbView" class="hidden stack" aria-label="Feedback and insights">
+    <section class="card">
+      <div class="card-head"><div><span class="kicker">Thank You tab</span><h2>Feedback &amp; Insights</h2></div><span class="faint" id="fbRetention"></span></div>
+      <p class="muted">Anonymous responses from students. Understanding is <b>self-reported</b>: it shows how students feel they changed, not a measured gain in knowledge.</p>
+      <div class="grid g5" id="fbTiles"></div>
+      <div class="row"><button id="fbRefresh" class="btn sm">Refresh</button></div>
+    </section>
+    <section class="card hidden" id="fbEmpty"><h3>No feedback yet</h3><p class="muted">Responses appear here as soon as students send them from the Thank You tab. Nothing on this page is example data.</p></section>
+    <div id="fbBody" class="stack">
+      <section class="card">
+        <div class="card-head"><div><span class="kicker">Before and after</span><h2>How students' understanding changed</h2></div></div>
+        <div class="fbchart-wrap"><div id="fbChart"></div><div class="legend"><span><i class="before"></i>Before using the lab</span><span><i class="after"></i>After using the lab</span></div></div>
+        <div class="scroll"><table><thead><tr><th>Area</th><th class="num">Responses</th><th class="num">Before</th><th class="num">After</th><th class="num">Avg change</th><th class="num">Improved</th><th class="num">No change</th><th class="num">Decreased</th><th></th></tr></thead><tbody id="fbTable"></tbody></table></div>
+        <p class="faint" id="fbNote"></p>
+        <details><summary>Rating distributions (1 to 5)</summary><div class="distgrid" id="fbDist"></div></details>
+      </section>
+      <div class="grid g2x">
+        <section class="card"><div class="card-head"><div><span class="kicker">Learning experience</span><h2>Simulation helpfulness</h2></div></div><div id="fbHelp"></div></section>
+        <section class="card"><div class="card-head"><div><span class="kicker">Overall</span><h2>Improved, same or lower</h2></div></div><div id="fbChange"></div><span class="kicker" style="margin-top:14px;display:block">Submissions per day (UTC)</span><div id="fbTrend"></div></section>
+      </div>
+      <section class="card"><div class="card-head"><div><span class="kicker">Most useful part</span><h2>Which module helped most</h2></div></div><div id="fbModules" class="hbars"></div></section>
+      <section class="card"><div class="card-head"><div><span class="kicker">Comments</span><h2>Words that come up most</h2></div></div><div id="fbWords"></div><p class="faint">A plain count of words that appear in at least two comments. It is not an AI summary, and no comment leaves this server.</p></section>
+    </div>
+    <section class="card">
+      <div class="card-head"><div><span class="kicker">Individual responses</span><h2>Browse, filter and manage</h2></div></div>
+      <div class="row">
+        <label style="flex:1;min-width:170px">Search suggestions<input id="fbSearch" placeholder="e.g. registration" autocomplete="off"></label>
+        <label style="width:230px">Most useful<select id="fbMod"></select></label>
+        <label style="width:150px">Helpfulness<select id="fbHelpF"><option value="">Any</option><option value="5">5</option><option value="4">4</option><option value="3">3</option><option value="2">2</option><option value="1">1</option></select></label>
+        <label style="width:150px">From<input id="fbFrom" type="date"></label>
+        <label style="width:150px">To<input id="fbTo" type="date"></label>
+        <label style="width:140px">Sort<select id="fbSort"><option value="new">Newest first</option><option value="old">Oldest first</option></select></label>
+      </div>
+      <div class="row"><button id="fbReset" class="btn sm">Clear filters</button><button id="fbExportF" class="btn sm">Export filtered</button><button id="fbExportA" class="btn sm">Export all (CSV)</button></div>
+      <div id="fbBulk" class="row hidden bulk"><b id="fbBulkN"></b><button id="fbBulkDel" class="btn sm danger">Delete selected</button><button id="fbBulkClear" class="btn sm">Clear selection</button></div>
+      <div class="scroll"><table id="fbTbl"><thead><tr><th><input type="checkbox" id="fbAll" aria-label="Select all on this page"></th><th>Sent</th><th class="num">Before</th><th class="num">After</th><th class="num">Change</th><th class="num">Helpful</th><th>Most useful</th><th>Suggestions</th><th></th></tr></thead><tbody id="fbRows"></tbody></table></div>
+      <div class="row" id="fbPager"></div>
+      <details class="danger-zone"><summary>Danger zone</summary><p class="muted">Remove every feedback response permanently.</p><button id="fbClearAll" class="btn sm danger">Delete all feedback…</button></details>
+    </section>
+    <dialog id="fbDetail" class="dlg" aria-labelledby="fbdT"><h3 id="fbdT">Response</h3><div id="fbdBody" class="stack"></div><div class="row end"><button id="fbdDel" class="btn danger">Delete</button><button id="fbdClose" class="btn">Close</button></div></dialog>
+    <dialog id="fbConfirm" class="dlg" aria-labelledby="fbcTitle"><h3 id="fbcTitle"></h3><div id="fbcBody"></div><label id="fbcTypeHelp" class="hidden">Type <b>DELETE</b> to confirm<input id="fbcType" autocomplete="off" spellcheck="false" aria-label="Type DELETE to confirm"></label><div class="row end"><button id="fbcCancel" class="btn">Cancel</button><button id="fbcOk" class="btn danger">Delete</button></div></dialog>
   </section>
 </main>
 <script type="module" src="/admin/admin.js"></script>

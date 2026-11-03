@@ -7,7 +7,8 @@ import { MAX_BODY, Req, Res } from './http';
 export async function toReq(r: IncomingMessage): Promise<Req> {
   const headers: Record<string, string> = {};
   for (const [k, v] of Object.entries(r.headers)) if (typeof v === 'string') headers[k.toLowerCase()] = v; else if (Array.isArray(v)) headers[k.toLowerCase()] = v.join(', ');
-  const path = new URL(r.url ?? '/', 'http://x').pathname;
+  const url = new URL(r.url ?? '/', 'http://x'), path = url.pathname, query: Record<string, string> = {};
+  for (const [k, v] of url.searchParams) if (!(k in query)) query[k] = v;
   let tooLarge = false, body: unknown = null;
   if (r.method === 'POST' || r.method === 'PUT') {
     const chunks: Buffer[] = []; let size = 0;
@@ -18,7 +19,7 @@ export async function toReq(r: IncomingMessage): Promise<Req> {
     }
     if (!tooLarge && chunks.length && (headers['content-type'] ?? '').includes('json')) { try { body = JSON.parse(Buffer.concat(chunks).toString('utf8')); } catch { body = null; } }
   }
-  return { method: r.method ?? 'GET', path, headers, ip: r.socket?.remoteAddress ?? 'unknown', body, tooLarge };
+  return { method: r.method ?? 'GET', path, query, headers, ip: r.socket?.remoteAddress ?? 'unknown', body, tooLarge };
 }
 
 export function send(s: ServerResponse, out: Res) {

@@ -19,6 +19,7 @@ export function buildSubmission(form: SubmitForm, c: SubmitContext, kind: 'pract
   const metrics: Record<string, string | number> = {
     'surface covered': pc(T.twin.coverage), 'objects found': `${T.detect.tp}/${T.detect.refs}`, 'precision': pc(T.detect.precision), 'recall': pc(T.detect.recall),
     'label colours right': `${T.colour.correct}/${T.colour.total}`, 'changes right': `${T.change.kindOk}/${T.change.truth}`, 'changes reported': T.change.found,
+    ...(run.registration ? { 'registration RMSE (cm)': Math.round(run.registration.rmse * 1000) / 10, 'registration overlap': pc(run.registration.overlap) } : {}),
     'floating points removed': pc(T.quality.outlierRemoval), 'small-object points kept': pc(T.quality.smallRetention), 'zones judged right': pc(T.safety.accuracy),
   };
   return {
