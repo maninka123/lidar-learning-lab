@@ -511,7 +511,7 @@ export default function TabTwin() {
           <Section title="Team">
             <div className="field"><label htmlFor="twin-team">Team name</label><input id="twin-team" data-testid="twin-team" value={T.team} onChange={(e) => T.set({ team: e.target.value })} placeholder="e.g. Lidar Legends" /></div>
             <div className="field"><label htmlFor="twin-members">Members (optional, comma separated)</label><input id="twin-members" value={T.members.join(', ')} onChange={(e) => T.set({ members: e.target.value.split(',').map((x) => x.trim()).filter(Boolean) })} /></div>
-            <p className="hint">Saved in this browser only. Nothing is sent anywhere.</p>
+            <p className="hint">Your work is saved in this browser. A score is sent only when you choose to send it, at the end.</p>
           </Section>
           <Section title="The six tasks and how they are graded" open={false}>
             <table className="table"><tbody>{TASK_KEYS.map((k) => <tr key={k}><td>{TASK_NAMES[k]}</td><td className="mono">{T.settings.enabled[k] ? T.settings.weights[k] : '–'}</td></tr>)}</tbody></table>
@@ -602,13 +602,12 @@ export default function TabTwin() {
       case 3: return (
         <>
           <div className="btn-row"><Btn sm onClick={() => T.set({ stage: 1 })}>← Change equipment</Btn></div>
-          <Callout kind="edu" title="How calibration works: 4 steps">
+          <Callout kind="edu" title="How calibration works">
             <ol style={{ margin: 0, paddingLeft: '1.2rem', display: 'grid', gap: 3 }}>
-              <li><b>Connect a camera to a LiDAR:</b> drag a wire from the dot of a camera to a LiDAR (or pick a camera and click a LiDAR). Each camera has one LiDAR, and several cameras can share the same one. The pair is your choice (the nearest by default; the orange dashed line in the view joins them). Camera 1 can go with LiDAR 2 if those two are close together.</li>
-              <li><b>Match the red crosses to the green squares</b> on the calibration board (or press the automatic button).</li>
-              <li><b>Watch the view:</b> that LiDAR's points are coloured by this camera. When it is right, colours (the red, green and yellow labels) land on the right objects.</li>
+              <li><b>Connect</b> each camera to a LiDAR: drag a wire from its dot (several cameras can share one).</li>
+              <li><b>Match</b> the red crosses to the green squares, or press the automatic button.</li>
+              <li><b>Watch</b> the view: that LiDAR's points take the camera's colours. When it is right, the labels land on the right objects.</li>
             </ol>
-            <div className="hint" style={{ marginTop: 6 }}>Only cameras are calibrated. After registration all LiDARs share one frame, so a camera is calibrated once for the whole system; the LiDAR you choose is only the one you watch.</div>
           </Callout>
           {d.cameras.length === 0 ? <p className="hint">You have no cameras. They are optional, but colour-coded labels cannot be read without one.</p> : (
             <>
