@@ -179,7 +179,7 @@ export function scoreQuality(raw: { positions: Float32Array; prov: Int32Array; n
   const tree = new KDTree(twin.positions, twin.count), r2 = 0.12 * 0.12, step = Math.max(1, Math.floor(raw.n / 20000));
   let g = 0, gk = 0, s = 0, sk = 0;
   for (let i = 0; i < raw.n; i += step) {
-    const pv = raw.prov[i]; if (truth.outlier[pv]) continue;
+    const pv = raw.prov[i]; if (truth.outlier[pv] || raw.positions[i * 3 + 2] > TWIN_MAX_Z || raw.positions[i * 3 + 2] < -0.15) continue;
     const hit = tree.nearest(raw.positions[i * 3], raw.positions[i * 3 + 1], raw.positions[i * 3 + 2], r2).index >= 0;
     g++; if (hit) gk++;
     if (smallInstances.has(truth.obj[pv])) { s++; if (hit) sk++; }

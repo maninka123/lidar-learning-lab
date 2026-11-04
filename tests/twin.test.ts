@@ -364,3 +364,17 @@ describe('choosing which planes and clusters to keep', () => {
     }
   });
 });
+
+describe('persistent camera associations and hired survey limits',()=>{
+ it('an explicit camera association restricts colour projection to that scanner’s measured points',()=>{
+  const f=buildFactory(11,'A'),u=lidar('rot16',0,-3),c=cam('cam-mid',0,-3,1.8,-90),s=acquireSurvey(f,design({lidars:[u]}),11).visible.scans[0].cloud;
+  const camera={unit:c,image:makeSampler(f,c,HW_SEED,0,[]),e:c.cal.est,fov:c.cal.fov};
+  const connected=colourPoints(s.positions,s.count,[{...camera,scanIds:[0]}],s.scanIds);
+  const disconnected=colourPoints(s.positions,s.count,[{...camera,scanIds:[99]}],s.scanIds);
+  expect(connected.count).toBeGreaterThan(100);expect(disconnected.count).toBe(0);
+ });
+ it('a hired TLS survey is limited to two fixed stations regardless of available budget',()=>{
+  const d=design({lidars:[lidar('tls-hire',-6,-1),lidar('tls-hire',6,-1),lidar('tls-hire',6,4)]});
+  expect(costOf(d,{...DEFAULT_SETTINGS,budget:99999}).errors.join()).toContain('two hired TLS');
+ });
+});

@@ -149,18 +149,19 @@ export function calibrationError(est: Extrinsic, fov: number, c: CameraUnit, sce
 }
 
 // ----------------------------------------------------------------------------- colour from cameras
-export interface CalibratedCamera { unit: CameraUnit; image: CamSampler; e: Extrinsic; fov: number }
+export interface CalibratedCamera { unit: CameraUnit; image: CamSampler; e: Extrinsic; fov: number; scanIds?: number[] }
 
 /** Give each point the colour of the pixel it lands on. Occlusion is judged against the LiDAR points themselves (a depth map made from the cloud),
  *  so a point hidden behind a nearer surface takes no colour. The pose and field of view are the team's calibration, errors included.
  *  Only the pixels the points land on are computed, once each. */
-export function colourPoints(pos: Float32Array, n: number, cams: CalibratedCamera[]): { colors: Uint8Array; valid: Uint8Array; count: number } {
+export function colourPoints(pos: Float32Array, n: number, cams: CalibratedCamera[], scanIds?: Uint16Array): { colors: Uint8Array; valid: Uint8Array; count: number } {
   const colors = new Uint8Array(n * 3), valid = new Uint8Array(n), best = new Float32Array(n).fill(0);
   let count = 0;
   for (const c of cams) {
     const pose = camPose(c.e), { w, h } = c.image, zw = Math.min(w, 1024), zs = zw / w, zh = Math.max(1, Math.round(h * zs)), zbuf = new Float32Array(zw * zh).fill(Infinity);
     const proj = new Float32Array(n * 3).fill(NaN);
     for (let i = 0; i < n; i++) {
+      if (c.scanIds && (!scanIds || !c.scanIds.includes(scanIds[i]))) continue;
       const q = project(pose, [pos[i * 3], pos[i * 3 + 1], pos[i * 3 + 2]], w, h, c.fov);
       if (!q) continue; proj[i * 3] = q.u; proj[i * 3 + 1] = q.v; proj[i * 3 + 2] = q.z;
       const iu = Math.round(q.u * zs), iv = Math.round(q.v * zs);

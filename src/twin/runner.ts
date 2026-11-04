@@ -1,8 +1,9 @@
+import { measuredCoverage, type MeasuredCoverage } from './measuredCoverage';
 import { buildFactory, Target, ChangeTruth } from './factory';
 import { acquireSurvey } from './acquire';
-import { makeSampler, CalibratedCamera } from './camera';
+import { makeSampler, calibrationTarget, residuals, rmsOf, colourPoints, CalibratedCamera } from './camera';
 import { runPipeline, Block, BLOCKS, StepInfo, DetObject, ChangeFound, SafetyFound } from './pipeline';
-import { TwinDesign, ChallengeSettings, costOf, CostReport, HW_SEED, TASK_KEYS, TaskKey } from './catalogue';
+import { TwinDesign, ChallengeSettings, costOf, pairedLidarOf, CostReport, HW_SEED, TASK_KEYS, TaskKey } from './catalogue';
 import { scoreTwin, scoreDetection, scoreColour, scoreChange, scoreSafety, safetyTruth, scoreQuality, combine, Grade, TaskScores, TwinScore, DetectionScore, ColourScore, ChangeScore, SafetyScore, QualityScore, SafetyTruth } from './grade';
 import { selectPoints, PointCloud } from '../core/pointcloud';
 import type { RegReport } from './register';
@@ -17,6 +18,7 @@ export const FINAL_SEEDS = [101, 202];
 export interface RunResult {
   seed: number; ok: boolean; error?: string; cost: CostReport; grade: Grade;
   tasks: { twin: TwinScore; detect: DetectionScore; colour: ColourScore; change: ChangeScore; quality: QualityScore; safety: SafetyScore };
+  coverage?: MeasuredCoverage; calibration?: { maxRms: number; validFraction: number }; updatedPreview?: PointCloud;
   steps: StepInfo[]; /** how well the team's registration fitted the scans (RMSE and overlap): the settings are part of the pipeline, so the final evaluation uses them too */ registration?: RegReport; twinPreview?: PointCloud; objects: DetObject[]; refs: Target[]; found: { changes: ChangeFound[]; safety?: SafetyFound[] }; truth: { changes: ChangeTruth[]; safety: SafetyTruth[] };
   stats: { rays: number; raysA: number; points: number; acquireMs: number; pipelineMs: number };
 }
@@ -32,7 +34,10 @@ export function runScenario(cfg: RunConfig, seed: number): RunResult {
 
   const t0 = Date.now();
   const A = acquireSurvey(fA, cfg.design, seed), B = needsSurveyB(cfg.pipeline) ? acquireSurvey(fB, cfg.design, seed) : undefined;
-  const cams: CalibratedCamera[] = cfg.design.cameras.map((c, i) => ({ unit: c, image: makeSampler(fA, c, HW_SEED, i, cfg.design.lights), e: c.cal.est, fov: c.cal.fov }));
+  const cams: CalibratedCamera[] = cfg.design.cameras.map((c, i) => ({ unit: c, image: makeSampler(fA, c, HW_SEED, i, cfg.design.lights), e: c.cal.est, fov: c.cal.fov, scanIds: A.visible.scans.filter((s) => s.unit === pairedLidarOf(c, cfg.design)?.id).map((s) => s.index) }));
+  const coverage = measuredCoverage(fA, A.visible.scans.map((s) => s.cloud));
+  const errors = cfg.design.cameras.map((c, i) => rmsOf(residuals(calibrationTarget(c, HW_SEED, i, cfg.design.lights), c.cal.est, c.cal.fov)) * 1280 / cams[i].image.w);
+  const calibration = { maxRms: errors.length ? Math.max(...errors) : Infinity, validFraction: errors.length ? errors.filter((e, i) => Number.isFinite(e) && e <= 4 && !!pairedLidarOf(cfg.design.cameras[i], cfg.design)).length / errors.length : 0 };
   const t1 = Date.now();
   const out = runPipeline(cfg.pipeline, { A: A.visible, B: B?.visible, camerasA: cams }, seed);
   const t2 = Date.now();
@@ -49,8 +54,14 @@ export function runScenario(cfg: RunConfig, seed: number): RunResult {
   };
   const scores: TaskScores = { twin: tasks.twin.score, detect: detect.score, colour: colour.score, change: tasks.change.score, quality: tasks.quality.score, safety: tasks.safety.score };
   const grade = combine(scores, cfg.settings, cost.total, A.visible.stats.rays);
+  let twinPreview = thin(out.A.twin, 40000);
+  if (twinPreview && cfg.pipeline.some((b) => b.kind === 'colour' && !b.bypass)) {
+    const col = colourPoints(twinPreview.positions, twinPreview.count, cams, twinPreview.scanIds);
+    for (let i = 0; i < twinPreview.count; i++) if (!col.valid[i]) col.colors.fill(125, i * 3, i * 3 + 3);
+    twinPreview = { ...twinPreview, colors: col.colors };
+  }
   return {
-    ...base, ok: true, grade, tasks, steps: out.steps.map((s) => ({ ...s, preview: thin(s.preview, 20000) })), registration: out.registration, twinPreview: thin(out.A.twin, 40000),
+    ...base, ok: true, grade, tasks, coverage, calibration, updatedPreview: thin(out.B?.twin ?? out.B?.cloud, 40000), steps: out.steps.map((s) => ({ ...s, preview: thin(s.preview, 20000) })), registration: out.registration, twinPreview,
     objects: preds.map((p) => ({ ...p, idx: new Int32Array(0) })), found: { changes: out.changes ?? [], safety: out.safety },
     stats: { rays: A.visible.stats.rays + (B?.visible.stats.rays ?? 0), raysA: A.visible.stats.rays, points: rawN, acquireMs: t1 - t0, pipelineMs: t2 - t1 },
   };

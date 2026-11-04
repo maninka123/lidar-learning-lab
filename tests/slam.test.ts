@@ -28,3 +28,15 @@ describe('SLAM teaching simulation', () => {
     expect(icp.ateBefore).toBeLessThan(noisy.ateBefore);
   }, 60000);
 });
+
+it('custom routes stay open until a return waypoint is explicitly added', async () => {
+ const { pathFromWaypoints, closeRoute, routeIsClosed } = await import('../src/registration/slam');
+ const wps: [number,number][]=[[0,0],[5,0],[5,5]], open=pathFromWaypoints(wps,20,false);
+ expect(open[0]).toMatchObject({x:0,y:0});expect(open[20]).toMatchObject({x:5,y:5});expect(routeIsClosed(wps)).toBe(false);
+ const closed=closeRoute(wps);expect(closed).toHaveLength(4);expect(closed[3]).toEqual(wps[0]);expect(closeRoute(closed)).toBe(closed);
+ const loop=pathFromWaypoints(closed,20,true);expect(loop[20]).toEqual(loop[0]);
+});
+it('an open route ending far from the start cannot invent a loop closure',()=>{
+ const r=runSlam(getScene('A'),sensor,{...base,steps:20,waypoints:[[-3,-2],[3,-2],[3,3]],loopClosure:true});
+ expect(r.closure?.detected).toBe(false);expect(r.corrected).toBeNull();expect(r.gt.at(-1)).not.toEqual(r.gt[0]);
+},60000);

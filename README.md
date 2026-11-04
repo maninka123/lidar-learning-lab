@@ -40,7 +40,7 @@ Go through the tabs in order, one idea at a time, about five minutes each. Each 
 | | **Applications (optional)** | |
 | 17 | **Scan to CAD** | Slice a classroom, find wall lines, square the corners, export a **DXF** floor plan. |
 | 18 | **Image to 3D** | Pick a scene (chair, crate, study desk, living corner, garden), three reconstruction methods, meshing, alignment with scale, error map. |
-| 19 | **Industrial Digital Twin Challenge** | The final challenge: buy LiDARs and cameras within a budget, place and calibrate them, build a processing pipeline, and complete six tasks in a simulated factory. Graded automatically on real results; scores can be sent to the instructor's admin page. See [docs/DIGITAL_TWIN_CHALLENGE.md](docs/DIGITAL_TWIN_CHALLENGE.md). |
+| 19 | **Industrial Digital Twin Challenge** | Seven progressively unlocked engineering missions: design, register, clean, detect, fuse cameras, assess changes and safety, then commission the complete system on unseen scenarios. Graded automatically on real results; scores can be sent to the instructor's admin page. See [docs/DIGITAL_TWIN_CHALLENGE.md](docs/DIGITAL_TWIN_CHALLENGE.md). |
 | 20 | **Thank You** | A calm closing page and an optional, anonymous feedback form (before/after understanding, helpfulness, most useful part, suggestions). The admin page has a **Feedback & Insights** tab with charts, a searchable table, CSV export and deletion. See [docs/FEEDBACK.md](docs/FEEDBACK.md). |
 
 Viewport: left-drag rotates, right-drag or the **Pan** button moves the cloud, wheel zooms.

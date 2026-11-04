@@ -91,13 +91,14 @@ export function RaySweep({ origin, ends, hit, animate, color = '#0a84ff' }: { or
 }
 
 /** A scanner standing in the scene: marker, ring when selected, a line down to the floor. */
-export function ScannerMarkers({ scanners, selected, sensorOf, labels = true }: { scanners: Scanner[]; selected: number | null; sensorOf: (s: Scanner) => SensorConfig; labels?: boolean }) {
+export function ScannerMarkers({ scanners, selected, sensorOf, labels = true, onSelect }: { scanners: Scanner[]; selected: number | null; sensorOf: (s: Scanner) => SensorConfig; labels?: boolean; onSelect?: (index: number) => void }) {
   return (
     <>
       {scanners.map((s, i) => {
         const c = STATION_COLOURS[i % 4], sel = s.id === selected;
         return (
-          <group key={s.id}>
+          <group key={s.id} onClick={onSelect ? (e) => { e.stopPropagation(); onSelect(i); } : undefined}>
+            {onSelect && <mesh position={[s.x, s.y, s.z]}><sphereGeometry args={[0.3, 10, 8]} /><meshBasicMaterial transparent opacity={0} depthWrite={false} /></mesh>}
             <SensorMarker x={s.x} y={s.y} z={s.z} yaw={s.yaw} pitch={-s.pitch} sensor={sensorOf(s)} color={c} label={labels ? `Scanner ${i + 1}` : undefined} showFov={false} scale={sel ? 1.5 : 1} />
             {sel && <Line points={Array.from({ length: 33 }, (_, k) => [s.x + 0.5 * Math.cos((k / 32) * 2 * Math.PI), s.y + 0.5 * Math.sin((k / 32) * 2 * Math.PI), 0.03] as Vec3)} color={c} lineWidth={3} />}
           </group>

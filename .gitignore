@@ -11,3 +11,6 @@ playwright-report
 .env.*
 !.env.example
 dist-fb
+
+# Local browser verification artifacts
+output/

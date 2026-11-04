@@ -17,3 +17,7 @@ npm run hash-password         # make ADMIN_PASSWORD_HASH for Vercel
 ```
 
 Environment variables (Vercel → Settings): `DEEPSEEK_API_KEY`, `ADMIN_USERNAME`, `ADMIN_PASSWORD_HASH`, `ADMIN_AUTH_SECRET`, `FRONTEND_ORIGIN`, plus the Redis pair added by the Upstash integration. Full guide: [../docs/WORKSHOP_MODE.md](../docs/WORKSHOP_MODE.md).
+
+### Mission summaries
+
+New challenge submissions optionally include a bounded `missions` array (up to seven entries): mission number, `status`, score 0–100, attempt count and completion flag. The administration details and CSV include these summaries. Older submissions without this property remain readable. Grades and mission status are calculated in the browser and are not tamper-proof.

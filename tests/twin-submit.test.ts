@@ -84,3 +84,14 @@ describe('grading settings from the instructor', () => {
     setWorkshopApi(''); vi.unstubAllGlobals();
   });
 });
+
+it('mission records accompany new score submissions and invalid imports are rejected',()=>{
+ const save=initialSave();const b=buildSubmission(form,{...ctx,progress:save.progress},'practice')!;
+ expect(b.missions).toHaveLength(7);expect(b.missions![0]).toMatchObject({number:1,status:'not-attempted',completed:false});
+ expect(parseSave(JSON.stringify({...save,pipeline:[{kind:'unknown',params:{}}]}))).toBeNull();
+});
+
+it('refuses final submission when prerequisite mission results are stale or missing',()=>{
+ const final={runs:[run],grade:run.grade,cost:run.cost,scores:{}};
+ expect(buildSubmission(form,{...ctx,final,progress:initialSave().progress},'final')).toBeNull();
+});

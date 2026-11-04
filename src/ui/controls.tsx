@@ -19,6 +19,18 @@ export function Section({ title, children, open = true, hint }: { title: string;
   );
 }
 
+/** A compact slider for toolbars: label, track and value on one line, styled like the buttons beside it. */
+export function ToolbarSlider({ label, value, min, max, step = 1, onChange, format }: { label: string; value: number; min: number; max: number; step?: number; onChange: (v: number) => void; format?: (v: number) => string }) {
+  const p = ((value - min) / (max - min || 1)) * 100;
+  return (
+    <label className="tb-slider">
+      <span className="tb-slider-label">{label}</span>
+      <input type="range" min={min} max={max} step={step} value={value} aria-label={label} style={{ ['--p' as string]: `${p}%` }} onChange={(e) => onChange(parseFloat(e.target.value))} />
+      <span className="tb-slider-val">{format ? format(value) : value}</span>
+    </label>
+  );
+}
+
 export function Slider({ label, value, min, max, step = 1, unit = '', onChange, format, hint, disabled }: {
   label: string; value: number; min: number; max: number; step?: number; unit?: string; onChange: (v: number) => void; format?: (v: number) => string; hint?: string; disabled?: boolean;
 }) {

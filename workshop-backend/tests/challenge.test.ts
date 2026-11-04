@@ -150,3 +150,10 @@ describe('challenge score submissions', () => {
     const s = ((await a.call('GET', 'challenge')).body as { submissions: Array<{ ip: string; device: string }> }).submissions[0]; expect(s.ip).toBe(''); expect(s.device).toBe('');
   });
 });
+
+
+it('accepts bounded mission summaries while retaining compatibility with old score records',()=>{
+ const old=parseSubmission(good);expect(old.ok).toBe(true);if(old.ok)expect(old.value.missions).toBeUndefined();
+ const parsed=parseSubmission({...good,missions:[{number:1,status:'passed',score:85,attempts:3,completed:true},{number:2,status:'<script>',score:999,attempts:-2}]});
+ expect(parsed.ok).toBe(true);if(parsed.ok){expect(parsed.value.missions?.[0]).toMatchObject({number:1,status:'passed',score:85,attempts:3,completed:true});expect(parsed.value.missions?.[1]).toMatchObject({status:'not-attempted',score:100,attempts:0});}
+});

@@ -18,7 +18,7 @@ export interface SlamParams {
   scaleErr: number; // fractional translation scale error
   loopClosure: boolean;
   z: number;
-  /** corners of the route the student drew (x, y). With three or more the robot drives round them and back to the start. */
+  /** Ordered route, open unless its last waypoint explicitly returns to the first. */
   waypoints?: [number, number][];
 }
 export interface SlamResult {
@@ -52,8 +52,28 @@ export function loopPath(scene: SceneDef, steps: number): Pose2[] {
 }
 
 /** The route the student drew, closed back to its start, corners rounded and resampled to `steps` equal moves. */
-export function pathFromWaypoints(wps: [number, number][], steps: number): Pose2[] {
-  return closedPath(wps.map((w) => [w[0], w[1]] as [number, number]), steps);
+export function routeIsClosed(wps: [number, number][]): boolean {
+  return wps.length >= 4 && Math.hypot(wps[0][0] - wps[wps.length - 1][0], wps[0][1] - wps[wps.length - 1][1]) < 0.05;
+}
+
+export function closeRoute(wps: [number, number][]): [number, number][] {
+  return wps.length < 3 || routeIsClosed(wps) ? wps : [...wps, [...wps[0]]];
+}
+
+export function pathFromWaypoints(wps: [number, number][], steps: number, closed = true): Pose2[] {
+  if (closed) return closedPath((routeIsClosed(wps) ? wps.slice(0, -1) : wps).map((w) => [...w]), steps);
+  const pts = wps.filter((w, i) => i === 0 || Math.hypot(w[0] - wps[i - 1][0], w[1] - wps[i - 1][1]) > 1e-6);
+  if (!pts.length) throw new Error('Add at least two waypoints.');
+  if (pts.length === 1) return Array.from({ length: steps + 1 }, () => ({ x: pts[0][0], y: pts[0][1], yaw: 0 }));
+  const lengths = [0];
+  for (let i = 1; i < pts.length; i++) lengths.push(lengths[i - 1] + Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]));
+  return Array.from({ length: steps + 1 }, (_, k) => {
+    const distance = lengths[lengths.length - 1] * k / steps;
+    let i = 0;
+    while (i < pts.length - 2 && lengths[i + 1] < distance) i++;
+    const a = pts[i], b = pts[i + 1], f = (distance - lengths[i]) / (lengths[i + 1] - lengths[i]);
+    return { x: a[0] + f * (b[0] - a[0]), y: a[1] + f * (b[1] - a[1]), yaw: Math.atan2(b[1] - a[1], b[0] - a[0]) };
+  });
 }
 
 function closedPath(pts: [number, number][], steps: number): Pose2[] {
@@ -84,7 +104,7 @@ function closedPath(pts: [number, number][], steps: number): Pose2[] {
 
 export function runSlam(scene: SceneDef, sensor: SensorConfig, p: SlamParams): SlamResult {
   const rng = makeRng(p.seed);
-  const gt = p.waypoints && p.waypoints.length >= 3 ? pathFromWaypoints(p.waypoints, p.steps) : loopPath(scene, p.steps);
+  const gt = p.waypoints && p.waypoints.length >= 2 ? pathFromWaypoints(p.waypoints, p.steps, routeIsClosed(p.waypoints)) : loopPath(scene, p.steps);
   const n = gt.length;
   // 1. local scans (sensor frame) taken from the true poses
   const local: PointCloud[] = [];
@@ -136,7 +156,7 @@ export function runSlam(scene: SceneDef, sensor: SensorConfig, p: SlamParams): S
     const dTheta = wrap(target.yaw - est[n - 1].yaw);
     const rotEnd = rotatedEnd(est, dTheta, 1);
     const tx = target.x - rotEnd.x, ty = target.y - rotEnd.y;
-    const detected = res.fitness > 0.5;
+    const detected = Math.hypot(gt[n - 1].x - gt[0].x, gt[n - 1].y - gt[0].y) <= 2 && res.fitness > 0.5;
     closure = { detected, fitness: res.fitness, rmse: res.finalRmse, correctionTrans: Math.hypot(target.x - est[n - 1].x, target.y - est[n - 1].y), correctionDeg: (dTheta * 180) / Math.PI };
     if (detected) {
       // Distribute the discrepancy linearly along the path: rotate about the start pose by f*dTheta and translate by f*t.

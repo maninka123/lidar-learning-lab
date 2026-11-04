@@ -9,6 +9,7 @@ const TASKS = ['twin', 'detect', 'colour', 'change', 'quality', 'safety', 'budge
 
 export interface Submission {
   id: string; at: number; name: string; index: string; kind: 'practice' | 'final'; team: string;
+  missions?: { number: number; status: string; score: number; attempts: number; completed: boolean }[];
   total: number; tasks: Record<string, number>; points: Record<string, number>; cost: number; budget: number;
   attempts: { practice: number; final: number }; startedAt: number | null;
   equipment: { lidars: string[]; cameras: string[]; lights: number; platform: boolean }; pipeline: string[];
@@ -49,6 +50,7 @@ export function parseSubmission(body: unknown): Parsed {
       total: Math.round(total * 10) / 10, tasks, points, cost: Math.round(bounded(b.cost, 0, 1e6) || 0), budget: Math.round(bounded(b.budget, 0, 1e6) || 0),
       attempts: { practice: Math.round(bounded(at.practice, 0, 1e5) || 0), final: Math.round(bounded(at.final, 0, 1e5) || 0) }, startedAt: Number.isNaN(sa) ? null : sa,
       equipment: { lidars: list(eq.lidars, 6, 60), cameras: list(eq.cameras, 4, 60), lights: Math.round(bounded(eq.lights, 0, 10) || 0), platform: eq.platform === true },
+      ...(Array.isArray(b.missions) ? { missions: b.missions.slice(0, 7).map((m, i) => { const v = m && typeof m === 'object' ? m as Record<string, unknown> : {}; return { number: i + 1, status: ['stale','needs-improvement','passed','excellent','not-attempted'].includes(String(v.status)) ? String(v.status) : 'not-attempted', score: bounded(v.score, 0, 100) || 0, attempts: Math.round(bounded(v.attempts, 0, 100000) || 0), completed: v.completed === true }; }) } : {}),
       pipeline: list(b.pipeline, 30, 50), metrics, client: { tz: clean(cl.tz, 40), lang: clean(cl.lang, 16) }, device: typeof b.device === 'string' && /^[A-Za-z0-9_-]{8,64}$/.test(b.device) ? b.device : '',
     },
   };

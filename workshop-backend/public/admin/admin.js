@@ -300,6 +300,7 @@ function renderChallenge() {
     const det = openRows.has(s.id) ? `<tr><td colspan="9"><div class="stack" style="gap:6px;font-size:.85rem">
       <div><b>Team:</b> ${esc(s.team || '—')} · <b>Equipment:</b> ${esc(s.equipment.lidars.join('; ') || 'no LiDAR')}${s.equipment.cameras.length ? ' · cameras: ' + esc(s.equipment.cameras.join('; ')) : ''}${s.equipment.lights ? ' · ' + s.equipment.lights + ' lamp(s)' : ''}${s.equipment.platform ? ' · mobile platform' : ''}</div>
       <div><b>Pipeline:</b> ${esc(s.pipeline.join(' → ') || '—')}</div>
+      ${s.missions ? '<div><b>Missions:</b> ' + s.missions.map((m) => 'M' + m.number + ': ' + esc(m.status) + ' (' + Number(m.score).toFixed(0) + '%, ' + Number(m.attempts) + ' attempts)').join(' · ') + '</div>' : ''}
       <div><b>Key results:</b> ${esc(Object.entries(s.metrics).map(([k, v]) => k + ' ' + v).join(' · ') || '—')}</div>
       <div><b>Points:</b> ${esc(Object.keys(TASK_SHORT).map((k) => TASK_SHORT[k] + ' ' + (s.points[k] ?? 0)).join(' · '))} · <b>Budget used:</b> ${s.cost} / ${s.budget} credits</div>
       <div class="faint">Started ${s.startedAt ? esc(fmtSydney(s.startedAt)) : '—'}${mins !== null ? ' (about ' + mins + ' min before sending)' : ''} · time zone ${esc(s.client.tz || '—')} · language ${esc(s.client.lang || '—')} · from ${esc(s.origin || '—')}</div></div></td></tr>` : '';
@@ -317,8 +318,8 @@ $('chView').addEventListener('click', (e) => {
 $('chClear').addEventListener('click', () => { if (confirm('Delete ALL challenge score records? This cannot be undone.')) run(async () => { await api('POST', 'challenge-clear', {}); await loadChallenge(); }); });
 $('chCsv').addEventListener('click', () => {
   const q = (v) => '"' + String(v ?? '').replace(/"/g, '""') + '"';
-  const head = ['sent (Sydney)', 'name', 'index', 'place', 'network', 'ip address', 'browser id', 'index numbers on this computer', 'kind', 'score', ...Object.values(TASK_SHORT).map((n) => n + ' (0-1)'), 'cost', 'budget', 'practice runs', 'final runs', 'equipment', 'pipeline'];
-  const sh = sharing(), rows = visibleSubs().map((s) => [fmtSydney(s.at), s.name, s.index, place(s), netName(s), s.ip || '', s.device || '', sh.n(s), s.kind, s.total, ...Object.keys(TASK_SHORT).map((k) => s.tasks[k] ?? 0), s.cost, s.budget, s.attempts.practice, s.attempts.final, [...s.equipment.lidars, ...s.equipment.cameras].join('; '), s.pipeline.join(' > ')]);
+  const head = ['sent (Sydney)', 'name', 'index', 'place', 'network', 'ip address', 'browser id', 'index numbers on this computer', 'kind', 'score', ...Object.values(TASK_SHORT).map((n) => n + ' (0-1)'), 'cost', 'budget', 'practice runs', 'final runs', 'equipment', 'pipeline', 'missions'];
+  const sh = sharing(), rows = visibleSubs().map((s) => [fmtSydney(s.at), s.name, s.index, place(s), netName(s), s.ip || '', s.device || '', sh.n(s), s.kind, s.total, ...Object.keys(TASK_SHORT).map((k) => s.tasks[k] ?? 0), s.cost, s.budget, s.attempts.practice, s.attempts.final, [...s.equipment.lidars, ...s.equipment.cameras].join('; '), s.pipeline.join(' > '), (s.missions || []).map((m) => 'M' + m.number + ':' + m.status + ':' + m.score + ':' + m.attempts).join('; ')]);
   const csv = [head, ...rows].map((r) => r.map(q).join(',')).join('\n');
   const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' })); a.download = 'challenge_scores.csv'; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
 });

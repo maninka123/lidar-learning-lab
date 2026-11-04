@@ -64,7 +64,7 @@ export default function App() {
   const [hideNote, setHideNote] = useState(false);
   return (
     <div className={`app ${navOpen ? '' : 'nav-collapsed'}`}>
-      <nav className="sidebar glass" aria-label="Lecture sections">
+      <nav className={`sidebar glass${tab === THANKS_AT ? ' sidebar-thanks' : ''}`} aria-label="Lecture sections">
         <div className="side-head">
           <div className="brand">
             <div className="brand-mark"><Radar size={22} color="#fff" /></div>

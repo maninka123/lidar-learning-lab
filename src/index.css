@@ -86,6 +86,19 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .nav-item .tick { margin-left: auto; color: var(--green); }
 .nav-item[aria-current="page"] .tick { color: #fff; }
 
+/* A light echo of the farewell page's peach, rose and dusk palette, scoped to its sidebar. */
+.sidebar-thanks {
+  --accent: #b74730;
+  --fill: rgba(217, 96, 63, .07);
+  --fill-hover: rgba(217, 96, 63, .14);
+  --sep: rgba(154, 90, 120, .16);
+  background: linear-gradient(165deg, rgba(240, 185, 168, .22), rgba(255, 255, 255, .88) 48%, rgba(154, 90, 120, .07));
+}
+.sidebar-thanks .brand-mark { background: linear-gradient(145deg, #f0b9a8, #d9603f); box-shadow: 0 3px 10px rgba(217, 96, 63, .18); }
+.sidebar-thanks .nav-item[aria-current="page"] { background: linear-gradient(110deg, #b74730, #a04f67); box-shadow: 0 2px 8px rgba(154, 90, 120, .2); }
+.sidebar-thanks .nav-sep { background: var(--sep); }
+.sidebar-thanks .nav-group span { background: var(--fill); }
+
 .main { display: flex; flex-direction: column; min-width: 0; min-height: 0; height: 100%; position: relative; overflow: hidden; }
 .topbar { display: flex; align-items: center; gap: 0.6rem; padding: 0.65rem 1rem; border-width: 0 0 1px 0; z-index: 4; flex-wrap: wrap; }
 .topbar h1 { font-size: 1.3rem; margin-right: 0.5rem; }
@@ -147,6 +160,12 @@ input[type="range"]::-moz-range-track { height: 0.3rem; border-radius: 1rem; bac
 input[type="range"]::-moz-range-progress { height: 0.3rem; border-radius: 1rem; background: var(--accent); }
 input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 1.3rem; height: 1.3rem; border-radius: 50%; background: #fff; margin-top: -0.5rem; box-shadow: 0 2px 8px rgba(0,0,0,.4), 0 0 0 0.5px rgba(0,0,0,.15); transition: transform .15s var(--ease); }
 input[type="range"]::-moz-range-thumb { width: 1.3rem; height: 1.3rem; border: 0; border-radius: 50%; background: #fff; box-shadow: 0 2px 8px rgba(0,0,0,.4); }
+input[type="range"]:focus { outline: none; }
+input[type="range"]:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 35%, transparent), 0 2px 8px rgba(0,0,0,.4); }
+.tb-slider { display: inline-flex; align-items: center; gap: 0.5rem; height: 2rem; padding: 0 0.75rem; border-radius: 0.65rem; background: var(--fill); font-size: 0.8125rem; font-weight: 500; color: var(--text); white-space: nowrap; cursor: pointer; }
+.tb-slider:hover { background: var(--fill-hover); }
+.tb-slider input[type="range"] { width: 6.5rem; height: 1.25rem; }
+.tb-slider-val { min-width: 2.4rem; text-align: right; font-family: var(--mono); font-variant-numeric: tabular-nums; color: var(--text2); }
 input[type="range"]:active::-webkit-slider-thumb { transform: scale(1.15); }
 input[type="number"], input[type="text"], input[type="password"], select, textarea {
   background: var(--fill); border: 1px solid transparent; border-radius: 0.65rem; padding: 0.45rem 0.65rem; font-size: 0.9375rem; min-height: 2.25rem; width: 100%; transition: border-color .2s, background .2s;

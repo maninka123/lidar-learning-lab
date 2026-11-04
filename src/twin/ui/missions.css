@@ -1,0 +1,58 @@
+.mission-map { order: 2; display: flex; gap: 6px; flex: 1 1 100%; overflow-x: auto; padding: 2px 0 5px; }
+.mission-map button { flex: 1 0 110px; display: flex; align-items: center; gap: 8px; padding: 8px 10px; text-align: left; border: 1px solid var(--sep); background: var(--bg-elev); border-radius: 12px; cursor: pointer; }
+.mission-map button > span { flex: none; display: grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; background: var(--fill); font-size: .8rem; font-weight: 700; }
+.mission-map small { font-size: .72rem; line-height: 1.2; }
+.mission-map button[aria-current] { background: var(--accent-soft); border-color: var(--accent); }
+.mission-map button:disabled { opacity: .45; cursor: default; }
+.mission-brief { display: grid; gap: 12px; padding: 4px 0 16px; }
+.mission-eyebrow { text-transform: uppercase; letter-spacing: .08em; font-size: .7rem; font-weight: 700; color: var(--accent); }
+.mission-brief h2 { font-size: 1.4rem; line-height: 1.15; letter-spacing: -.02em; margin-top: -6px; }
+.mission-brief > p { color: var(--text2); font-size: .9rem; line-height: 1.45; }
+.mission-brief .mission-objective { padding: 10px 12px; border-radius: 12px; background: var(--accent-soft); color: var(--text); }
+.mission-objective b { display: block; margin-bottom: 2px; font-size: .7rem; letter-spacing: .06em; text-transform: uppercase; color: var(--accent); }
+.mission-brief .btn-row { gap: 6px; }
+.mission-brief .btn-row .btn { background: transparent; border: 1px solid var(--sep); color: var(--text2); font-weight: 500; }
+.mission-result { padding: 12px; border-radius: 14px; background: var(--fill); display: grid; gap: 10px; }
+.mission-result.passed, .mission-result.excellent { background: rgba(31,157,61,.08); border: 1px solid rgba(31,157,61,.25); animation: mission-arrive .25s ease-out; }
+.mission-result.stale { background: rgba(217,122,0,.08); border: 1px solid rgba(217,122,0,.3); }
+.mission-metric { display: flex; justify-content: space-between; gap: 12px; font-size: .8rem; align-items: start; }
+.mission-metric strong { text-align: right; white-space: nowrap; }
+.mission-metric small { display: block; font-size: .68rem; font-weight: 400; color: var(--text2); }
+.mission-tools { margin-bottom: 4px; }
+[data-testid="mission-targets"] { margin: 10px 0; display: flex; gap: 8px; align-items: flex-start; padding: 8px 10px; border-radius: 10px; border: 1px dashed var(--sep); font-size: .8rem; color: var(--text2); line-height: 1.4; }
+[data-testid="mission-targets"]::before { content: '◎'; color: var(--accent); }
+[data-testid="mission-evaluate"] { margin: 10px 0 4px; width: 100%; justify-content: center; min-height: 2.6rem; font-size: .95rem; }
+[data-testid="twin-stage-title"] { display: none; text-transform: uppercase; letter-spacing: .08em; font-size: .7rem; font-weight: 700; color: var(--text3); margin-top: 6px; }
+[data-testid="twin-budget"] { padding: 12px 14px; border-radius: 14px; background: var(--fill); }
+[data-testid="twin-budget"] > div:first-child { align-items: baseline; font-size: .95rem; }
+[data-testid="twin-budget"] .mono { font-size: .85rem; }
+.equipment { display: grid; gap: 10px; }
+.equipment-note { font-size: .78rem; color: var(--text2); }.equipment-note summary, .equipment-more summary { cursor: pointer; }.equipment-note p { margin-top: 6px; line-height: 1.4; }
+.equipment-card { border: 1px solid var(--sep); border-radius: 12px; padding: 9px 10px; display: grid; gap: 7px; background: var(--bg-elev); transition: border-color .15s; }
+.equipment-card:hover { border-color: color-mix(in srgb, var(--accent) 40%, var(--sep)); }
+.equipment-card.picked { border-color: var(--accent); }
+.equipment-card.off { opacity: .6; }
+.equipment-row { display: flex; align-items: center; gap: 8px; }
+.equipment-icon { flex: none; display: grid; place-items: center; width: 28px; height: 28px; border-radius: 8px; background: var(--accent-soft); color: var(--accent); }
+.equipment-card h4 { flex: 1; min-width: 0; font-size: .85rem; font-weight: 600; line-height: 1.2; }
+.equipment-cost { flex: none; font-size: .95rem; font-weight: 700; letter-spacing: -.01em; }
+.equipment-chips { display: flex; flex-wrap: wrap; gap: 4px; }
+.equipment-chips span { display: inline-flex; align-items: center; gap: 4px; padding: 2px 7px; border-radius: 999px; background: var(--fill); font-size: .7rem; color: var(--text2); white-space: nowrap; }
+.equipment-actions { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.equipment-actions .btn { min-height: 1.75rem; padding: 0 .65rem; font-size: .78rem; gap: 4px; }.equipment-actions .btn.primary { background: var(--accent); color: #fff; }
+.equipment-actions .chip { min-height: 1.75rem; padding: 0 .6rem; display: inline-flex; align-items: center; gap: 3px; font-size: .75rem; }
+.equipment-more { flex-basis: 100%; font-size: .75rem; color: var(--text3); }.equipment-more summary { cursor: pointer; width: max-content; }
+.equipment-more dl { display: grid; gap: 4px; margin: 8px 0 4px; padding: 8px 10px; border-radius: 10px; background: var(--fill); }
+.equipment-more dl div { display: grid; grid-template-columns: 4.5rem 1fr; gap: 8px; }.equipment-more dt { color: var(--text3); }.equipment-more dd { margin: 0; color: var(--text); }
+.equipment-more a { font-size: .72rem; }
+.equipment-compare { overflow-x: auto; }.equipment-compare table { min-width: 440px; font-size: .78rem; }.equipment-compare th { text-align: left; vertical-align: top; }
+.chip { min-height: 2rem; padding: 0 .75rem; border-radius: .6rem; border: 1px solid var(--sep); background: transparent; color: var(--text2); font-size: .8rem; font-weight: 500; cursor: pointer; }
+.chip[aria-pressed="true"] { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+@keyframes mission-arrive { from { opacity: .3; transform: translateY(4px); } }
+@media (prefers-reduced-motion: reduce) { .mission-result { animation: none !important; } }
+
+.mission-tools .seg { flex-wrap: wrap; }.mission-tools .seg button { white-space: normal; flex: 1 1 auto; }
+.completion-report { margin: 12px 0; padding: 18px; border-radius: 18px; border: 1px solid rgba(31,157,61,.25); background: linear-gradient(140deg,rgba(31,157,61,.06),var(--bg-elev)); display: grid; gap: 12px; }
+.completion-score { font-size: 2.8rem; letter-spacing: -.05em; font-weight: 700; line-height: 1; }.completion-score small { font-size: 1rem; letter-spacing: 0; color: var(--text2); }
+.completion-metrics { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }.completion-metrics div { display: grid; gap: 2px; }.completion-metrics span { color: var(--text2); font-size: .7rem; }.completion-metrics b { font-size: .92rem; }
+.completion-report details { font-size: .78rem; }.completion-report summary { cursor: pointer; }.completion-report ul { padding-left: 16px; }

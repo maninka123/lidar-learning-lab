@@ -144,7 +144,7 @@ test.describe('LiDAR Learning Lab', () => {
 
   test('tab 5: SLAM drift + loop closure', async ({ page }) => {
     await go(page, 9);
-      await page.evaluate(() => window.__lab.getState().patch({ slamParams: { ...window.__lab.getState().slamParams, loopClosure: true } }));
+      await page.evaluate(() => window.__lab.getState().patch({ waypoints: [[-14,0],[14,0],[14,24],[-14,24],[-14,0]], slamParams: { ...window.__lab.getState().slamParams, loopClosure: true } }));
     await page.getByTestId('run-slam').click();
     await expect.poll(() => state(page, (s) => s.slam?.ateAfter ?? null), { timeout: 120000 }).not.toBeNull();
     const r = await state(page, (s) => ({ b: s.slam.ateBefore, a: s.slam.ateAfter }));
@@ -503,7 +503,9 @@ test.describe('corner cases', () => {
 
 test('SLAM tab: a waypoint can be removed and the route follows', async ({ page }) => {
   await page.goto('/'); await page.getByTestId('nav-9').click();
-  await page.getByRole('button', { name: 'Loop preset' }).click();
+  await page.getByTestId('add-waypoints-tool').click();
+  const plan = page.getByLabel('Top-down plan view');
+  await plan.click({ position: { x: 40, y: 60 } }); await plan.click({ position: { x: 140, y: 60 } }); await plan.click({ position: { x: 140, y: 130 } });
   const n0 = await state(page, (s) => s.waypoints.length);
   expect(n0).toBeGreaterThanOrEqual(3);
   await page.getByTestId('wp-remove-1').click();
@@ -758,7 +760,7 @@ test.describe('guided ICP and SLAM lessons', () => {
   test('SLAM lesson: steps through drift, loop closure and the summary', async ({ page }) => {
     test.setTimeout(420_000);
     await page.goto('/'); await go(page, 9);
-      await page.evaluate(() => window.__lab.getState().patch({ slamParams: { ...window.__lab.getState().slamParams, steps: 20 } })); // a short loop keeps the headless run quick
+      await page.evaluate(() => window.__lab.getState().patch({ waypoints: [[-14,0],[14,0],[14,24],[-14,24],[-14,0]], slamParams: { ...window.__lab.getState().slamParams, steps: 20 } })); // a short loop keeps the headless run quick
     await page.getByRole('button', { name: 'Learn', exact: true }).click();
     await expect(page.getByTestId('slam-guide-title')).toContainText('Step 1 of 6', { timeout: 150000 });
     await page.getByTestId('slam-guide-step-3').click({ force: true }); await expect(page.getByTestId('slam-guide-drift')).toContainText('position off by', { timeout: 15000 });
@@ -769,177 +771,7 @@ test.describe('guided ICP and SLAM lessons', () => {
   });
 });
 
-test.describe('industrial digital twin challenge', () => {
-  test('is the last tab; the budget can never be exceeded, and every item can be removed and re-bought', async ({ page }) => {
-    await page.goto('/');
-    await expect(page.getByTestId('nav-18')).toContainText('Industrial Digital Twin');
-    await page.getByTestId('nav-18').click();
-    await expect(page.getByTestId('twin-stage-title')).toContainText('Mission');
-    await page.getByTestId('twin-start').click();
-    await page.getByTestId('twin-buy-rot32').click(); await page.getByTestId('twin-buy-cam-mid').click();
-    const before = await page.getByTestId('twin-remaining').innerText();
-    await expect(page.getByTestId('twin-buy-tls')).toBeDisabled(); // 6000+ credits do not fit in what is left
-    await expect(page.getByTestId('twin-budget')).not.toContainText('Over budget');
-    expect(await page.getByTestId('twin-remaining').innerText()).toBe(before);
-    // every owned item has its own Remove button; removing frees the credits, and the item can be bought again
-    await expect(page.getByTestId('twin-owned')).toContainText('LiDAR 1'); await expect(page.getByTestId('twin-owned')).toContainText('Camera 1');
-    await page.getByTestId('twin-remove-c1').click();
-    await expect(page.getByTestId('twin-owned')).not.toContainText('Camera 1'); expect(await page.getByTestId('twin-remaining').innerText()).not.toBe(before);
-    await page.getByTestId('twin-remove-l1').click(); await expect(page.getByTestId('twin-owned')).not.toContainText('LiDAR 1'); await expect(page.getByTestId('twin-remaining')).toContainText('3000');
-    await expect(page.getByTestId('twin-buy-tls')).toBeDisabled(); // a 6000-credit TLS does not fit in the default 3000 (the admin can raise the budget)
-    await page.getByTestId('twin-buy-rot128').click(); await expect(page.getByTestId('twin-owned')).toContainText('128');
-    await expect(page.getByTestId('twin-budget')).not.toContainText('Over budget');
-  });
-  test('upgrades that would go over the budget are refused with a message', async ({ page }) => {
-    await page.goto('/'); await page.getByTestId('nav-18').click(); await page.getByTestId('twin-stage-2').click();
-    await page.getByTestId('twin-buy-rot128').click(); await page.getByTestId('twin-buy-cam-high').click(); await page.getByTestId('twin-buy-light').click(); await page.getByTestId('twin-buy-light').click(); // 2905 of 3000
-    await page.getByTestId('twin-stage-3').click(); await page.getByTestId('twin-unit-c1').click();
-    const left = await page.getByTestId('twin-remaining').innerText();
-    await page.getByText(/Low-light kit/).click(); // +120: refused
-    await expect(page.getByText(/Not enough credits/).first()).toBeVisible();
-    expect(await page.getByTestId('twin-remaining').innerText()).toBe(left);
-    await expect(page.getByTestId('twin-budget')).not.toContainText('Over budget');
-  });
-  test('new equipment starts scattered around the factory, not on top of each other; the tilt reaches ±90°', async ({ page }) => {
-    await page.goto('/'); await page.getByTestId('nav-18').click(); await page.getByTestId('twin-stage-2').click();
-    for (let i = 0; i < 3; i++) await page.getByTestId('twin-buy-rot16').click();
-    const pos = await page.evaluate(() => (window as any).__twin?.getState().design.lidars.map((u: any) => [u.x, u.y]));
-    expect(pos).toHaveLength(3);
-    for (let i = 0; i < 3; i++) for (let j = i + 1; j < 3; j++) expect(Math.hypot(pos[i][0] - pos[j][0], pos[i][1] - pos[j][1])).toBeGreaterThan(5);
-    await page.getByTestId('twin-stage-3').click(); await page.getByTestId('twin-unit-l1').click();
-    const tilt = page.getByLabel('Tilt up (+) / down (−)'); await expect(tilt).toHaveAttribute('min', '-90'); await expect(tilt).toHaveAttribute('max', '90');
-    await expect(page.getByLabel('Resolution')).toHaveCount(0); // the model (channel count) decides it
-  });
-  test('the plan sits in the top-left corner of the view, and the coverage numbers are in the live statistics', async ({ page }) => {
-    await page.goto('/'); await page.getByTestId('nav-18').click(); await page.getByTestId('twin-stage-2').click(); await page.getByTestId('twin-buy-rot32').click(); await page.getByTestId('twin-stage-3').click();
-    await expect(page.getByTestId('twin-plan')).toBeVisible(); await expect(page.getByTestId('twin-plan').locator('canvas')).toBeVisible();
-    const stage = await page.getByTestId('stage').boundingBox(), plan = await page.getByTestId('twin-plan').boundingBox();
-    expect(plan!.x - stage!.x).toBeLessThan(30); expect(plan!.y - stage!.y).toBeLessThan(90); // top left of the canvas
-    await expect(page.getByTestId('stats-card')).toContainText('Observed', { timeout: 30000 });
-    await expect(page.getByTestId('stats-card').getByTestId('stats-group')).toHaveCount(2); // Budget & equipment, LiDAR coverage
-    await expect(page.getByTestId('right-panel').getByTestId('twin-plan')).toHaveCount(0); // not in the panel
-    await page.getByTestId('twin-plan-toggle').click(); await expect(page.getByTestId('twin-plan').locator('canvas')).toHaveCount(0); // it can be folded away
-    await page.getByTestId('twin-plan-toggle').click(); await expect(page.getByTestId('twin-plan').locator('canvas')).toBeVisible();
-    const legend = await page.getByLabel('Legend').boundingBox(); expect(legend!.x + legend!.width).toBeGreaterThan(stage!.x + stage!.width - 40); // the colour key is at the top right
-    await page.getByTestId('stats-card').getByRole('button', { name: /LiDAR coverage/ }).click(); // a group title folds its numbers away
-    await expect(page.getByTestId('stats-card')).not.toContainText('Observed'); await page.getByTestId('stats-card').getByRole('button', { name: /LiDAR coverage/ }).click(); await expect(page.getByTestId('stats-card')).toContainText('Observed');
-      await page.getByTestId('twin-stage-5').click(); await expect(page.getByTestId('twin-plan')).toBeVisible(); // it stays for the later stages
-    await page.getByTestId('twin-stage-8').click(); await expect(page.getByTestId('twin-plan')).toBeVisible();
-  });
-  test('the same model can be bought twice, and each unit stays where it is put', async ({ page }) => {
-    await page.goto('/'); await page.getByTestId('nav-18').click(); await page.getByTestId('twin-stage-2').click();
-    await page.getByTestId('twin-buy-rot32').click(); await page.getByTestId('twin-buy-rot32').click();
-    await expect(page.getByTestId('twin-owned')).toContainText('LiDAR 1'); await expect(page.getByTestId('twin-owned')).toContainText('LiDAR 2');
-    await page.getByTestId('twin-stage-3').click(); await expect(page.getByTestId('twin-unit-l2')).toBeVisible();
-    await expect(page.getByTestId('twin-add-station')).toHaveCount(0); // no stations: these are fixed units for monitoring
-  });
-  test('calibration is checked against a LiDAR, and that LiDAR\'s points are coloured by the camera as you calibrate', async ({ page }) => {
-    await page.goto('/'); await page.getByTestId('nav-18').click(); await page.getByTestId('twin-stage-2').click();
-    await page.getByTestId('twin-buy-rot32').click(); await page.getByTestId('twin-buy-rot32').click(); await page.getByTestId('twin-buy-cam-mid').click();
-    await page.getByTestId('twin-stage-4').click();
-    await expect(page.getByTestId('twin-unit-c1')).toContainText('→ LiDAR'); // the pairing is on the button
-    await expect(page.getByTestId('twin-cal-list')).not.toContainText('LiDAR 1 LiDAR 2'); // only cameras are listed to calibrate
-    await page.getByTestId('twin-unit-c1').click();
-    await expect(page.getByTestId('twin-pair-board')).toBeVisible();
-    { const from = (await page.getByTestId('twin-port-c1').boundingBox())!, to = (await page.getByTestId('twin-pair-l2').boundingBox())!; // connect by dragging a wire from the camera to a LiDAR
-      await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2); await page.mouse.down(); await page.mouse.move(to.x + 30, to.y + to.height / 2, { steps: 8 }); await page.mouse.up(); }
-    await expect(page.getByTestId('twin-unit-c1')).toContainText('→ LiDAR 2'); await page.getByTestId('twin-pair-l1').click(); await expect(page.getByTestId('twin-unit-c1')).toContainText('→ LiDAR 1'); await page.getByTestId('twin-pair-l2').click(); await expect(page.getByTestId('twin-unit-c1')).toContainText('→ LiDAR 2'); // the pairing is the student's choice, not fixed 1-to-1
-    await expect(page.getByTestId('twin-fov-pct')).toContainText(/LiDAR covers [\d.]+ % of the camera's view/); const near = await page.getByTestId('twin-fov-pct').innerText();
-    await page.getByTestId('twin-fov-overlap').getByRole('slider').fill('20'); await expect(page.getByTestId('twin-fov-overlap')).toContainText('on a flat screen 20 m'); expect(await page.getByTestId('twin-fov-pct').innerText()).not.toBe(near);
-    await page.getByTestId('twin-pair-l1').click(); await expect(page.getByTestId('twin-unit-c1')).toContainText('→ LiDAR 1');
-    await expect(page.getByTestId('twin-cal-colour')).toContainText(/colours [\d,]+ of [\d,]+ points/, { timeout: 60000 });
-    const before = await page.getByTestId('twin-cal-colour').innerText();
-    await page.getByTestId('twin-cal-auto').click();
-    await expect(page.getByTestId('twin-cal-colour')).toContainText(/colours/, { timeout: 60000 });
-    expect(before).toMatch(/Grey points/);
-  });
-  test('several cameras can be wired to one LiDAR, and together they colour its points', async ({ page }) => {
-    await page.goto('/'); await page.getByTestId('nav-18').click(); await page.getByTestId('twin-stage-2').click();
-    await page.getByTestId('twin-buy-rot32').click(); await page.getByTestId('twin-buy-cam-mid').click(); await page.getByTestId('twin-buy-cam-basic').click();
-    await page.getByTestId('twin-stage-4').click(); await page.getByTestId('twin-unit-c1').click();
-    await expect(page.getByTestId('twin-pair-l1')).toContainText('Cam 1 + Cam 2'); // both wires end at the one LiDAR
-    await expect(page.getByTestId('twin-unit-c1')).toContainText('→ LiDAR 1'); await expect(page.getByTestId('twin-unit-c2')).toContainText('→ LiDAR 1');
-    await expect(page.getByTestId('twin-cal-colour')).toContainText(/Cameras 1 \+ 2 together colour [\d,]+ of [\d,]+ points/, { timeout: 60000 });
-  });
-  test('the 3D view can show the scene, the points, or both at once', async ({ page }) => {
-    await page.goto('/'); await page.getByTestId('nav-18').click(); await page.getByTestId('twin-stage-2').click(); await page.getByTestId('twin-buy-rot32').click();
-    await page.getByTestId('twin-stage-5').click(); await page.getByTestId('twin-acquire').click();
-    await expect(page.getByTestId('twin-survey')).toBeVisible({ timeout: 60000 });
-    const view = page.getByRole('group', { name: 'What the 3D view shows' });
-    for (const m of ['Scene', 'Points', 'Both']) { await view.getByRole('button', { name: m, exact: true }).click(); await expect(view.getByRole('button', { name: m, exact: true })).toHaveAttribute('aria-pressed', 'true'); }
-    await expect(page.locator('canvas').first()).toBeVisible();
-  });
-  test('the pipeline is built block by block: it starts empty, phases are joined by arrows, a registration is required, and the order is kept', async ({ page }) => {
-    test.setTimeout(240_000);
-    await page.goto('/'); await page.getByTestId('nav-18').click();
-    await page.getByTestId('twin-stage-2').click(); await page.getByTestId('twin-buy-rot32').click(); await page.getByTestId('twin-buy-rot32').click();
-    await page.getByTestId('twin-stage-6').click();
-    await expect(page.locator('[data-testid^="twin-block-"]')).toHaveCount(0); // nothing is pre-built
-    await expect(page.getByTestId('twin-recommended')).toHaveCount(0);
-    await expect(page.getByTestId('twin-run')).toBeDisabled();
-    await expect(page.getByTestId('twin-lanes').locator('.pipe-link')).toHaveCount(4); // arrows between the five phases
-    await page.getByTestId('twin-add-phase-4').selectOption('classify'); await page.getByTestId('twin-add-phase-4').selectOption('euclid'); // added in the wrong order: kept in the right one
-    await page.getByTestId('twin-add-phase-1').selectOption('icp');
-    await expect(page.getByTestId('twin-block-1')).toContainText('ICP registration'); await expect(page.getByTestId('twin-block-2')).toContainText('Euclidean'); await expect(page.getByTestId('twin-block-3')).toContainText('Classify');
-    await page.getByTestId('twin-add-phase-4').selectOption('colour'); // needs a camera: the message says so
-    await expect(page.getByTestId('twin-block-error-4')).toBeVisible(); await expect(page.getByTestId('twin-run')).toBeDisabled();
-    await page.getByTestId('twin-remove-4').click(); await expect(page.getByTestId('twin-run')).toBeEnabled();
-    // registration can be tested on its own, with its RMSE
-    await page.getByTestId('twin-settings-1').click(); await expect(page.getByLabel(/Match distance/)).toBeVisible();
-    await page.getByTestId('twin-test-reg-1').click(); await expect(page.getByTestId('twin-reg-result')).toContainText('RMSE', { timeout: 60000 });
-    await page.getByTestId('twin-run').click();
-    await expect(page.getByTestId('twin-steps')).toBeVisible({ timeout: 180000 });
-    await page.getByTestId('twin-stage-9').click();
-    await expect(page.getByTestId('twin-total')).toContainText('/ 100');
-    await expect(page.getByTestId('twin-send-off')).toBeVisible(); // no server address is built into the test app: sending is explained, not offered
-    await page.getByTestId('twin-stage-7').click(); await expect(page.getByTestId('twin-twin')).toContainText('Covered');
-  });
-  test('the 3D view has its own Test button while you add blocks: it says what is missing, runs the pipeline and steps through the blocks', async ({ page }) => {
-    await page.goto('/'); await page.getByTestId('nav-18').click(); await page.getByTestId('twin-stage-2').click(); await page.getByTestId('twin-buy-rot32').click(); await page.getByTestId('twin-stage-6').click();
-    await expect(page.getByTestId('twin-canvas-run')).toBeVisible(); await expect(page.getByTestId('twin-run-canvas')).toBeDisabled(); await expect(page.getByTestId('twin-canvas-why')).toContainText(/registration/i);
-    await page.getByTestId('twin-add-phase-1').selectOption('icp'); await page.getByTestId('twin-add-phase-2').selectOption('voxel');
-    await expect(page.getByTestId('twin-canvas-why')).toHaveCount(0); await expect(page.getByTestId('twin-run-canvas')).toBeEnabled();
-    await page.getByTestId('twin-run-canvas').click(); await expect(page.getByTestId('twin-canvas-steps')).toBeVisible({ timeout: 180000 });
-    await expect(page.getByTestId('twin-points-2')).toContainText(/−\d+ %/); // the voxel block says how many points it removed, right inside the block
-    await expect(page.getByTestId('twin-canvas-steps')).toContainText(/After .*: [\d,]+ points/); // a finished run already shows its result in the view: the last block with points
-    await page.getByRole('button', { name: 'Previous block' }).click(); await page.getByRole('button', { name: 'Next block' }).click(); await expect(page.getByTestId('twin-canvas-steps')).toContainText(/After .*: [\d,]+ points/);
-  });
-  test('a block that finds planes or clusters lists them, and unticking some changes the result', async ({ page }) => {
-    await page.goto('/'); await page.getByTestId('nav-18').click(); await page.getByTestId('twin-stage-2').click(); await page.getByTestId('twin-buy-rot32').click(); await page.getByTestId('twin-buy-rot32').click(); await page.getByTestId('twin-stage-6').click();
-    await page.getByTestId('twin-add-phase-1').selectOption('icp'); await page.getByTestId('twin-add-phase-2').selectOption('voxel'); await page.getByTestId('twin-add-phase-3').selectOption('planes');
-    await page.getByTestId('twin-run-canvas').click(); await expect(page.getByTestId('twin-pick-3')).toContainText(/\d+ planes found/, { timeout: 180000 }); await expect(page.getByTestId('twin-pick-3')).toContainText('Floor');
-    await expect(page.getByTestId('twin-points-3')).toContainText(/−\d+ %/); // the planes were removed
-    await page.getByTestId('twin-pick-none-3').click(); // keep every plane: nothing is removed any more, and the test runs again by itself
-    await expect(page.getByTestId('twin-points-3')).toHaveCount(0, { timeout: 180000 }); await expect(page.getByTestId('twin-pick-3-1')).not.toBeChecked();
-  });
-  test('blocks can run in sequence or in parallel, and the builder can be expanded', async ({ page }) => {
-    await page.goto('/'); await page.getByTestId('nav-18').click();
-    await page.getByTestId('twin-stage-2').click(); await page.getByTestId('twin-buy-rot16').click(); await page.getByTestId('twin-stage-6').click();
-    await page.getByTestId('twin-add-phase-1').selectOption('icp'); await page.getByTestId('twin-add-phase-2').selectOption('crop');
-    await page.getByTestId('twin-add-phase-2').selectOption('sor'); await page.getByTestId('twin-add-phase-2').selectOption('ror');
-    await expect(page.getByTestId('twin-parallel-group')).toHaveCount(0); // in sequence by default: arrows between blocks, no side-by-side group
-    await expect(page.getByTestId('twin-phase-2').locator('.pipe-arrow')).toHaveCount(2);
-    await page.getByTestId('twin-par-3').click(); await page.getByTestId('twin-par-4').click(); // sor and ror side by side
-    await expect(page.getByTestId('twin-parallel-group')).toHaveCount(1); await expect(page.getByTestId('twin-parallel-group')).toContainText('joined');
-    await page.getByTestId('twin-seq-4').click(); await expect(page.getByTestId('twin-parallel-group')).toHaveCount(0); // a lone parallel block is just in sequence
-    await page.getByTestId('twin-par-4').click();
-    await page.getByTestId('twin-expand-builder').click();
-    await expect(page.getByTestId('twin-pipe-overlay')).toBeVisible(); await expect(page.getByTestId('twin-lanes-wide').locator('.pipe-link')).toHaveCount(4);
-    await expect(page.getByTestId('twin-parallel-group')).toHaveCount(1); // the same pipeline, laid out left to right
-    await page.getByTestId('twin-collapse-builder').click(); await expect(page.getByTestId('twin-pipe-overlay')).toHaveCount(0);
-    await expect(page.getByTestId('twin-parallel-group')).toHaveCount(1);
-  });
-  test('the workspace is remembered after a reload', async ({ page }) => {
-    await page.goto('/'); await page.getByTestId('nav-18').click();
-    await page.getByTestId('twin-team').fill('Lidar Legends');
-    await page.getByTestId('twin-stage-2').click(); await page.getByTestId('twin-buy-rot16').click();
-    await page.waitForTimeout(700); await page.reload(); await page.getByTestId('nav-18').click();
-    await expect(page.getByTestId('twin-stage-title')).toContainText('Equipment'); // it opens where you left off
-    await expect(page.getByTestId('twin-owned')).toContainText('Low-resolution');
-    await page.getByTestId('twin-stage-1').click(); await expect(page.getByTestId('twin-team')).toHaveValue('Lidar Legends');
-  });
-});
-
+// Industrial challenge coverage is in mission-redesign.spec.ts (seven measured missions).
 
 // ============================================================================ the Thank You tab and its feedback form
 const FB_API = 'http://localhost:8799', CORS = { 'access-control-allow-origin': '*', 'access-control-allow-headers': 'content-type' };

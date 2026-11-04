@@ -1,5 +1,6 @@
 import type { RunResult } from './runner';
 import { TASK_NAMES, TaskKey } from './catalogue';
+import { usd } from './pricing';
 
 /** Plain-language feedback taken from the measured numbers of a run. Nothing here is generic: every sentence quotes what happened. */
 const pct = (v: number) => `${Math.round(v * 100)} %`;
@@ -26,7 +27,7 @@ export function feedbackFor(r: RunResult): Record<TaskKey, string[]> {
 }
 
 export function reportMarkdown(team: string, members: string[], r: RunResult | null, finalGrade: { total: number; perTask: { key: TaskKey; points: number; weight: number }[] } | null, costTotal: number, budget: number): string {
-  const L = [`# Industrial Digital Twin Challenge: results`, '', `Team: ${team || '(no name)'}${members.length ? ` · ${members.join(', ')}` : ''}`, `Equipment cost: ${costTotal} of ${budget} credits`, ''];
+  const L = [`# Industrial Digital Twin Challenge: results`, '', `Team: ${team || '(no name)'}${members.length ? ` · ${members.join(', ')}` : ''}`, `Equipment cost: ${usd(costTotal)} of ${usd(budget)}`, ''];
   const tbl = (g: { total: number; perTask: { key: TaskKey; points: number; weight: number }[] }) => [`| Task | Points | Out of |`, `|---|---|---|`, ...g.perTask.map((t) => `| ${TASK_NAMES[t.key]} | ${t.points.toFixed(1)} | ${t.weight} |`), `| **Total** | **${g.total.toFixed(1)}** | 100 |`, ''];
   if (finalGrade) L.push('## Final evaluation', ...tbl(finalGrade));
   if (r) { L.push(`## Practice run (scenario ${r.seed})`, ...tbl(r.grade)); const fb = feedbackFor(r); for (const k of Object.keys(fb) as TaskKey[]) { L.push(`### ${TASK_NAMES[k]}`, ...fb[k].map((x) => `- ${x}`), ''); } }

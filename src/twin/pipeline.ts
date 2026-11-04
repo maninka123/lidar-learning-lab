@@ -266,7 +266,10 @@ export function runPipeline(blocks: Block[], input: PipelineInput, seed = 1): Pi
         case 'dbscan': { const c = w.cloud!, r = dbscan(c.positions, c.count, p.eps, p.min); w.segLabels = r.labels; w.segCount = r.clusters; const pk = pickClusters(c.positions, r.labels, r.clusters, b.off ?? []); if (e === 'A') pick = pk; note = `${r.clusters} clusters${b.off?.length ? ` (${pk.items.filter((x) => !x.on).length} dropped)` : ''}`; break; }
         case 'classify': { w.objects = clustersToObjects(w.cloud!, w.segLabels!, w.segCount!, p); note = `${w.objects.length} objects`; break; }
         case 'colour': {
-          const c = w.cloud!, objs = w.objects!, col = colourPoints(c.positions, c.count, input.camerasA);
+          const c = w.cloud!, objs = w.objects!, col = colourPoints(c.positions, c.count, input.camerasA, c.scanIds);
+          const colors = col.colors.slice();
+          for (let i = 0; i < c.count; i++) if (!col.valid[i]) colors.fill(125, i * 3, i * 3 + 3);
+          w.cloud = { ...c, colors };
           let named = 0;
           for (const o of objs) {
             const votes = { red: 0, green: 0, yellow: 0 }; let tot = 0;
@@ -331,7 +334,7 @@ export function runPipeline(blocks: Block[], input: PipelineInput, seed = 1): Pi
     }
     const after = ws.A.cloud?.count ?? cur;
     if (reg) registration = reg;
-    steps.push({ ...base, ms: now() - s0, after, note, reg, pick, preview: ws.A.cloud && info.out === 'cloud' ? thin(ws.A.cloud, 40000) : undefined });
+    steps.push({ ...base, ms: now() - s0, after, note, reg, pick, preview: ws.A.cloud && (info.out === 'cloud' || info.out === 'segments' || info.out === 'objects') ? thin(ws.A.cloud, 40000) : undefined });
   });
   for (const w of [ws.A, ws.B]) if (w && !w.twin) w.twin = w.cloud;
   return { A: ws.A, B: ws.B, registration, changes, safety, steps, ms: now() - t0 };
