@@ -95,10 +95,13 @@ The built-in scenes are procedural (MIT). The real scans come from public datase
 
 </details>
 
-**AI steps (Scene Graphs, Moving Scene)** need a DeepSeek key. <sub>Why DeepSeek? It is capable, easy to get a key for, and cheap enough for a large audience. Cost matters here because the lab sends point clouds as text, which uses many tokens, and one shared workshop key has to serve a whole class.</sub> There are three ways to get one:
+**AI steps (Scene Graphs, Moving Scene)** need a DeepSeek key. There are three ways to get one:
+
 - **In a workshop:** nothing to do. While your instructor's workshop is running the AI works for everyone (you can add your name if you like).
 - **On the website:** paste your own key into the box that appears. It stays in your browser.
 - **On your own computer:** copy `.env.example` to `.env.local`, put `DEEPSEEK_API_KEY=your-key` in it and run `npm run dev`. The key stays on your machine and nothing needs pasting.
+
+> **Why DeepSeek?** It is capable, easy to get a key for, and cheap. Cost matters because the lab sends point clouds as text, which uses many tokens, and one shared workshop key has to serve a whole class.
 
 Everything else works without any key.
 
