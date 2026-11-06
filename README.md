@@ -97,7 +97,7 @@ The built-in scenes are procedural (MIT). The real scans come from public datase
 
 **AI steps (Scene Graphs, Moving Scene)** need a DeepSeek key. There are three ways to get one:
 
-- **In a workshop:** nothing to do. While your instructor's workshop is running the AI works for everyone (you can add your name if you like).
+- **In a workshop:** nothing to do. Your lecturer or instructor will provide AI access for everyone during the session (you can add your name if you like).
 - **On the website:** paste your own key into the box that appears. It stays in your browser.
 - **On your own computer:** copy `.env.example` to `.env.local`, put `DEEPSEEK_API_KEY=your-key` in it and run `npm run dev`. The key stays on your machine and nothing needs pasting.
 
