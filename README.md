@@ -37,7 +37,6 @@ Go through the tabs in order, one idea at a time, about five minutes each. Each 
 | 14 | **Supervised Learning** (train your own model) | Drag blocks to build a small neural network and train it on 10 labelled images and 10 labelled point clouds, side by side. Choose classification, detection or segmentation; three held-back examples show whether it really learned. |
 | 15 | **Scene Graphs & 3D AI** | Objects and relations, offline question answering, link to local-llm-fit. |
 | 16 | **Moving Scene & Temporal Graph** | A vehicle scans a street every 0.8 s. Each frame is segmented, objects are tracked between frames, and events (approaching, crossing, passing) become a temporal scene graph a language model can answer questions from. |
-| | **Applications (optional)** | |
 | 17 | **Scan to CAD** | Slice a classroom, find wall lines, square the corners, export a DXF floor plan. |
 | 18 | **Image to 3D** | Choose a scene, try three reconstruction methods, then mesh, align with scale and view the error map. |
 | 19 | **Industrial Digital Twin Challenge** | Seven unlocking missions: design, register, clean, detect, add cameras, check changes and safety, then commission the system on unseen scenarios. Graded on real results; scores can go to the instructor. See docs/DIGITAL_TWIN_CHALLENGE.md. |
