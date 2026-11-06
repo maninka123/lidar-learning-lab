@@ -72,6 +72,11 @@ npm run test:e2e   # browser tests (Playwright; first run: npx playwright instal
 
 ## Data and credits
 
+The built-in scenes are procedural (MIT). The real scans come from public datasets and keep their own licences; every source is credited.
+
+<details>
+<summary><b>Datasets and licences</b> (6)</summary>
+
 | Dataset | Source | Licence |
 |---|---|---|
 | Scenes A–D (room, workshop, street, city) | Procedural, this repo | MIT |
@@ -81,7 +86,14 @@ npm run test:e2e   # browser tests (Playwright; first run: npx playwright instal
 | Livox MID-360 frames | [Zenodo 14841855](https://zenodo.org/records/14841855), AIST | CC BY 4.0 |
 | Velodyne VLP-16 frames | [Keio-CSG/lidar-spoofing-artifacts](https://github.com/Keio-CSG/lidar-spoofing-artifacts) | no licence stated, credit Keio-CSG |
 
+</details>
+
+<details>
+<summary><b>Video credits</b>: Dr. Florent Poux</summary>
+
 **Videos linked in the app** are by **[Dr. Florent Poux](https://www.youtube.com/@FlorentPoux)**, whose point-cloud tutorials inspired the classroom tabs. Thank you for sharing them: [Scan to CAD](https://www.youtube.com/watch?v=Z8uAzTqdSts) · [Adaptive RANSAC plane detection](https://www.youtube.com/watch?v=MJJNIvvAQzc) · [Smart 3D change detection](https://www.youtube.com/watch?v=38Fu-pDwUoA) · [The library point cloud](https://www.youtube.com/watch?v=X57nSQZePyE) · [University](https://www.youtube.com/watch?v=8nzo4YobRyc) · [Old wool factory](https://www.youtube.com/watch?v=Kq8FKKODkog) · [Implantation point cloud](https://www.youtube.com/watch?v=Hy4hnWMw5ms). The videos play from YouTube; nothing is downloaded or copied.
+
+</details>
 
 **AI steps (Scene Graphs, Moving Scene)** need a DeepSeek key, and there are three ways to get one:
 - **In a workshop:** nothing to do. While your instructor's workshop is running the AI works for everyone (you can add your name if you like).
