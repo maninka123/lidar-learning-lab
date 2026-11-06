@@ -489,8 +489,7 @@ export default function TabTwin() {
       );
       case 4: return (
         <>
-          <Callout kind="edu" title="Acquire a survey">Every LiDAR measures with range noise, lost returns and a few floating points. Fixed scanners are recorded where you put them, with a small installation error. A mobile scanner only knows its route by dead reckoning, so its scans drift apart. Registration (a block in your pipeline) joins the scans into one frame.</Callout>
-          <Btn variant="primary" icon={<Play size={16} />} onClick={acquire} busy={T.busy === 'Acquiring the survey…'} disabled={!cost.ok} testId="twin-acquire">Acquire the practice survey</Btn>
+          <Callout kind="edu" title="What you get">Noisy scans, with a few lost and floating points. Fixed scanners carry a small installation error; a mobile one drifts along its route. Join them in <b>Process</b> with registration.</Callout>
           {survey && (
             <table className="table" data-testid="twin-survey"><thead><tr><td>Scan</td><td>Points</td><td>Coloured by a camera</td></tr></thead><tbody>
               {survey.visible.scans.map((s2, i) => <tr key={s2.index}><td>{s2.name}</td><td className="mono">{s2.cloud.count.toLocaleString()}</td><td className="mono">{surveyView?.[i]?.cam ? `${surveyView[i].coloured.toLocaleString()} (${Math.round((100 * surveyView[i].coloured) / Math.max(1, s2.cloud.count))} %)` : d.cameras.length ? '…' : 'no camera'}</td></tr>)}
@@ -747,8 +746,9 @@ export default function TabTwin() {
   const controls = (
     <>
       <MissionBrief key={mission} mission={mission} progress={T.progress} onContinue={() => goMission(mission + 1)} onReference={() => { const i = tabIndex(missionDef.reference); if (i >= 0) lab.setTab(i); }} />
-      {[1, 2, 4, 8].includes(stage) && <BudgetSummary cost={cost} budget={T.settings.budget} hasLidar={!!d.lidars.length} />}
+      {[1, 2, 8].includes(stage) && <BudgetSummary cost={cost} budget={T.settings.budget} hasLidar={!!d.lidars.length} />}
       <div className="mission-tools"><Seg label="Mission tools" value={stage} onChange={(stage) => T.set({ stage })} options={missionDef.tools.map((value) => ({ value, label: TOOL_NAMES[value] }))} /></div>
+      {stage === 4 && <div style={{ marginBottom: 10 }}><Btn variant="primary" block icon={<Play size={16} />} onClick={acquire} busy={T.busy === 'Acquiring the survey…'} disabled={!cost.ok} testId="twin-acquire">{survey ? 'Acquire the survey again' : 'Acquire the practice survey'}</Btn></div>}
       {mission === 6 && <p className="mission-check-target mission-final-target" data-testid="mission-targets">{MISSION_TARGETS[mission]}</p>}
       {mission < 6 && <MissionCheck
         target={MISSION_TARGETS[mission]}
