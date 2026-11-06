@@ -1,4 +1,4 @@
-# LiDAR Learning Lab
+<p align="center"><img src="docs/banner.svg" alt="LiDAR Learning Lab" width="100%"></p>
 
 **Welcome, and thanks for stopping by.** 👋
 
