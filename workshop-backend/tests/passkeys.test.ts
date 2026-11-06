@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { createHash, createSign, generateKeyPairSync, randomBytes } from 'node:crypto';
-import { admin, mk, setup, Ctx } from './helpers';
+import { admin, mk, setup, Ctx, PASSWORD, USER } from './helpers';
 import { adminHandler } from '../lib/handlers';
 
 /** A tiny software passkey (like Touch ID, Face ID or Windows Hello): enough CBOR and crypto to act as a platform authenticator (ES256, no attestation). */
@@ -93,9 +93,12 @@ describe('Passkeys', () => {
     expect((await a.call('POST', 'passkey-register', { challengeId: o.challengeId, response: dev.create(o.options.challenge) })).status).toBe(400); // expired
   });
 
-  it('shares the login throttle, so it cannot be guessed at either', async () => {
+  it('has its own throttle: students hammering the password form cannot lock the passkey out, and wrong passkeys are still refused', async () => {
     const ctx = setup(); const a = admin(ctx); await a.login(); await register(ctx, a);
     const codes: number[] = []; for (let i = 0; i < 8; i++) codes.push((await loginWith(ctx, { challengeId: 'aaaaaaaaaaaa', response: { id: 'x' } }, '4.4.4.4')).status);
-    expect(codes.slice(0, 5)).toEqual([401, 401, 401, 401, 401]); expect(codes[5]).toBe(429);
+    expect(codes).toEqual([401, 401, 401, 401, 401, 401, 401, 401]); // refused every time, never signed in
+    const other: number[] = []; for (let i = 0; i < 7; i++) other.push((await adminHandler(ctx.deps)(mk('POST', '/api/admin/login', { body: { username: USER, password: 'wrong password!' }, ip: '9.9.9.9' }))).status);
+    expect(other[5]).toBe(429); // the password is locked for that address...
+    expect((await loginWith(ctx, { challengeId: 'aaaaaaaaaaaa', response: { id: 'x' } }, '9.9.9.9')).status).toBe(401); // ...but the passkey door is not (401 = tried and refused, not 429)
   });
 });

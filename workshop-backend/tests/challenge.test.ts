@@ -157,3 +157,19 @@ it('accepts bounded mission summaries while retaining compatibility with old sco
  const parsed=parseSubmission({...good,missions:[{number:1,status:'passed',score:85,attempts:3,completed:true},{number:2,status:'<script>',score:999,attempts:-2}]});
  expect(parsed.ok).toBe(true);if(parsed.ok){expect(parsed.value.missions?.[0]).toMatchObject({number:1,status:'passed',score:85,attempts:3,completed:true});expect(parsed.value.missions?.[1]).toMatchObject({status:'not-attempted',score:100,attempts:0});}
 });
+
+import { scoreFlags, DEFAULT_SETTINGS } from '../lib/challenge';
+describe('score consistency checks', () => {
+  const tasks = { twin: 0.8, detect: 0.7, colour: 0.9, change: 0.6, quality: 0.9, safety: 1, budget: 0.5 };
+  const W = 100, points = Object.fromEntries(Object.entries(tasks).map(([k, v]) => [k, Math.round((100 * (DEFAULT_SETTINGS.weights as Record<string, number>)[k] * v) / W * 10) / 10]));
+  const total = Object.values(points).reduce((a, b) => a + b, 0);
+  const good = { total, tasks, points, cost: 2500, budget: 3000, kind: 'final' as const, missions: Array.from({ length: 7 }, (_, i) => ({ number: i + 1, status: i < 6 ? 'passed' : 'not-attempted', score: 80, attempts: 1, completed: i < 6 })) };
+  it('an honest score has no flags', () => { expect(scoreFlags(good, DEFAULT_SETTINGS)).toEqual([]); });
+  it('catches a total that was edited, spending over budget, a changed budget and a final sent too early', () => {
+    expect(scoreFlags({ ...good, total: 100 }, DEFAULT_SETTINGS).join(' ')).toMatch(/not the sum/);
+    expect(scoreFlags({ ...good, cost: 4000 }, DEFAULT_SETTINGS).join(' ')).toMatch(/above the budget/);
+    expect(scoreFlags({ ...good, budget: 99999 }, DEFAULT_SETTINGS).join(' ')).toMatch(/budget differs/);
+    expect(scoreFlags({ ...good, points: { ...points, twin: 20 }, total: total - points.twin + 20 }, DEFAULT_SETTINGS).join(' ')).toMatch(/do not match/);
+    expect(scoreFlags({ ...good, missions: good.missions.map((m, i) => (i === 2 ? { ...m, status: 'needs-improvement' } : m)) }, DEFAULT_SETTINGS).join(' ')).toMatch(/before missions/);
+  });
+});

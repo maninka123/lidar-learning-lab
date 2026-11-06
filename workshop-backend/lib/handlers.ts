@@ -2,7 +2,7 @@ import type { Deps } from './env';
 import { missingEnv } from './env';
 import { Req, Res, json, err, corsHeaders, originAllowed, ipTag, clientIp, MAX_BODY } from './http';
 import { StoreUnavailable } from './store';
-import { clearCookie, createSession, csrfOk, destroySession, getSession, loginAllowed, sameOrigin, underLimit, verifyPassword } from './auth';
+import { clearCookie, createSession, csrfOk, destroySession, getSession, loginAllowed, loginSucceeded, sameOrigin, underLimit, verifyPassword, type LoginKind } from './auth';
 import * as W from './workshop';
 import * as L from './live';
 import * as P from './passkeys';
@@ -170,7 +170,7 @@ export const adminHandler = (deps: Deps) => async (req: Req): Promise<Res> => {
     if (req.method !== 'GET' && !sameOrigin(req)) return err(403, 'bad_origin');
 
     const sameText = (a: string, b: string) => { const x = createHash('sha256').update(a).digest(), y = createHash('sha256').update(b).digest(); return timingSafeEqual(x, y); };
-    const signIn = async () => { const { cookie, session } = await createSession(deps); return json(200, { ok: true, csrf: session.csrf, expiresAt: session.expiresAt }, { cookies: [cookie] }); };
+    const signIn = async (kind: LoginKind) => { await loginSucceeded(req, deps, kind); const { cookie, session } = await createSession(deps); return json(200, { ok: true, csrf: session.csrf, expiresAt: session.expiresAt }, { cookies: [cookie] }); };
 
     if (route === 'login' && req.method === 'POST') {
       if (!(await loginAllowed(req, deps))) return err(429, 'too_many_attempts', 'Too many login attempts. Wait 15 minutes.');
@@ -179,15 +179,15 @@ export const adminHandler = (deps: Deps) => async (req: Req): Promise<Res> => {
       const userOk = typeof u === 'string' && u.length <= 100 && sameText(u, deps.env.adminUser);
       const pwOk = typeof pw === 'string' && pw.length <= 200 && verifyPassword(pw, deps.env.adminHash);
       if (!userOk || !pwOk) return err(401, 'bad_login', 'Wrong username or password.');
-      return signIn();
+      return signIn('password');
     }
     // passkey sign-in (no session yet, so the same throttle as the password)
     if ((route === 'passkey-login-options' || route === 'passkey-login') && req.method === 'POST') {
       // asking for a challenge is cheap and harmless; only the answer counts like a password try
-      const allowed = route === 'passkey-login-options' ? await underLimit(req, deps, 'passkey-options', 40) : await loginAllowed(req, deps);
+      const allowed = route === 'passkey-login-options' ? await underLimit(req, deps, 'passkey-options', 100) : await loginAllowed(req, deps, 'passkey');
       if (!allowed) return err(429, 'too_many_attempts', 'Too many login attempts. Wait 15 minutes.');
       if (route === 'passkey-login-options') { const o = await P.loginOptions(req, deps); return o ? json(200, o) : err(404, 'no_passkey', 'No passkey is set up yet.'); }
-      return (await P.verifyLogin(req, deps, (req.body ?? {}) as never)) ? signIn() : err(401, 'bad_login', 'Passkey sign-in failed.');
+      return (await P.verifyLogin(req, deps, (req.body ?? {}) as never)) ? signIn('passkey') : err(401, 'bad_login', 'Passkey sign-in failed.');
     }
     const session = await getSession(req, deps);
     if (route === 'session' && req.method === 'GET') return json(200, session ? { authenticated: true, csrf: session.csrf, expiresAt: session.expiresAt, now, passkeys: await P.passkeyCount(deps) } : { authenticated: false, passkeys: (await P.passkeyCount(deps)) > 0 });

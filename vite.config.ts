@@ -22,6 +22,7 @@ export default defineConfig(({ mode }) => {
     build: { chunkSizeWarningLimit: 1600 },
     server: { proxy },
     preview: { proxy },
-    test: { include: ['tests/**/*.test.ts'], environment: 'node' },
+    // the simulations are heavy and a shared CI runner is slower than a laptop, so the default 5 s limit is far too tight
+    test: { include: ['tests/**/*.test.ts'], environment: 'node', testTimeout: 180000 },
   };
 });

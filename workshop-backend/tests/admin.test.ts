@@ -28,6 +28,13 @@ describe('admin authentication', () => {
     expect((await a.login()).status).toBe(429); // even the right password waits
     ctx.clock.t += 16 * 60e3; expect((await a.login()).status).toBe(200);
   });
+  it('a successful sign-in does not use up the attempts, so only wrong guesses count', async () => {
+    const ctx = setup(); const a = admin(ctx);
+    for (let i = 0; i < 3; i++) expect((await a.login('wrong password!')).status).toBe(401);
+    for (let i = 0; i < 8; i++) expect((await a.login()).status).toBe(200); // eight right ones in a row: never blocked
+    expect((await a.login('wrong password!')).status).toBe(401); expect((await a.login('wrong password!')).status).toBe(401); // that was 5 wrong in all
+    expect((await a.login('wrong password!')).status).toBe(429);
+  });
   it('requires the CSRF token and a same-site origin for changes', async () => {
     const ctx = setup(); const a = admin(ctx); await a.login();
     const good = a.csrf; a.csrf = '';

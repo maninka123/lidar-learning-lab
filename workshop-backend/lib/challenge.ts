@@ -18,6 +18,8 @@ export interface Submission {
   geo: { city: string; country: string }; net: string; origin: string;
   /** the network address of the computer that sent it (recorded so one computer sending under several names can be seen), and a random id the browser keeps */
   ip: string; device: string;
+  /** the server's own consistency checks: empty when everything adds up (see scoreFlags) */
+  flags?: string[];
 }
 
 const clean = (v: unknown, max: number): string => (typeof v === 'string' ? v.replace(/[\u0000-\u001f\u007f<>"'`&]/g, '').replace(/\s+/g, ' ').trim().slice(0, max) : '');
@@ -59,12 +61,28 @@ export function parseSubmission(body: unknown): Parsed {
 export const cleanLabel = (v: unknown) => clean(v, 30);
 export const netTag = (secret: string, ip: string) => addrTag(secret, ip);
 
+/**
+ * Grading runs in the student's browser, so a score cannot be proven genuine. These checks only catch scores whose own numbers contradict each other
+ * (a total that is not the sum of its parts, points that do not follow from the task scores and the instructor's weights, spending above the budget,
+ * a final evaluation sent before the missions were passed). A determined forger who sends consistent numbers will not be caught.
+ */
+export function scoreFlags(v: Pick<Submission, 'total' | 'tasks' | 'points' | 'cost' | 'budget' | 'kind' | 'missions'>, st: ChallengeSettings): string[] {
+  const flags: string[] = [], sum = TASKS.reduce((a, k) => a + (v.points[k] ?? 0), 0);
+  if (Math.abs(v.total - sum) > 0.8) flags.push('The total is not the sum of the task points.');
+  const W = TASKS.reduce((a, k) => a + (st.enabled[k] ? st.weights[k] : 0), 0);
+  if (W > 0 && TASKS.some((k) => Math.abs((v.points[k] ?? 0) - (st.enabled[k] ? (100 * st.weights[k] * (v.tasks[k] ?? 0)) / W : 0)) > 0.8)) flags.push('Task points do not match the task scores and the current weights.');
+  if (v.budget > 0 && v.cost > v.budget + 1) flags.push('Equipment cost is above the budget.');
+  if (v.budget > 0 && Math.abs(v.budget - st.budget) > 1) flags.push('The budget differs from the one set here.');
+  if (v.kind === 'final' && v.missions && v.missions.slice(0, 6).some((m) => m.status !== 'passed' && m.status !== 'excellent')) flags.push('Final evaluation sent before missions 1 to 6 were passed.');
+  return flags;
+}
+
 /** Store a submission. Returns false when this network has sent too many in the last hour. */
 export async function addSubmission(s: Store, p: Extract<Parsed, { ok: true }>['value'], ctx: { now: number; headers: Record<string, string>; ip: string; secret: string }): Promise<{ ok: true; id: string } | { ok: false }> {
   const net = netTag(ctx.secret, ctx.ip), hour = Math.floor(ctx.now / 3600000), rk = CH.rate(net, hour);
   const n = await s.incr(rk); if (n === 1) await s.expire(rk, 7200);
   if (n > MAX_PER_NET_HOUR) return { ok: false };
-  const id = randomBytes(6).toString('hex'), sub: Submission = { ...p, id, at: ctx.now, geo: geoFrom(ctx.headers), net, origin: clean(ctx.headers['origin'] ?? '', 80), ip: /^[0-9A-Fa-f:.]{3,45}$/.test(ctx.ip) ? ctx.ip : '' };
+  const flags = scoreFlags(p, await loadSettings(s)), id = randomBytes(6).toString('hex'), sub: Submission = { ...p, flags, id, at: ctx.now, geo: geoFrom(ctx.headers), net, origin: clean(ctx.headers['origin'] ?? '', 80), ip: /^[0-9A-Fa-f:.]{3,45}$/.test(ctx.ip) ? ctx.ip : '' };
   await s.lpush(CH.subs, JSON.stringify(sub)); await s.ltrim(CH.subs, 0, MAX_KEEP - 1);
   return { ok: true, id };
 }

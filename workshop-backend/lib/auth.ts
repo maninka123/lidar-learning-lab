@@ -7,16 +7,20 @@ const SESSION_MS = 8 * 3600e3;
 export const COOKIE = 'ws_admin';
 
 // ---------------------------------------------------------------- password (scrypt)
+/** 2^17, the current OWASP recommendation for scrypt (r = 8, p = 1). Older hashes keep working: the parameters are stored inside each hash. */
+export const SCRYPT_N = 131072;
+const maxMem = (N: number, r: number) => 256 * N * r; // twice what scrypt needs, because Node's default limit (32 MiB) is too small for N = 2^17
 export function hashPassword(password: string): string {
-  const salt = randomBytes(16), N = 16384, r = 8, p = 1;
-  const h = scryptSync(password, salt, 32, { N, r, p });
+  const salt = randomBytes(16), N = SCRYPT_N, r = 8, p = 1;
+  const h = scryptSync(password, salt, 32, { N, r, p, maxmem: maxMem(N, r) });
   return `scrypt:${N}:${r}:${p}:${salt.toString('base64')}:${h.toString('base64')}`;
 }
 export function verifyPassword(password: string, stored: string): boolean {
   const [alg, N, r, p, salt, hash] = stored.split(':');
   if (alg !== 'scrypt' || !salt || !hash) return false;
   try {
-    const want = Buffer.from(hash, 'base64'), got = scryptSync(password, Buffer.from(salt, 'base64'), want.length, { N: +N, r: +r, p: +p });
+    const n = +N, rr = +r; if (!(n >= 1024 && n <= 2 ** 20) || !(rr >= 1 && rr <= 16)) return false;
+    const want = Buffer.from(hash, 'base64'), got = scryptSync(password, Buffer.from(salt, 'base64'), want.length, { N: n, r: rr, p: +p, maxmem: maxMem(n, rr) });
     return got.length === want.length && timingSafeEqual(got, want);
   } catch { return false; }
 }
@@ -65,12 +69,28 @@ export function sameOrigin(req: Req): boolean {
 export const csrfOk = (req: Req, s: Session) => same(req.headers['x-csrf-token'] ?? '', s.csrf);
 
 // ---------------------------------------------------------------- login throttling
-/** Returns true if this attempt may proceed. 5 tries per IP and 30 overall per 15 minutes. */
-export async function loginAllowed(req: Req, deps: Deps): Promise<boolean> {
+/**
+ * Password guesses are limited: 5 wrong tries per address and 60 overall per 15 minutes. A passkey cannot be guessed, so it has its own, much
+ * larger bucket: students hammering the password form on a shared network cannot stop the instructor signing in with a passkey.
+ * The attempt is counted before it is checked (so parallel guesses cannot slip past), and handed back when the sign-in succeeds, so only failures use it up.
+ */
+export type LoginKind = 'password' | 'passkey';
+const LIMITS: Record<LoginKind, { ip: number; all: number }> = { password: { ip: 5, all: 60 }, passkey: { ip: 100, all: Infinity } };
+const loginKeys = (req: Req, deps: Deps, kind: LoginKind) => {
   const win = Math.floor(deps.now() / 900e3), ip = ipTag(clientIp(req.headers, req.ip));
-  const a = await deps.store.incr(`login:ip:${ip}:${win}`), b = await deps.store.incr(`login:all:${win}`);
-  await deps.store.expire(`login:ip:${ip}:${win}`, 1000); await deps.store.expire(`login:all:${win}`, 1000);
-  return a <= 5 && b <= 30;
+  return { ip: `login:${kind}:ip:${ip}:${win}`, all: `login:${kind}:all:${win}` };
+};
+/** Returns true if this attempt may proceed. */
+export async function loginAllowed(req: Req, deps: Deps, kind: LoginKind = 'password'): Promise<boolean> {
+  const k = loginKeys(req, deps, kind), lim = LIMITS[kind];
+  const a = await deps.store.hincrby(k.ip, 'n', 1), b = await deps.store.hincrby(k.all, 'n', 1);
+  await deps.store.expire(k.ip, 1000); await deps.store.expire(k.all, 1000);
+  return a <= lim.ip && b <= lim.all;
+}
+/** A successful sign-in does not count against the limit. */
+export async function loginSucceeded(req: Req, deps: Deps, kind: LoginKind = 'password'): Promise<void> {
+  const k = loginKeys(req, deps, kind);
+  await deps.store.hincrby(k.ip, 'n', -1); await deps.store.hincrby(k.all, 'n', -1);
 }
 
 /** Generic per-address limiter: true while this address is under `limit` calls in the current 15 minutes. */

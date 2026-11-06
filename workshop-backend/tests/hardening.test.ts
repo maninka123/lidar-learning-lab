@@ -23,3 +23,20 @@ describe('admin dashboard hardening', () => {
     expect(h['Content-Security-Policy']).not.toContain("script-src 'self' 'unsafe");
   });
 });
+
+import { hashPassword, verifyPassword, SCRYPT_N } from '../lib/auth';
+import { randomBytes, scryptSync } from 'node:crypto';
+describe('password hashing', () => {
+  it('new hashes use the stronger setting and verify; wrong passwords and damaged hashes are refused', () => {
+    const h = hashPassword('a long passphrase 123');
+    expect(h.startsWith(`scrypt:${SCRYPT_N}:8:1:`)).toBe(true);
+    expect(verifyPassword('a long passphrase 123', h)).toBe(true);
+    expect(verifyPassword('another passphrase', h)).toBe(false);
+    expect(verifyPassword('x', 'scrypt:1:8:1:AAAA:AAAA')).toBe(false); // absurdly weak parameters are not accepted
+    expect(verifyPassword('x', 'scrypt:999999999:8:1:AAAA:AAAA')).toBe(false); // nor absurdly large ones (memory attack)
+  });
+  it('a hash made with the old, lighter setting still works', () => {
+    const salt = randomBytes(16), hash = scryptSync('old passphrase 456', salt, 32, { N: 16384, r: 8, p: 1 });
+    expect(verifyPassword('old passphrase 456', `scrypt:16384:8:1:${salt.toString('base64')}:${hash.toString('base64')}`)).toBe(true);
+  });
+});
