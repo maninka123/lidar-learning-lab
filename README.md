@@ -21,27 +21,27 @@ Go through the tabs in order, one idea at a time, about five minutes each. Each 
 
 | # | Tab | What you do |
 |---|-----|-------------|
-| 1 | **What is LiDAR?** | A sensor, a wall and a person: time of flight, beam divergence, field of view. Click any point for its position and intensity. |
-| 2 | **Scanner Simulator** | Place a scanner, set FOV, resolution, channels, range and noise, pick commercial presets (Velodyne, Ouster, Hesai, Livox…). |
+| 1 | **What is LiDAR?** | A sensor, a wall and a person: time of flight, beam spread, field of view. Click any point for its position and intensity. |
+| 2 | **Scanner Simulator** | Place a scanner and set FOV, resolution, channels, range and noise, or pick a real preset (Velodyne, Ouster, Hesai, Livox…). |
 | 3 | **Compare Sensors** | Two to four sensors scan the same place side by side. |
-| 4 | **Point Cloud Gallery** | Real clouds with play/pause through frames: Velodyne VLP-16, Ouster OS1/OS0, Livox MID-360, RIEGL TLS. Raw file view; open your own file. |
-| 5 | **Occlusion & Sensor Placement** | Why a laser cannot see everything: shadows behind objects, field of view and range. Place up to four scanners (click the scene or the plan), see which surfaces each one covers, compare two placements, and take three challenges (Room, Workshop, Street). Coverage counts surface area that is geometrically visible, not point counts. |
+| 4 | **Point Cloud Gallery** | Real clouds you can play through frame by frame (VLP-16, Ouster, MID-360, RIEGL TLS). Raw file view; open your own file. |
+| 5 | **Occlusion & Sensor Placement** | Why a laser cannot see everything. Place up to four scanners, see what each one covers, compare two placements, and take three challenges (Room, Workshop, Street). Coverage is visible surface area, not point counts. |
 | 6 | **Point Cloud Processing** | A pipeline of filters on an untouched original: crop, voxel, noise, outliers, normals. |
-| 7 | **Point Cloud Registration** | Two clouds, no scene. A guided "How ICP works" lesson replays a real run step by step (matches, move, repeat, and how it can fail). Move one by hand or run ICP (point-to-point / point-to-plane); the 4×4 matrix is drawn on the view. |
-| 8 | **Change Detection** | Five ready-made visits to the classroom with editable timestamps; a distance heatmap shows how much changed between any two. |
-| 9 | **TLS Scanning** | Place tripod stations, scan, then register the scans into one cloud. You know the true positions, so you see how close registration gets. |
-| 10 | **SLAM & Mobile Scanning** | Moving scans in a city (handheld, vehicle, UAV) and a SLAM run with drift and loop closure, plus a guided "How SLAM works" lesson. |
-| 11 | **LiDAR + Camera Fusion** | A colourful hall, a LiDAR and a camera. Move the camera into place with translation and rotation sliders, watch the point cloud colour change, press Calculate to see the errors zoomed in, save the calibration, then map a whole walk in colour in a pop-up. |
-| 12 | **Meshing & Surfaces** | Coloured point clouds (the hall from tab 10, a classroom, a tree) into surfaces: voxel, smoothed, height map, close gaps, simplify, colour from the points, export OBJ. |
-| 13 | **Unsupervised Learning** (clustering & segmentation) | RANSAC plane detection (floor, walls, ceiling taken out with a few settings), then Euclidean clustering or DBSCAN on the same classroom scan, scored against its furniture. |
-| 14 | **Supervised Learning** (train your own model) | Build a small neural network by dragging blocks (Conv, Pool, Upsample, Dense...; the point-cloud versions work the same way) and train it on 10 labelled images and 10 labelled point clouds, side by side: classification, detection (2D box / 3D box) or segmentation (drawn as a U-Net). Three examples are held back to show whether the model really learned. |
-| 15 | **Scene Graphs & 3D AI** | Objects and relations, offline question answering, link to [local-llm-fit](https://maninka123.github.io/local-llm-fit/). |
-| 16 | **Moving Scene & Temporal Graph** | A vehicle drives through a street and scans every 0.8 s (a point cloud series). Each frame is segmented fast (ground out, cluster, name by size), objects are tracked from frame to frame, and the result is a **temporal scene graph** with events (approaching, crossing, passing). A language model answers questions from it. |
+| 7 | **Point Cloud Registration** | Align two clouds by hand or with ICP (point-to-point or point-to-plane), with the 4×4 matrix on screen. A guided "How ICP works" lesson replays a real run, including how it fails. |
+| 8 | **Change Detection** | Five visits to the same classroom; a distance heatmap shows what changed between any two. |
+| 9 | **TLS Scanning** | Place tripod stations, scan, and register the scans into one cloud. The true positions are known, so you see how close you got. |
+| 10 | **SLAM & Mobile Scanning** | Handheld, vehicle or UAV scanning in a city with a choice of three LiDARs (VLP-16, Hokuyo, Mid-360). Pick a ready-made route or draw one, set the speed, and see drift and loop closure. Includes a guided "How SLAM works" lesson. |
+| 11 | **LiDAR + Camera Fusion** | Move a camera into place with sliders, watch the cloud pick up colour, check the errors, save the calibration, then map a whole walk in colour. |
+| 12 | **Meshing & Surfaces** | Turn coloured clouds (a hall, a classroom, a tree) into surfaces: voxel, smooth, height map, fill gaps, simplify. Export OBJ. |
+| 13 | **Unsupervised Learning** (clustering & segmentation) | RANSAC plane detection (floor, walls, ceiling), then Euclidean clustering or DBSCAN, scored against the classroom furniture. |
+| 14 | **Supervised Learning** (train your own model) | Drag blocks to build a small neural network and train it on 10 labelled images and 10 labelled point clouds, side by side. Choose classification, detection or segmentation; three held-back examples show whether it really learned. |
+| 15 | **Scene Graphs & 3D AI** | Objects and relations, offline question answering, link to local-llm-fit. |
+| 16 | **Moving Scene & Temporal Graph** | A vehicle scans a street every 0.8 s. Each frame is segmented, objects are tracked between frames, and events (approaching, crossing, passing) become a temporal scene graph a language model can answer questions from. |
 | | **Applications (optional)** | |
-| 17 | **Scan to CAD** | Slice a classroom, find wall lines, square the corners, export a **DXF** floor plan. |
-| 18 | **Image to 3D** | Pick a scene (chair, crate, study desk, living corner, garden), three reconstruction methods, meshing, alignment with scale, error map. |
-| 19 | **Industrial Digital Twin Challenge** | Seven progressively unlocked engineering missions: design, register, clean, detect, fuse cameras, assess changes and safety, then commission the complete system on unseen scenarios. Graded automatically on real results; scores can be sent to the instructor's admin page. See [docs/DIGITAL_TWIN_CHALLENGE.md](docs/DIGITAL_TWIN_CHALLENGE.md). |
-| 20 | **Thank You** | A calm closing page and an optional, anonymous feedback form (before/after understanding, helpfulness, most useful part, suggestions). The admin page has a **Feedback & Insights** tab with charts, a searchable table, CSV export and deletion. See [docs/FEEDBACK.md](docs/FEEDBACK.md). |
+| 17 | **Scan to CAD** | Slice a classroom, find wall lines, square the corners, export a DXF floor plan. |
+| 18 | **Image to 3D** | Choose a scene, try three reconstruction methods, then mesh, align with scale and view the error map. |
+| 19 | **Industrial Digital Twin Challenge** | Seven unlocking missions: design, register, clean, detect, add cameras, check changes and safety, then commission the system on unseen scenarios. Graded on real results; scores can go to the instructor. See docs/DIGITAL_TWIN_CHALLENGE.md. |
+| 20 | **Thank You** | A calm closing page with an optional, anonymous feedback form. The admin page has a Feedback & Insights tab. See docs/FEEDBACK.md. |
 
 Viewport: left-drag rotates, right-drag or the **Pan** button moves the cloud, wheel zooms.
 
