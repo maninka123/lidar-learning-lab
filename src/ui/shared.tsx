@@ -133,8 +133,8 @@ export function StatsCard({ items, title = 'Live statistics', row }: { items: { 
     </div>
   );
   return (
-    <div className="overlay glass card" style={{ left: 12, bottom: 12, width: open ? 'min(26rem, calc(100% - 24px))' : 'auto' }} data-testid="stats-card">
-      <button className="section-head" onClick={() => setOpen(!open)} style={{ marginBottom: open ? 8 : 0, width: '100%' }}>
+    <div className="overlay glass card" style={{ left: 12, bottom: 12, width: 'max-content', minWidth: open ? '11rem' : undefined, maxWidth: 'min(26rem, calc(100% - 24px))', padding: '0.6rem 0.75rem' }} data-testid="stats-card">
+      <button className="section-head" onClick={() => setOpen(!open)} style={{ marginBottom: open ? 6 : 0, width: '100%', gap: 14 }}>
         <h3>{title}</h3><span className="spacer" /><span className="caption mono">{fps} fps</span>
       </button>
       {open && (items.some((it) => it.group)
@@ -145,7 +145,7 @@ export function StatsCard({ items, title = 'Live statistics', row }: { items: { 
             </button>
             {!folded[g.name] && <div className="stats-row" style={{ gridTemplateColumns: `repeat(${g.items.length}, minmax(0, 1fr))` }}>{g.items.map((it) => <Stat key={it.k} k={it.k} v={it.v} s={it.s} />)}</div>}
           </div>))}</div>
-        : <div className="stats-grid">{items.map((it) => <Stat key={it.k} k={it.k} v={it.v} s={it.s} />)}</div>)}
+        : <div className="stats-grid" style={{ gridTemplateColumns: `repeat(${Math.min(2, items.length)}, minmax(0, 1fr))` }}>{items.map((it) => <Stat key={it.k} k={it.k} v={it.v} s={it.s} />)}</div>)}
     </div>
   );
 }

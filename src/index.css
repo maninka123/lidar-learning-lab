@@ -196,6 +196,7 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 .stat .k { font-size: 0.8125rem; color: var(--text2); }
 .stat .v { font-size: 1.2rem; font-weight: 650; letter-spacing: -0.01em; font-variant-numeric: tabular-nums; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .stat .s { font-size: 0.8rem; color: var(--text3); }
+.stats-grid .stat { padding: 0.4rem 0.65rem; } .stats-grid .stat .v { font-size: 1.1rem; }
 
 .badge { display: inline-flex; align-items: center; gap: 0.3rem; padding: 0.12rem 0.5rem; border-radius: 1rem; font-size: 0.78rem; font-weight: 650; letter-spacing: 0.01em; white-space: nowrap; }
 .badge.sim { background: rgba(10,132,255,.22); color: #0a60c9; }
