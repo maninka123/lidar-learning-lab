@@ -94,7 +94,7 @@ Everything else works without any key.
 
 <p align="center">
 <b>Made with care for anyone learning how machines see in 3D.</b><br>
-If it helped you, a star means a lot: <a href="https://github.com/maninka123/lidar-learning-lab"><img alt="Star on GitHub" src="https://img.shields.io/github/stars/maninka123/lidar-learning-lab?style=social&label=Star"></a> · <a href="https://github.com/maninka123/lidar-learning-lab/issues">ideas &amp; fixes welcome</a> · <a href="https://maninka123.github.io/lidar-learning-lab/">try the lab</a>
+If it helped you, a star means a lot: <a href="https://github.com/maninka123/lidar-learning-lab">⭐ Star on GitHub</a> · <a href="https://github.com/maninka123/lidar-learning-lab/issues">ideas &amp; fixes welcome</a> · <a href="https://maninka123.github.io/lidar-learning-lab/">try the lab</a>
 </p>
 
 <p align="center"><sub>MIT licence · React, TypeScript, Vite, Three.js · also <a href="https://github.com/maninka123/rotating-target-calibration-studio">Rotating Target Calibration Studio</a> and <a href="https://github.com/maninka123/local-llm-fit">Model Fit Explorer</a></sub></p>
