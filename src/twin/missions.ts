@@ -10,6 +10,8 @@ export const fmtMetric = (value: number, unit: string) => (!Number.isFinite(valu
 export type MissionLevel = 'needs-improvement' | 'passed' | 'excellent';
 export interface MissionMetric { label: string; value: number; target: number; unit: '%' | 'cm' | 'px' | 'credits' | 'pts/m²' | '°'; lower?: boolean }
 export interface MissionResult { at: number; fingerprint: string; level: MissionLevel; score: number; metrics: MissionMetric[]; feedback: string[]; stale?: boolean }
+/** Saved measurements keep their history; financial displays always use the current project. */
+export const currentMissionMetrics = (result: MissionResult, cost: number, budget: number): MissionMetric[] => result.metrics.map((metric) => metric.unit === 'credits' ? { ...metric, value: cost, target: budget } : metric);
 export interface MissionProgress { current: number; unlocked: number; results: (MissionResult | null)[]; attempts: number[] }
 export const emptyProgress = (): MissionProgress => ({ current: 0, unlocked: 0, results: Array(7).fill(null), attempts: Array(7).fill(0) });
 /** The critical zones need enough measured points to see detail, not only to be seen: the least points per square metre of surface (up to 3 m high). */

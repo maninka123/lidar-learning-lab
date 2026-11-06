@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { DEFAULT_SETTINGS, EMPTY_DESIGN } from '../src/twin/catalogue';
-import { pipelineForMission, emptyProgress, recordMission, invalidateProgress, missionFingerprint, currentPass, readyForFinal, type MissionResult } from '../src/twin/missions';
+import { pipelineForMission, emptyProgress, recordMission, invalidateProgress, missionFingerprint, currentMissionMetrics, currentPass, readyForFinal, type MissionResult } from '../src/twin/missions';
 import { initialSave, parseSave, snapshot, useTwin } from '../src/twin/store';
 import { newBlock } from '../src/twin/pipeline';
 import { usd } from '../src/twin/pricing';
@@ -8,6 +8,14 @@ const cfg = { design: { ...EMPTY_DESIGN, lidars: [{id:'l1',item:'rot32',res:'sta
 const pass = (mission: number): MissionResult => ({at:1,fingerprint:missionFingerprint(cfg,mission),level:'passed',score:80,metrics:[],feedback:[]});
 const completed = () => {let p=emptyProgress();for(let i=0;i<6;i++)p=recordMission(p,i,pass(i));return p;};
 describe('engineering mission progression',()=>{
+ it('displays the current budget and equipment cost instead of financial values from an old test',()=>{
+  const saved:MissionResult={...pass(0),stale:true,metrics:[{label:'Coverage',value:61.9,target:70,unit:'%'},{label:'Equipment cost',value:2480,target:3000,unit:'credits',lower:true}]};
+  for(const budget of [1400,1000]){
+   const metrics=currentMissionMetrics(saved,200,budget);
+   expect(metrics[0]).toEqual(saved.metrics[0]);expect(metrics[1]).toMatchObject({value:200,target:budget});
+  }
+  expect(saved.metrics[1]).toMatchObject({value:2480,target:3000});
+ });
  it('shows a $7,000 default and migrates old defaults without overwriting new custom budgets',()=>{
   expect(usd(initialSave().settings.budget)).toBe('$7,000');
   for(const budget of [3000,7000]){

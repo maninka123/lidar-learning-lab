@@ -3,7 +3,7 @@ import { MissionCheck } from '../twin/ui/MissionCheck';
 import { CompletionReport } from '../twin/ui/CompletionReport';
 import { engineeringReport } from '../twin/report';
 import { PairBoard, FovOverlapChart, CalPanel } from '../twin/ui/CalibrationWorkspace';
-import { MISSIONS, MISSION_TARGETS, TOOL_NAMES, fmtMetric, currentPass, evaluateMission, recordMission, readyForFinal, missionFingerprint, pipelineForMission } from '../twin/missions';
+import { MISSIONS, MISSION_TARGETS, TOOL_NAMES, fmtMetric, currentMissionMetrics, currentPass, evaluateMission, recordMission, readyForFinal, missionFingerprint, pipelineForMission } from '../twin/missions';
 import { MissionMap, MissionBrief } from '../twin/ui/MissionPanel';
 import { EquipmentCatalogue } from '../twin/ui/EquipmentCatalogue';
 import { pairedLidarOf, inspectionCamera, INSPECTION_CAMERA_ID } from '../twin/catalogue';
@@ -813,7 +813,7 @@ export default function TabTwin() {
   />;
   const controls = (
     <>
-      <MissionBrief key={mission} mission={mission} progress={T.progress} onContinue={() => goMission(mission + 1)} onReference={() => { const i = tabIndex(missionDef.reference); if (i >= 0) lab.setTab(i); }} />
+      <MissionBrief key={mission} mission={mission} progress={T.progress} cost={cost.total} budget={T.settings.budget} onContinue={() => goMission(mission + 1)} onReference={() => { const i = tabIndex(missionDef.reference); if (i >= 0) lab.setTab(i); }} />
       {[1, 2, 8].includes(stage) && <BudgetSummary cost={cost} budget={T.settings.budget} hasLidar={!!d.lidars.length} />}
       <div className="mission-tools"><Seg label="Mission tools" value={stage} onChange={(stage) => { if (!regBusy && !T.busy) T.set({ stage }); }} options={missionDef.tools.map((value) => ({ value, label: mission === 1 ? value === 4 ? '1 · Acquire scans' : '2 · Align scans' : TOOL_NAMES[value] }))} /></div>
       {stage === 4 && <div className="align-acquire"><Btn variant="primary" block icon={<Play size={16} />} onClick={acquire} busy={T.busy === 'Acquiring the survey…'} disabled={!cost.ok || !!T.busy || regBusy} testId="twin-acquire">{survey ? 'Acquire the survey again' : 'Acquire the practice survey'}</Btn>{mission === 1 && survey && <Btn block onClick={() => T.set({ stage: 5 })} disabled={!!T.busy || regBusy} testId="align-open">Continue to alignment →</Btn>}</div>}
@@ -832,7 +832,7 @@ export default function TabTwin() {
     : taskTab === 'change' ? [...practice.truth.changes.map((c) => ({ x: c.centre[0], y: c.centre[1], color: '#30d158', r: 5 })), ...practice.found.changes.map((c) => ({ x: c.centre[0], y: c.centre[1], color: '#ff9f0a', r: 3 }))] : []) : [];
   const planLayers = { ...basePlan, markers: [...basePlan.markers, ...taskMarks] };
   const result = T.progress.results[mission];
-  const stats = result ? result.metrics.map((m) => ({ k: m.label, v: fmtMetric(m.value, m.unit), s: result.stale ? 'Revalidation required' : `Target ${m.lower ? '≤' : '≥'} ${fmtMetric(m.target, m.unit)}` })) : [{ k: 'Project budget', v: `${usd(cost.remaining)} left`, s: `${usd(cost.total)} spent of ${usd(T.settings.budget)}` }];
+  const stats = result ? currentMissionMetrics(result, cost.total, T.settings.budget).map((m) => ({ k: m.label, v: fmtMetric(m.value, m.unit), s: result.stale ? 'Revalidation required' : `Target ${m.lower ? '≤' : '≥'} ${fmtMetric(m.target, m.unit)}` })) : [{ k: 'Project budget', v: `${usd(cost.remaining)} left`, s: `${usd(cost.total)} spent of ${usd(T.settings.budget)}` }];
   const legend = stage === 5 && mission === 1 ? [{ color: '#1d78dc', label: 'Reference + earlier scans' }, { color: '#f4a21e', label: 'Current scan' }] : stage === 2 ? [{ color: HEAT[0], label: 'No LiDAR sees it' }, { color: HEAT[1], label: 'One LiDAR' }, { color: HEAT[2], label: 'Two views (green); 3+ blue in measured test' }] : stage === 6 ? [{ color: '#ff453a', label: 'True surface not covered' }] : stage === 7 ? [{ color: '#30d158', label: 'Found' }, { color: '#ff9f0a', label: 'Misnamed' }, { color: '#ff453a', label: 'Missed' }] : ZONES.map((z, i) => ({ color: ['#c7a28a', '#9ab', '#8ac', '#bb9', '#667'][i], label: z.name }));
   void STATUS_COLOURS;
   return <TabFrame title="Industrial Digital Twin Challenge" topExtras={<MissionMap progress={T.progress} busy={!!T.busy || regBusy} onSelect={goMission} />} tab={17} viewport={viewport} controls={controls} learn={null} noPanelTabs noEnv stats={stats} overlays={<>{stage === 5 && mission !== 1 && (() => {

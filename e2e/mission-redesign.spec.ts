@@ -2,13 +2,24 @@ import { sampleConfig } from '../tests/helpers/twinStrategies';
 import { initialSave } from '../src/twin/store';
 import { test, expect } from '@playwright/test';
 test.beforeEach(async ({page})=>{await page.addInitScript(()=>localStorage.setItem('lidar-lab-intro-last',String(Date.now())));});
-test('a saved $15,000 default becomes $7,000 in the equipment bill',async({page})=>{
+test('saved mission targets and all budget displays follow the current admin budget',async({page})=>{
  const save=initialSave();save.settings={...save.settings,budget:3000,budgetVersion:undefined};save.design={...save.design,cameras:[]};
+ save.progress.results[0]={at:1,fingerprint:'previous-project',level:'needs-improvement',score:50,stale:true,metrics:[{label:'Critical-area measured coverage',value:61.9,target:70,unit:'%'},{label:'Equipment cost',value:2480,target:3000,unit:'credits',lower:true}],feedback:[]};
  await page.addInitScript(save=>localStorage.setItem('lidar-lab-twin',JSON.stringify(save)),save);
  await page.goto('/');await page.getByTestId('nav-18').click();
  const bill=page.getByRole('table',{name:'Your bill',exact:true});
- await expect(bill.locator('.bill-row').filter({hasText:'Budget'}).locator('.bill-amt')).toHaveText('$7,000');
- await expect(bill.locator('.bill-row').filter({hasText:'Remaining'}).locator('.bill-amt')).toHaveText('$7,000');
+ const financial=page.getByTestId('mission-result').locator('.mission-metric').filter({hasText:'Equipment cost'});
+ const assertBudget=async(amount:string)=>{
+  await expect(bill.locator('.bill-row').filter({hasText:'Budget'}).locator('.bill-amt')).toHaveText(amount);
+  await expect(bill.locator('.bill-row').filter({hasText:'Remaining'}).locator('.bill-amt')).toHaveText(amount);
+  await expect(financial.locator('small')).toHaveText(`target ≤ ${amount}`);
+  await expect(page.getByTestId('twin-budget')).toContainText(`Total ${amount}`);
+ };
+ await assertBudget('$7,000');await expect(financial).toContainText('$0');await expect(page.getByTestId('mission-result')).not.toContainText('$15,000');
+ await page.evaluate(()=>{const s=(window as any).__twin.getState();s.set({settings:{...s.settings,budget:1000}});});
+ await assertBudget('$5,000');
+ await page.evaluate(()=>{const s=(window as any).__twin.getState();s.set({settings:{...s.settings,budget:1400}});});
+ await assertBudget('$7,000');
  await expect(bill.locator('.bill-head')).toContainText('US$');
  await bill.scrollIntoViewIfNeeded();await page.screenshot({path:'output/playwright/budget-7000.png'});
 });
