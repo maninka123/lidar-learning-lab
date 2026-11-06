@@ -46,7 +46,13 @@ Viewport: left-drag rotates, right-drag or the **Pan** button moves the cloud, w
 
 ## AI in the scene graph tab (optional)
 
-Tab 15 can hand a thinned-out point cloud straight to a language model (DeepSeek V4 Flash) to show why that does not work well. It needs a key: copy `.env.example` to `.env.local` and put your DeepSeek key in it. `.env.local` is ignored by git, and the key is added by the dev / preview server, so it is never in the page or the built site. The live GitHub Pages site has no server, so there you paste your own key into the page (kept only in your browser) or skip this section: everything else works without it.
+Tab 15 can send a thinned-out point cloud straight to a language model (DeepSeek V4 Flash) to show why that works poorly.
+
+1. Copy `.env.example` to `.env.local`.
+2. Put your DeepSeek key in it: `DEEPSEEK_API_KEY=your-key`.
+3. Run `npm run dev`. The dev server adds the key, so it is never in the page or the built site, and `.env.local` is ignored by git.
+
+**On the live site** there is no server, so paste your own key into the page (it stays in your browser) or skip this section. Everything else works without a key.
 
 ## Run it yourself
 
