@@ -225,7 +225,7 @@ boot();
 // ---- Challenge scores: what students sent from the Industrial Digital Twin Challenge
 let ch = { subs: [], labels: {}, accept: { accepting: false, until: null }, settings: null }, chUnit = 'unlimited';
 const TASK_NAMES = { twin: 'Digital twin', detect: 'Object detection', colour: 'Colour-coded objects', change: 'Change detection', quality: 'Noise handling', safety: 'Safety and clearance', budget: 'Budget and efficiency' };
-const DEFAULT_SET = { budget: 7000, priceScale: 1, maxSubmissions: 0, weights: { twin: 20, detect: 20, colour: 10, change: 20, quality: 10, safety: 10, budget: 10 }, enabled: { twin: true, detect: true, colour: true, change: true, quality: true, safety: true, budget: true } };
+const DEFAULT_SET = { budgetVersion: 2, budget: 1400, priceScale: 1, maxSubmissions: 0, weights: { twin: 20, detect: 20, colour: 10, change: 20, quality: 10, safety: 10, budget: 10 }, enabled: { twin: true, detect: true, colour: true, change: true, quality: true, safety: true, budget: true } };
 const TASK_SHORT = { twin: 'Twin', detect: 'Objects', colour: 'Colour', change: 'Change', quality: 'Noise', safety: 'Safety', budget: 'Budget' };
 const openRows = new Set();
 function setView(v) {
@@ -255,7 +255,7 @@ function visibleSubs() {
   return list;
 }
 function renderSettings(s) {
-  const f = $('chSetForm'); f.budget.value = s.budget; f.priceScale.value = s.priceScale; f.maxSubmissions.value = s.maxSubmissions;
+  const f = $('chSetForm'); f.budget.value = s.budget * 5; f.priceScale.value = s.priceScale; f.maxSubmissions.value = s.maxSubmissions;
   $('chTasks').innerHTML = Object.keys(TASK_NAMES).map((k) => `<tr><td>${esc(TASK_NAMES[k])}</td><td><input type="checkbox" data-en="${k}" ${s.enabled[k] ? 'checked' : ''} aria-label="${esc(TASK_NAMES[k])} counts"></td><td class="num"><input type="number" data-w="${k}" min="0" max="100" value="${s.weights[k]}" style="width:70px" aria-label="${esc(TASK_NAMES[k])} weight"></td><td class="num" data-share="${k}">—</td></tr>`).join('');
   updateShares();
 }
@@ -263,7 +263,7 @@ function readSettings() {
   const f = $('chSetForm'), weights = {}, enabled = {};
   document.querySelectorAll('[data-w]').forEach((i) => { weights[i.dataset.w] = Number(i.value); });
   document.querySelectorAll('[data-en]').forEach((i) => { enabled[i.dataset.en] = i.checked; });
-  return { budget: Number(f.budget.value), priceScale: Number(f.priceScale.value), maxSubmissions: Number(f.maxSubmissions.value), weights, enabled };
+  return { budgetVersion: 2, budget: Number(f.budget.value) / 5, priceScale: Number(f.priceScale.value), maxSubmissions: Number(f.maxSubmissions.value), weights, enabled };
 }
 function updateShares() {
   const s = readSettings(), total = Object.keys(TASK_NAMES).reduce((a, k) => a + (s.enabled[k] ? s.weights[k] || 0 : 0), 0);

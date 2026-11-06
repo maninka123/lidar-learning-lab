@@ -121,9 +121,9 @@ export async function stopAccepting(s: Store): Promise<AcceptConfig> { const c =
 
 // ---- grading settings: set by the instructor here, read by the student app (not editable there)
 export type TaskKey = (typeof TASKS)[number];
-export interface ChallengeSettings { budget: number; priceScale: number; maxSubmissions: number; weights: Record<TaskKey, number>; enabled: Record<TaskKey, boolean> }
+export interface ChallengeSettings { budgetVersion?: 2; budget: number; priceScale: number; maxSubmissions: number; weights: Record<TaskKey, number>; enabled: Record<TaskKey, boolean> }
 export const DEFAULT_SETTINGS: ChallengeSettings = {
-  budget: 7000, priceScale: 1, maxSubmissions: 0,
+  budgetVersion: 2, budget: 1400, priceScale: 1, maxSubmissions: 0,
   weights: { twin: 20, detect: 20, colour: 10, change: 20, quality: 10, safety: 10, budget: 10 },
   enabled: { twin: true, detect: true, colour: true, change: true, quality: true, safety: true, budget: true },
 };
@@ -144,10 +144,15 @@ export function parseSettings(body: unknown): ParsedSettings {
     weights[k] = Math.round(v); enabled[k] = e[k] !== false;
   }
   if (!TASKS.some((k) => enabled[k] && weights[k] > 0)) return { ok: false, message: 'Switch on at least one task with a weight above 0.' };
-  return { ok: true, value: { budget: Math.round(budget), priceScale: Math.round(scale * 100) / 100, maxSubmissions: Math.round(maxS), weights, enabled } };
+  return { ok: true, value: { budgetVersion: 2, budget: Math.round(budget), priceScale: Math.round(scale * 100) / 100, maxSubmissions: Math.round(maxS), weights, enabled } };
 }
 export async function loadSettings(s: Store): Promise<ChallengeSettings> {
   const raw = await s.get(CH.settings); if (!raw) return DEFAULT_SETTINGS;
-  try { const p = parseSettings(JSON.parse(raw)); return p.ok ? p.value : DEFAULT_SETTINGS; } catch { return DEFAULT_SETTINGS; }
+  try {
+    const stored = JSON.parse(raw), parsed = parseSettings(stored);
+    if (!parsed.ok) return DEFAULT_SETTINGS;
+    if (stored.budgetVersion !== 2 && (parsed.value.budget === 3000 || parsed.value.budget === 7000)) return { ...parsed.value, budget: DEFAULT_SETTINGS.budget };
+    return parsed.value;
+  } catch { return DEFAULT_SETTINGS; }
 }
 export const saveSettings = (s: Store, v: ChallengeSettings) => s.set(CH.settings, JSON.stringify(v));

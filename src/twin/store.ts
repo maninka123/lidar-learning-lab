@@ -1,6 +1,6 @@
 import { emptyProgress, invalidateProgress, MISSIONS, readyForFinal, type MissionProgress } from './missions';
 import { create } from 'zustand';
-import { TwinDesign, EMPTY_DESIGN, ChallengeSettings, DEFAULT_SETTINGS, LIDARS, CAMERAS, RES_TIERS, inspectionCamera } from './catalogue';
+import { TwinDesign, EMPTY_DESIGN, ChallengeSettings, DEFAULT_SETTINGS, LIDARS, CAMERAS, RES_TIERS, inspectionCamera, budgetFor } from './catalogue';
 import { Block, BLOCKS } from './pipeline';
 import type { RunResult, FinalResult } from './runner';
 
@@ -26,7 +26,7 @@ export function migrateSave(value: unknown): TwinSave | null {
   const base = initialSave();
   const raw = o.progress, unlocked = Math.max(0, Math.min(6, Math.floor(Number.isFinite(raw?.unlocked) ? raw!.unlocked : 0)));
   const progress: MissionProgress = raw ? { current: Math.max(0, Math.min(unlocked, Math.floor(Number.isFinite(raw.current) ? raw.current : 0))), unlocked, results: Array.from({ length: 7 }, (_, i) => Array.isArray(raw.results) && raw.results[i] && typeof raw.results[i]?.fingerprint === 'string' && Array.isArray(raw.results[i]?.metrics) && Array.isArray(raw.results[i]?.feedback) ? raw.results[i] : null), attempts: Array.from({ length: 7 }, (_, i) => Number.isFinite(raw.attempts?.[i]) ? Math.max(0, raw.attempts[i]) : 0) } : emptyProgress();
-  const settings = { ...DEFAULT_SETTINGS, ...o.settings, weights: { ...DEFAULT_SETTINGS.weights, ...o.settings?.weights }, enabled: { ...DEFAULT_SETTINGS.enabled, ...o.settings?.enabled } };
+  const settings = { ...DEFAULT_SETTINGS, ...o.settings, budgetVersion: 2 as const, budget: budgetFor(o.settings ?? {}), weights: { ...DEFAULT_SETTINGS.weights, ...o.settings?.weights }, enabled: { ...DEFAULT_SETTINGS.enabled, ...o.settings?.enabled } };
   // Legacy equipment, pipelines and attempts survive. Old stage visits do not count as measured mission passes.
   const merged = { ...base, ...o, version: 2 as const, settings, progress, design: { ...EMPTY_DESIGN, ...o.design } };
   merged.progress = invalidateProgress(progress, { design: merged.design, pipeline: merged.pipeline, settings });

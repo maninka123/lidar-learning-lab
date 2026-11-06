@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { ORIGIN, T0, admin, mk, setup } from './helpers';
 import { studentHandler, publicHandler } from '../lib/handlers';
-import { parseSubmission } from '../lib/challenge';
+import { parseSubmission, loadSettings, saveSettings, CH } from '../lib/challenge';
 
 const good = {
   name: 'Ada Lovelace', index: 'z1234567', kind: 'final', consent: true, team: 'Lidar Legends', total: 71.46,
@@ -18,6 +18,15 @@ async function openIt(ctx: ReturnType<typeof setup>, minutes?: number) { const a
 const status = (ctx: ReturnType<typeof setup>) => publicHandler(ctx.deps)(mk('GET', '/api/public/challenge', { headers: { origin: ORIGIN } }));
 
 describe('challenge score submissions', () => {
+  it('corrects legacy default budgets and preserves explicitly saved instructor budgets', async () => {
+    const ctx = setup();
+    for (const budget of [3000, 7000]) {
+      await ctx.store.set(CH.settings, JSON.stringify({ ...DEFAULT_SETTINGS, budgetVersion: undefined, budget }));
+      expect((await loadSettings(ctx.store)).budget).toBe(1400);
+      await saveSettings(ctx.store, { ...DEFAULT_SETTINGS, budget });
+      expect((await loadSettings(ctx.store)).budget).toBe(budget);
+    }
+  });
   it('stores a score with the time, an approximate place and a network tag, and the admin can read it', async () => {
     const ctx = setup(); await openIt(ctx); ctx.clock.t = T0 + 5000;
     const r = await send(ctx, good); expect(r.status).toBe(200);
@@ -124,8 +133,8 @@ describe('challenge score submissions', () => {
   it('grading settings: set in the dashboard, read by the student app, validated, and unchanged by students', async () => {
     const ctx = setup(); const a = admin(ctx); await a.login();
     const def = (await status(ctx)).body as { settings: { budget: number; weights: Record<string, number>; maxSubmissions: number } };
-    expect(def.settings.budget).toBe(7000); expect(def.settings.maxSubmissions).toBe(0); expect(Object.values(def.settings.weights).reduce((x, y) => x + y, 0)).toBe(100);
-    const next = { budget: 9000, priceScale: 1.5, maxSubmissions: 3, weights: { twin: 30, detect: 30, colour: 0, change: 20, quality: 10, safety: 10, budget: 0 }, enabled: { twin: true, detect: true, colour: false, change: true, quality: true, safety: true, budget: false } };
+    expect(def.settings.budget).toBe(1400); expect(def.settings.maxSubmissions).toBe(0); expect(Object.values(def.settings.weights).reduce((x, y) => x + y, 0)).toBe(100);
+    const next = { budgetVersion: 2 as const, budget: 9000, priceScale: 1.5, maxSubmissions: 3, weights: { twin: 30, detect: 30, colour: 0, change: 20, quality: 10, safety: 10, budget: 0 }, enabled: { twin: true, detect: true, colour: false, change: true, quality: true, safety: true, budget: false } };
     expect((await a.call('POST', 'challenge-settings', next)).status).toBe(200);
     const pub = ((await status(ctx)).body as { settings: typeof next }).settings; expect(pub).toEqual(next);
     expect(((await a.call('GET', 'challenge')).body as { settings: typeof next }).settings).toEqual(next);
@@ -163,7 +172,7 @@ describe('score consistency checks', () => {
   const tasks = { twin: 0.8, detect: 0.7, colour: 0.9, change: 0.6, quality: 0.9, safety: 1, budget: 0.5 };
   const W = 100, points = Object.fromEntries(Object.entries(tasks).map(([k, v]) => [k, Math.round((100 * (DEFAULT_SETTINGS.weights as Record<string, number>)[k] * v) / W * 10) / 10]));
   const total = Object.values(points).reduce((a, b) => a + b, 0);
-  const good = { total, tasks, points, cost: 2500, budget: DEFAULT_SETTINGS.budget, kind: 'final' as const, missions: Array.from({ length: 7 }, (_, i) => ({ number: i + 1, status: i < 6 ? 'passed' : 'not-attempted', score: 80, attempts: 1, completed: i < 6 })) };
+  const good = { total, tasks, points, cost: 1000, budget: DEFAULT_SETTINGS.budget, kind: 'final' as const, missions: Array.from({ length: 7 }, (_, i) => ({ number: i + 1, status: i < 6 ? 'passed' : 'not-attempted', score: 80, attempts: 1, completed: i < 6 })) };
   it('an honest score has no flags', () => { expect(scoreFlags(good, DEFAULT_SETTINGS)).toEqual([]); });
   it('catches a total that was edited, spending over budget, a changed budget and a final sent too early', () => {
     expect(scoreFlags({ ...good, total: 100 }, DEFAULT_SETTINGS).join(' ')).toMatch(/not the sum/);

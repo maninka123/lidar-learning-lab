@@ -40,7 +40,7 @@ Each result carries a dependency fingerprint. LiDAR placement/resolution or rout
 
 ### Pricing and project budget
 
-Reference prices use USD, checked 2026-11-04, and **one simulation credit = US$5** before the instructor price scale. The default 7,000-credit allocation represents a US$35,000 educational project. Installation and resolution effort are simulated allowances, not vendor quotations. Existing instructor budgets and grading settings remain authoritative.
+Reference prices use USD, checked 2026-11-04, and **one simulation credit = US$5** before the instructor price scale. The default budget is **US$7,000** (1,400 internal credits). The admin budget field uses US dollars. Installation and resolution effort are simulated allowances, not vendor quotations. Existing instructor budgets and grading settings remain authoritative.
 
 - [Livox manufacturer launch announcement](https://www.livoxtech.com/mobile/de/news/mid360_launch): US$749 sample reference, labelled as a launch price rather than a current binding quote.
 - [Leica BLK360 official shop](https://shop.leica-geosystems.com/reality-capture/blk360/buy): US$26,500 commercial TLS reference; the simulator uses a generic TLS approximation.
@@ -57,7 +57,7 @@ Valid-point retention is evaluated in the fixed monitoring height range −0.15 
 
 ## Measured strategy validation
 
-The default-budget strategies passed all six practice gates and the two final scenarios. These are regression fixtures, not required solutions.
+The reference strategies, using a custom 7,000-credit (US$35,000) validation budget, passed all six practice gates and the two final scenarios. These are regression fixtures, not required solutions.
 
 | Strategy | LiDARs | Cost incl. cameras (of 7,000) | Critical coverage | Alignment error | Detection F1 | Labels correct | Change F1 | Final / 100 |
 |---|---|---:|---:|---:|---:|---:|---:|---:|

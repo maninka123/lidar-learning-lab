@@ -2,6 +2,16 @@ import { sampleConfig } from '../tests/helpers/twinStrategies';
 import { initialSave } from '../src/twin/store';
 import { test, expect } from '@playwright/test';
 test.beforeEach(async ({page})=>{await page.addInitScript(()=>localStorage.setItem('lidar-lab-intro-last',String(Date.now())));});
+test('a saved $15,000 default becomes $7,000 in the equipment bill',async({page})=>{
+ const save=initialSave();save.settings={...save.settings,budget:3000,budgetVersion:undefined};save.design={...save.design,cameras:[]};
+ await page.addInitScript(save=>localStorage.setItem('lidar-lab-twin',JSON.stringify(save)),save);
+ await page.goto('/');await page.getByTestId('nav-18').click();
+ const bill=page.getByRole('table',{name:'Your bill',exact:true});
+ await expect(bill.locator('.bill-row').filter({hasText:'Budget'}).locator('.bill-amt')).toHaveText('$7,000');
+ await expect(bill.locator('.bill-row').filter({hasText:'Remaining'}).locator('.bill-amt')).toHaveText('$7,000');
+ await expect(bill.locator('.bill-head')).toContainText('US$');
+ await bill.scrollIntoViewIfNeeded();await page.screenshot({path:'output/playwright/budget-7000.png'});
+});
 test('thank-you sidebar theme is scoped to the active tab',async({page})=>{
  await page.goto('/');await page.getByTestId('nav-19').click();await expect(page.getByTestId('thanks-page')).toBeVisible();
  await expect(page.locator('.sidebar')).toHaveClass(/sidebar-thanks/);await page.screenshot({path:'output/playwright/thanks-sidebar.png'});

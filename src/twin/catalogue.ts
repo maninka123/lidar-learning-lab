@@ -59,12 +59,15 @@ export const LIMITS = { lidars: 6, cameras: 4, lights: 4 };
 export type TaskKey = 'twin' | 'detect' | 'colour' | 'change' | 'quality' | 'safety' | 'budget';
 export const TASK_KEYS: TaskKey[] = ['twin', 'detect', 'colour', 'change', 'quality', 'safety', 'budget'];
 export const TASK_NAMES: Record<TaskKey, string> = { twin: 'Digital twin', detect: 'Object detection', colour: 'Colour-coded objects', change: 'Change detection', quality: 'Noise handling', safety: 'Safety and clearance', budget: 'Budget and efficiency' };
-export interface ChallengeSettings { budget: number; priceScale: number; maxSubmissions: number; weights: Record<TaskKey, number>; enabled: Record<TaskKey, boolean> }
+export interface ChallengeSettings { budgetVersion?: 2; budget: number; priceScale: number; maxSubmissions: number; weights: Record<TaskKey, number>; enabled: Record<TaskKey, boolean> }
 export const DEFAULT_SETTINGS: ChallengeSettings = {
-  budget: 7000, priceScale: 1, maxSubmissions: 0, // 0 = grade as many times as you like
+  budgetVersion: 2, budget: 1400, priceScale: 1, maxSubmissions: 0, // 0 = grade as many times as you like
   weights: { twin: 20, detect: 20, colour: 10, change: 20, quality: 10, safety: 10, budget: 10 },
   enabled: { twin: true, detect: true, colour: true, change: true, quality: true, safety: true, budget: true },
 };
+
+/** Correct the two previously shipped defaults while retaining newly saved instructor budgets. */
+export const budgetFor = (settings: { budget?: number; budgetVersion?: number }): number => settings.budgetVersion !== 2 && (settings.budget === 3000 || settings.budget === 7000) ? DEFAULT_SETTINGS.budget : settings.budget ?? DEFAULT_SETTINGS.budget;
 
 // ----------------------------------------------------------------------------- what the team has bought and placed
 export interface LidarUnit { id: string; item: string; res: ResTier; x: number; y: number; z: number; yaw: number; pitch: number }

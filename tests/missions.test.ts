@@ -3,10 +3,20 @@ import { DEFAULT_SETTINGS, EMPTY_DESIGN } from '../src/twin/catalogue';
 import { pipelineForMission, emptyProgress, recordMission, invalidateProgress, missionFingerprint, currentPass, readyForFinal, type MissionResult } from '../src/twin/missions';
 import { initialSave, parseSave, snapshot, useTwin } from '../src/twin/store';
 import { newBlock } from '../src/twin/pipeline';
+import { usd } from '../src/twin/pricing';
 const cfg = { design: { ...EMPTY_DESIGN, lidars: [{id:'l1',item:'rot32',res:'standard' as const,x:0,y:0,z:1.8,yaw:0,pitch:0}] }, pipeline: ['icp','voxel','euclid','classify','colour','diff','safety'].map(k=>newBlock(k as never)), settings:DEFAULT_SETTINGS };
 const pass = (mission: number): MissionResult => ({at:1,fingerprint:missionFingerprint(cfg,mission),level:'passed',score:80,metrics:[],feedback:[]});
 const completed = () => {let p=emptyProgress();for(let i=0;i<6;i++)p=recordMission(p,i,pass(i));return p;};
 describe('engineering mission progression',()=>{
+ it('shows a $7,000 default and migrates old defaults without overwriting new custom budgets',()=>{
+  expect(usd(initialSave().settings.budget)).toBe('$7,000');
+  for(const budget of [3000,7000]){
+   const save=initialSave();save.settings={...save.settings,budget,budgetVersion:undefined};
+   expect(usd(parseSave(JSON.stringify(save))!.settings.budget)).toBe('$7,000');
+   save.settings.budgetVersion=2;
+   expect(parseSave(JSON.stringify(save))!.settings.budget).toBe(budget);
+  }
+ });
  it('runs only unlocked mission phases, so a legacy future colour block cannot block registration',()=>{
   const pipeline = [newBlock('icp'), newBlock('voxel'), newBlock('classify'), newBlock('colour')];
   expect(pipelineForMission(pipeline,1).map(b=>b.kind)).toEqual(['icp']);

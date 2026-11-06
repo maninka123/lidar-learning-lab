@@ -1,6 +1,6 @@
 import { useEffect, useSyncExternalStore } from 'react';
 import type { ChatMsg } from './deepseek';
-import { ChallengeSettings, TASK_KEYS } from '../twin/catalogue';
+import { ChallengeSettings, TASK_KEYS, budgetFor } from '../twin/catalogue';
 
 /**
  * Workshop Mode, student side. When the instructor has switched a workshop on, students can use the AI features with
@@ -138,11 +138,11 @@ export async function submitFeedback(body: unknown, timeoutMs = 10000): Promise<
 export function readSettings(v: unknown): ChallengeSettings | undefined {
   if (!v || typeof v !== 'object') return undefined;
   const o = v as Record<string, unknown>, w = (o.weights ?? {}) as Record<string, unknown>, e = (o.enabled ?? {}) as Record<string, unknown>;
-  const budget = Number(o.budget), priceScale = Number(o.priceScale), maxSubmissions = Number(o.maxSubmissions);
+  const budget = budgetFor({ budget: Number(o.budget), budgetVersion: Number(o.budgetVersion) }), priceScale = Number(o.priceScale), maxSubmissions = Number(o.maxSubmissions);
   if (!Number.isFinite(budget) || budget < 500 || !Number.isFinite(priceScale) || priceScale <= 0 || !Number.isFinite(maxSubmissions) || maxSubmissions < 0) return undefined;
   const weights = {} as ChallengeSettings['weights'], enabled = {} as ChallengeSettings['enabled'];
   for (const k of TASK_KEYS) { const x = Number(w[k]); if (!Number.isFinite(x) || x < 0 || x > 100) return undefined; weights[k] = x; enabled[k] = e[k] !== false; }
-  return { budget, priceScale, maxSubmissions, weights, enabled };
+  return { budgetVersion: 2, budget, priceScale, maxSubmissions, weights, enabled };
 }
 /** Is the instructor accepting Challenge scores right now, and what are the grading settings? Any problem counts as "not known": the lab then still lets you try to send and shows the server's answer. */
 export async function challengeAccepting(timeoutMs = 4000): Promise<{ known: boolean; accepting: boolean; until: number | null; settings?: ChallengeSettings }> {

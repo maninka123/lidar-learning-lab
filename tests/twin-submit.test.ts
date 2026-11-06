@@ -74,8 +74,8 @@ describe('is the instructor accepting scores?', () => {
 describe('grading settings from the instructor', () => {
   it('are read from the server response, and a damaged or odd answer is ignored', async () => {
     const { readSettings, challengeAccepting } = await import('../src/apps/workshop');
-    const ok = { budget: 9000, priceScale: 1.5, maxSubmissions: 3, weights: { twin: 30, detect: 30, colour: 0, change: 20, quality: 10, safety: 10, budget: 0 }, enabled: { twin: true, detect: true, colour: false, change: true, quality: true, safety: true, budget: false } };
-    expect(readSettings(ok)).toEqual(ok); expect(readSettings({ ...ok, budget: 1 })).toBeUndefined(); expect(readSettings({ ...ok, weights: { ...ok.weights, twin: 'x' } })).toBeUndefined(); expect(readSettings(null)).toBeUndefined(); expect(readSettings('x')).toBeUndefined();
+    const ok = { budgetVersion: 2 as const, budget: 9000, priceScale: 1.5, maxSubmissions: 3, weights: { twin: 30, detect: 30, colour: 0, change: 20, quality: 10, safety: 10, budget: 0 }, enabled: { twin: true, detect: true, colour: false, change: true, quality: true, safety: true, budget: false } };
+    expect(readSettings(ok)).toEqual(ok); for (const budget of [3000, 7000]) expect(readSettings({ ...ok, budget, budgetVersion: undefined })?.budget).toBe(1400); expect(readSettings({ ...ok, budget: 1 })).toBeUndefined(); expect(readSettings({ ...ok, weights: { ...ok.weights, twin: 'x' } })).toBeUndefined(); expect(readSettings(null)).toBeUndefined(); expect(readSettings('x')).toBeUndefined();
     setWorkshopApi('https://backend.example');
     vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ accepting: false, settings: ok }), { status: 200 })));
     expect((await challengeAccepting()).settings).toEqual(ok);

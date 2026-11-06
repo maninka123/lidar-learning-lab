@@ -48,7 +48,7 @@ describe('equipment shop and budget', () => {
 
 describe('fixed units', () => {
   const f = buildFactory(11, 'A');
-  it('the default budget is 7000 credits', () => { expect(DEFAULT_SETTINGS.budget).toBe(7000); });
+  it('the default budget is 1400 internal credits ($7,000)', () => { expect(DEFAULT_SETTINGS.budget).toBe(1400); });
   it('the same model can be bought twice, each unit costs and scans on its own', () => {
     const one = lidar('rot32', -6, -0.3), two = lidar('rot32', 6, -0.3);
     const a = costOf(design({ lidars: [one] }), DEFAULT_SETTINGS), b = costOf(design({ lidars: [one, two] }), DEFAULT_SETTINGS);

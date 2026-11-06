@@ -474,7 +474,7 @@ export default function TabTwin() {
               if (d.platform) rows.push({ label: 'Mobile scanning platform', amount: c(MOBILE_PLATFORM.cost), remove: d.lidars.some(isMobile) ? undefined : { id: 'platform', test: 'platform', what: 'the platform', onClick: () => setDesign((q) => ({ ...q, platform: false })) } });
               return (
                 <div className="bill" data-testid="twin-owned" role="table" aria-label="Your bill">
-                  <div className="bill-head"><span>Item</span><span>Credits</span></div>
+                  <div className="bill-head"><span>Item</span><span>US$</span></div>
                   {rows.length === 0 && <div className="bill-empty">Nothing yet. Add equipment above.</div>}
                   {rows.map((r, i) => (
                     <div key={i} className={`bill-row ${r.sub ? 'sub' : ''}`} role="row">
