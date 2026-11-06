@@ -105,7 +105,7 @@ The built-in scenes are procedural (MIT). The real scans come from public datase
 
 Everything else works without any key.
 
----
+<p align="center"><img src="docs/footer.svg" alt="" width="100%"></p>
 
 <p align="center">
 <b>Made with care for anyone learning how machines see in 3D.</b><br>
