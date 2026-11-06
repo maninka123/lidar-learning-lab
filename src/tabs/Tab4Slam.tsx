@@ -8,7 +8,7 @@ import { KindLegend } from '../ui/shared';
 import { SceneFromStore, MiniChart } from './common';
 import { PolyLine, CloudLayer, Marker } from '../ui/three';
 import { Crosshair, Trash2, X, Play, RotateCcw, Dots } from '../ui/icons';
-import { PRESETS, presetToConfig, SensorConfig } from '../sensor/presets';
+import { PRESETS, presetToConfig, pointsPerSecond, getPreset, SensorConfig } from '../sensor/presets';
 import { runTask } from '../engine/client';
 import { PointCloud } from '../core/pointcloud';
 import { Vec3 } from '../core/math';
@@ -17,8 +17,11 @@ import { SlamGuidePanel, SlamGuideScene } from '../guide/SlamGuide';
 import { useSlamGuide } from '../guide/store';
 import { tabIndex } from './nav';
 import { closeRoute, routeIsClosed } from '../registration/slam';
+import { SPEEDS, SLAM_LIDARS, presetRoutes, routeLength, slamPlan, type SlamLidarId } from '../registration/routes';
 
 const SLAM_SENSOR: SensorConfig = { ...presetToConfig(PRESETS.find((p) => p.id === 'rot16')!), hRes: 2, channels: 5, vMin: -20, vMax: 20, maxRange: 60, noise: 0.005, minRange: 0.3 };
+/** The sensor the simulation runs: the chosen preset, thinned so that mapping stays fast. */
+const simSensor = (id: SlamLidarId): SensorConfig => { if (id === 'vlp16') return SLAM_SENSOR; const l = SLAM_LIDARS.find((x) => x.id === id)!; return { ...presetToConfig(getPreset(l.preset)), ...l.sim, minRange: 0.3 }; };
 
 /** The lesson lives in the Learn tab of the side panel: opening the tab starts it, leaving it closes it. */
 function SlamLearn({ slam, busy, onRun, onTls }: { slam: ReturnType<typeof useLab.getState>['slam']; busy: boolean; onRun: (o?: Record<string, number | boolean>) => void; onTls: () => void }) {
@@ -53,6 +56,13 @@ export default function Tab4() {
   const setRoute = (waypoints: [number, number][]) => { invalidate(); s.patch({ waypoints }); };
   const setPlatform = (z: number) => { invalidate(); setP({ z }); };
   const platform = p.z >= 3 ? 'uav' : p.z === 1.8 ? 'vehicle' : 'handheld';
+  const [speeds, setSpeeds] = useState<Record<string, number>>({});
+  const lim = SPEEDS[platform], speed = Math.min(lim.max, Math.max(lim.min, speeds[platform] ?? lim.def));
+  const presets = presetRoutes(scene.id, scene.bounds, platform);
+  const [lidarId, setLidarId] = useState<SlamLidarId>('vlp16');
+  const lidar = SLAM_LIDARS.find((l) => l.id === lidarId)!, realSensor = presetToConfig(getPreset(lidar.preset)), sensor = simSensor(lidarId);
+  const length = s.waypoints.length > 1 ? routeLength(s.waypoints) : 0;
+  const plan = slamPlan(length, speed, realSensor.frequency);
 
   useEffect(() => { s.patch({ interaction: tool && !guideOn ? 'add-waypoint' : 'select' }); return () => { useLab.getState().patch({ interaction: 'select' }); }; }, [tool, guideOn]); // eslint-disable-line react-hooks/exhaustive-deps
   const wps = s.waypoints;
@@ -64,9 +74,9 @@ export default function Tab4() {
     setTool(false);
     setBusy(true);
     try {
-      const params = { ...p, ...over, odom: 'icp' as const, waypoints: s.waypoints };
+      const params = { ...p, ...over, odom: 'icp' as const, waypoints: s.waypoints, steps: plan.steps };
       if (Object.keys(over).length) s.patch({ slamParams: { ...p, ...over } });
-      const r = await runTask('slam', { scene, sensor: SLAM_SENSOR, params });
+      const r = await runTask('slam', { scene, sensor, params });
       if (gen !== generation.current) return;
       s.patch({ slam: r });
       setResultZ(params.z);
@@ -84,7 +94,7 @@ export default function Tab4() {
   const slamView = (
     <>
       <SceneFromStore interactive={tool && s.interaction === 'add-waypoint' && !guideOn} />
-      {guideOn && slam && <SlamGuideScene slam={slam} z={z} sensor={SLAM_SENSOR} pointSize={s.view.pointSize} />}
+      {guideOn && slam && <SlamGuideScene slam={slam} z={z} sensor={sensor} pointSize={s.view.pointSize} />}
       {!guideOn && wps.length > 0 && <>
         {wps.length > 1 && <PolyLine pts={wps.map(([x, y]) => [x, y, 0.3] as Vec3)} color="#ff9f0a" width={3} dashed />}
         {wps.map(([x, y], i) => <Marker key={i} p={[x, y, 0.3]} color="#ff9f0a" r={0.5} label={`${i + 1}`} />)}
@@ -116,8 +126,10 @@ export default function Tab4() {
         <>
           <Section title="Mobile platform">
             <Seg label="Mobile platform" value={platform} onChange={(v) => setPlatform(v === 'uav' ? 6 : v === 'vehicle' ? 1.8 : 1.5)} options={[{ value: 'handheld', label: 'Handheld' }, { value: 'vehicle', label: 'Vehicle' }, { value: 'uav', label: 'UAV' }]} />
-            <p className="hint">Scanner height changes the surfaces measured along your route.</p>
+            <Seg label="LiDAR" value={lidarId} onChange={(v) => { invalidate(); setLidarId(v); }} options={SLAM_LIDARS.map((l) => ({ value: l.id, label: l.label.replace('Velodyne Puck ', '').replace('Hokuyo ', '').replace('Livox ', '') }))} />
+            <p className="hint"><b>{lidar.label}</b> · {lidar.kind}. {lidar.note} Scanner height changes the surfaces measured along your route.</p>
             {platform === 'uav' && <Slider label="Flight height" value={p.z} min={3} max={40} step={1} unit=" m" onChange={setPlatform} />}
+            <Slider label={platform === 'vehicle' ? 'Driving speed' : platform === 'uav' ? 'Flight speed' : 'Walking speed'} value={speed} min={lim.min} max={lim.max} step={lim.step} unit=" m/s" format={(v) => v.toFixed(lim.step < 1 ? 1 : 0)} onChange={(v) => { invalidate(); setSpeeds((o) => ({ ...o, [platform]: v })); }} hint={lim.note} />
           </Section>
           <Section title="Route">
             <p className="hint">Add at least two waypoints in the scene or plan. The scanner follows your route. For loop closure, place at least three corners and use Close route to add a return waypoint at the start.</p>
@@ -130,13 +142,22 @@ export default function Tab4() {
               <li key={i} className="mono" style={{ fontSize: '0.875rem' }}><span style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}><span>{x.toFixed(1)}, {y.toFixed(1)}</span>
                 <button className="btn sm" style={{ padding: '2px 6px', minHeight: 0 }} title={`Remove waypoint ${i + 1}`} aria-label={`Remove waypoint ${i + 1}`} data-testid={`wp-remove-${i}`} onClick={() => setRoute(useLab.getState().waypoints.filter((_, j) => j !== i))}><X size={13} /></button></span></li>
             ))}</ol>}
+            <div className="btn-row" style={{ flexWrap: 'wrap' }} data-testid="route-presets">
+              {presets.map((r) => <Btn key={r.id} sm title={r.hint} onClick={() => { setRoute(r.wps.map(([x, y]) => [x, y] as [number, number])); setTool(false); setP({ loopClosure: routeIsClosed(r.wps) }); }} testId={`preset-${r.id}`}>{r.label}</Btn>)}
+            </div>
+            <p className="hint">Or try a ready-made {platform === 'uav' ? 'flight path' : platform === 'vehicle' ? 'drive' : 'walk'} without placing any waypoints.</p>
+            {wps.length > 1 && <div className="callout" style={{ gap: 4 }} data-testid="route-stats">
+              <b>This route</b>
+              <span className="mono" style={{ fontSize: '0.875rem' }}>{length.toFixed(1)} m ÷ {speed.toFixed(lim.step < 1 ? 1 : 0)} m/s = {plan.duration < 90 ? `${plan.duration.toFixed(1)} s` : `${Math.floor(plan.duration / 60)} min ${Math.round(plan.duration % 60)} s`}</span>
+              <span className="mono" style={{ fontSize: '0.875rem' }}>{realSensor.frequency} scans/s × {plan.duration.toFixed(0)} s = {fmtN(plan.captured)} scans</span>
+              <span className="mono" style={{ fontSize: '0.875rem' }}>≈ {fmtN(Math.round(pointsPerSecond(realSensor) * plan.duration))} points captured</span>
+              <span className="caption">{plan.thinned ? `Mapping uses ${plan.used} of them, one every ${plan.spacing.toFixed(1)} m, so the browser stays fast.` : `All ${plan.used} are used for mapping, one every ${plan.spacing.toFixed(1)} m.`}</span>
+              {plan.spacing > 3 && <span className="caption">Scans are far apart, so neighbours overlap less. Try a slower speed.</span>}
+            </div>}
             <Plan2D scene={scene} height={200} onClick={(x, y) => tool && s.interaction === 'add-waypoint' && addWp(x, y)} layers={{ paths: wps.length > 1 ? [{ pts: wps, color: '#ff9f0a', dashed: true }] : [], markers: wps.map(([x, y], i) => ({ x, y, color: '#ff9f0a', label: `${i + 1}` })) }} />
           </Section>
-          <Callout kind="warn" title="Teaching approximation">
-            Scans are aligned with ICP along your route. Loop closure matches the final and first scans and distributes the correction along the trajectory. This is a teaching approximation of a SLAM back-end.
-          </Callout>
+          <Callout kind="warn" title="Simplified SLAM">Scans are matched with ICP; loop closure corrects the drift.</Callout>
           <Section title="Mapping">
-            <Slider label="Scans along the route" value={p.steps} min={20} max={80} step={2} onChange={(steps) => { invalidate(); setP({ steps }); }} />
             <Toggle label="Apply loop closure" checked={p.loopClosure} onChange={(loopClosure) => { invalidate(); setP({ loopClosure }); }} hint="Revisit the start using Close route, then run the simulation to compare both outputs." />
           </Section>
           <Section title="Run">

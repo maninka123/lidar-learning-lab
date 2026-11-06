@@ -29,6 +29,14 @@ test('challenge starts with one mission, measures failure, saves equipment, and 
  await page.goto('/');await page.getByTestId('nav-18').click();
  await expect(page.getByTestId('twin-mission-1')).toBeEnabled();for(let i=2;i<=7;i++)await expect(page.getByTestId(`twin-mission-${i}`)).toBeDisabled();
  await expect(page.getByTestId('mission-brief')).toContainText('Design the sensing network');await expect(page.getByTestId('twin-buy-cam-mid')).toHaveCount(0);
+ await expect(page.getByTestId('mission-evaluate')).toBeDisabled();
+ await expect(page.getByRole('region',{name:'Coverage check'})).toContainText('Add a LiDAR');
+ await page.getByLabel('Coverage preview',{exact:true}).selectOption('all');await expect(page.getByLabel('Coverage preview',{exact:true})).toHaveValue('all');
+ await page.getByLabel('Coverage preview',{exact:true}).selectOption('critical');
+ await page.screenshot({path:'output/playwright/mission-panel-desktop.png'});
+ await page.setViewportSize({width:1366,height:900});await page.screenshot({path:'output/playwright/mission-panel-laptop.png'});
+ const budget=await page.getByTestId('twin-budget').boundingBox(), check=await page.getByRole('region',{name:'Coverage check'}).boundingBox();
+ if(budget&&check)await page.screenshot({path:'output/playwright/mission-panel-detail.png',clip:{x:budget.x-5,y:budget.y-5,width:budget.width+10,height:check.y+check.height-budget.y+10}});
  await page.getByTestId('twin-buy-rot16').click();await page.getByTestId('mission-evaluate').click();await expect(page.getByTestId('mission-result')).toContainText('Needs improvement',{timeout:120000});
  await expect(page.getByTestId('twin-mission-2')).toBeDisabled();await expect.poll(() => page.evaluate(() => !!JSON.parse(localStorage.getItem('lidar-lab-twin') || '{}').progress?.results?.[0])).toBe(true);await page.reload();await page.getByTestId('nav-18').click();await expect(page.getByTestId('twin-owned')).toContainText('Low-resolution');await expect(page.getByTestId('mission-result')).toContainText('Needs improvement');
  await page.screenshot({path:'output/playwright/mission-one.png'});

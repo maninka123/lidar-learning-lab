@@ -1,3 +1,5 @@
+import { BudgetSummary } from '../twin/ui/BudgetSummary';
+import { MissionCheck } from '../twin/ui/MissionCheck';
 import { CompletionReport } from '../twin/ui/CompletionReport';
 import { engineeringReport } from '../twin/report';
 import { PairBoard, FovOverlapChart, CalPanel } from '../twin/ui/CalibrationWorkspace';
@@ -379,16 +381,6 @@ export default function TabTwin() {
     </div>
   );
 
-  const budgetBox = (
-    <div data-testid="twin-budget" style={{ display: 'grid', gap: 4 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between' }}><b>Budget</b><span className="mono">{usd(cost.total)} / {usd(T.settings.budget)}</span></div>
-      <div style={{ height: 8, borderRadius: 4, background: 'var(--fill)', overflow: 'hidden' }}><div style={{ width: `${Math.min(100, (100 * cost.total) / T.settings.budget)}%`, height: '100%', background: cost.total > T.settings.budget ? '#ff453a' : '#0a84ff' }} /></div>
-      <div className="caption" data-testid="twin-remaining">Remaining: {usd(cost.remaining)}</div>
-      {cost.errors.map((e) => <div key={e} className="caption" style={{ color: '#ff453a' }}>⚠ {e}</div>)}
-      {cost.warnings.map((e) => <div key={e} className="caption" style={{ color: '#b36b00' }}>• {e}</div>)}
-    </div>
-  );
-
   const fb = practice ? feedbackFor(practice) : null;
   const gradeRows = (g: { total: number; perTask: { key: TaskKey; points: number; weight: number; score: number; enabled: boolean }[] }) => (
     <table className="table" data-testid="twin-grade-table"><thead><tr><td>Task</td><td>Score</td><td>Points</td></tr></thead><tbody>
@@ -401,7 +393,6 @@ export default function TabTwin() {
     switch (stage) {
       case 1: return (
         <>
-          {budgetBox}
           {mission === 0 && <Section title="Compare LiDAR scanners"><EquipmentCatalogue cameras={false} scale={T.settings.priceScale} buy={buyLidar} canBuy={(id) => d.lidars.length < LIMITS.lidars && (id !== 'tls-hire' || d.lidars.filter((u) => u.item === id).length < 2) && (!lidarItem(id).mobile || !d.lidars.some(isMobile)) && affordable(lidarPlan(id).f)} /></Section>}
           {mission >= 4 && <Section title="Compare cameras"><EquipmentCatalogue cameras scale={T.settings.priceScale} buy={buyCamera} canBuy={(id) => d.cameras.length < LIMITS.cameras && affordable(cameraPlan(id))} /></Section>}
           <Section title="Extras" open={mission >= 4}>
@@ -448,7 +439,6 @@ export default function TabTwin() {
       );
       case 2: return (
         <>
-          {budgetBox}
           <div className="btn-row"><Btn sm onClick={() => T.set({ stage: 1 })} testId="twin-back-equipment">← Change equipment</Btn></div>
           <Section title="Place your equipment">
             {unitList}
@@ -499,7 +489,6 @@ export default function TabTwin() {
       );
       case 4: return (
         <>
-          {budgetBox}
           <Callout kind="edu" title="Acquire a survey">Every LiDAR measures with range noise, lost returns and a few floating points. Fixed scanners are recorded where you put them, with a small installation error. A mobile scanner only knows its route by dead reckoning, so its scans drift apart. Registration (a block in your pipeline) joins the scans into one frame.</Callout>
           <Btn variant="primary" icon={<Play size={16} />} onClick={acquire} busy={T.busy === 'Acquiring the survey…'} disabled={!cost.ok} testId="twin-acquire">Acquire the practice survey</Btn>
           {survey && (
@@ -707,7 +696,6 @@ export default function TabTwin() {
       );
       default: return (
         <>
-          {budgetBox}
           <div className="btn-row" style={{ flexWrap: 'wrap' }}>
             <Btn variant="primary" icon={<Play size={16} />} onClick={runPractice} busy={!!T.busy} disabled={!cost.ok || !chk.ok} testId="twin-run-2">Run practice</Btn>
             <Btn variant="good" onClick={submitFinal} busy={!!T.busy} disabled={!readyForFinal(T.progress) || !cost.ok || !chk.ok || (T.settings.maxSubmissions > 0 && finalsUsed >= T.settings.maxSubmissions)} testId="twin-final">Final evaluation{T.settings.maxSubmissions > 0 ? ` (${Math.max(0, T.settings.maxSubmissions - finalsUsed)} left)` : ''}</Btn>
@@ -759,13 +747,19 @@ export default function TabTwin() {
   const controls = (
     <>
       <MissionBrief key={mission} mission={mission} progress={T.progress} onContinue={() => goMission(mission + 1)} onReference={() => { const i = tabIndex(missionDef.reference); if (i >= 0) lab.setTab(i); }} />
+      {[1, 2, 4, 8].includes(stage) && <BudgetSummary cost={cost} budget={T.settings.budget} hasLidar={!!d.lidars.length} />}
       <div className="mission-tools"><Seg label="Mission tools" value={stage} onChange={(stage) => T.set({ stage })} options={missionDef.tools.map((value) => ({ value, label: TOOL_NAMES[value] }))} /></div>
-      <p className="hint" data-testid="mission-targets">{MISSION_TARGETS[mission]}</p>
-      {mission === 0 && <Seg label="Coverage region" value={coverageMode} onChange={setCoverageMode} options={[{ value: 'critical', label: 'Critical areas' }, { value: 'all', label: 'Whole factory' }]} />}
-      {mission < 6 && <Btn variant="primary" onClick={runPractice} busy={!!T.busy} disabled={!cost.ok || (mission > 0 && !chk.ok)} testId="mission-evaluate">{mission === 0 ? 'Test measured coverage' : 'Evaluate this mission'}</Btn>}
-      {mission === 0 && <Section title="Project identity" open={false}><div className="field"><label htmlFor="twin-team">Team name (optional)</label><input id="twin-team" value={T.team} onChange={(e) => T.set({ team: e.target.value })} /></div><Btn sm onClick={exportConfig}>Export configuration</Btn><Btn sm onClick={() => { if (confirm("Start a new project? Export first if you want to keep this configuration.")) T.reset(); }}>Start a new project</Btn><Btn sm onClick={() => fileRef.current?.click()}>Import configuration</Btn><input ref={fileRef} type="file" accept="application/json" hidden onChange={(e) => importConfig(e.target.files?.[0])} /></Section>}
-      <div data-testid="twin-stage-title" className="caption">{TOOL_NAMES[stage]}</div>
-      <div key={stage} style={{ display: 'grid', gap: 12 }}>{panel}</div>
+      {mission === 6 && <p className="mission-check-target mission-final-target" data-testid="mission-targets">{MISSION_TARGETS[mission]}</p>}
+      {mission < 6 && <MissionCheck
+        target={MISSION_TARGETS[mission]}
+        coverage={mission === 0 ? { value: coverageMode, onChange: setCoverageMode } : undefined}
+        busy={!!T.busy}
+        disabled={!cost.ok || (mission > 0 && !chk.ok)}
+        disabledReason={!d.lidars.length ? 'Add a LiDAR from the catalogue to begin.' : !cost.ok ? 'Review your equipment and budget before testing.' : 'Complete the processing steps before testing.'}
+        onEvaluate={runPractice}
+      />}
+      <div key={stage} className="mission-workspace">{panel}</div>
+      <div className="mission-project-details">{mission === 0 && <Section title="Project identity" open={false}><div className="field"><label htmlFor="twin-team">Team name (optional)</label><input id="twin-team" value={T.team} onChange={(e) => T.set({ team: e.target.value })} /></div><Btn sm onClick={exportConfig}>Export configuration</Btn><Btn sm onClick={() => { if (confirm("Start a new project? Export first if you want to keep this configuration.")) T.reset(); }}>Start a new project</Btn><Btn sm onClick={() => fileRef.current?.click()}>Import configuration</Btn><input ref={fileRef} type="file" accept="application/json" hidden onChange={(e) => importConfig(e.target.files?.[0])} /></Section>}</div>
     </>
   );
   const basePlan = { markers: [...d.lidars.map((u, i) => ({ x: u.x, y: u.y, color: UNIT_COLOURS[i % 6], label: `L${i + 1}`, yaw: u.yaw, r: u.id === sel ? 8 : 5 })), ...d.cameras.map((u, i) => ({ x: u.x, y: u.y, color: '#0a84ff', label: `C${i + 1}`, yaw: u.yaw, r: u.id === sel ? 8 : 5 })), ...d.lights.map((u, i) => ({ x: u.x, y: u.y, color: '#ffcc00', label: `Lamp ${i + 1}`, r: 5 })), ...(d.lidars.some(isMobile) ? d.route.map(([x, y], i) => ({ x, y, color: '#ff9f0a', label: `${i + 1}`, r: 4 })) : [])], paths: d.lidars.some(isMobile) && d.route.length > 1 ? [{ pts: d.route, color: '#ff9f0a', dashed: true }] : [] };

@@ -18,14 +18,39 @@
 .mission-metric { display: flex; justify-content: space-between; gap: 12px; font-size: .8rem; align-items: start; }
 .mission-metric strong { text-align: right; white-space: nowrap; }
 .mission-metric small { display: block; font-size: .68rem; font-weight: 400; color: var(--text2); }
-.mission-tools { margin-bottom: 4px; }
-[data-testid="mission-targets"] { margin: 10px 0; display: flex; gap: 8px; align-items: flex-start; padding: 8px 10px; border-radius: 10px; border: 1px dashed var(--sep); font-size: .8rem; color: var(--text2); line-height: 1.4; }
-[data-testid="mission-targets"]::before { content: '◎'; color: var(--accent); }
-[data-testid="mission-evaluate"] { margin: 10px 0 4px; width: 100%; justify-content: center; min-height: 2.6rem; font-size: .95rem; }
-[data-testid="twin-stage-title"] { display: none; text-transform: uppercase; letter-spacing: .08em; font-size: .7rem; font-weight: 700; color: var(--text3); margin-top: 6px; }
-[data-testid="twin-budget"] { padding: 12px 14px; border-radius: 14px; background: var(--fill); }
-[data-testid="twin-budget"] > div:first-child { align-items: baseline; font-size: .95rem; }
-[data-testid="twin-budget"] .mono { font-size: .85rem; }
+/* Quiet workspace tabs, a single evaluation card and a compact financial summary. */
+.mission-tools { margin: 8px 0 14px; }
+.mission-tools .seg.block { gap: 14px; padding: 0; border-radius: 0; background: transparent; border-bottom: 1px solid var(--sep); }
+.mission-tools .seg button { flex: 0 1 auto; padding: 10px 2px; border: 0; border-bottom: 2px solid transparent; border-radius: 0; background: transparent; color: var(--text3); font-size: .82rem; font-weight: 550; line-height: 1.3; box-shadow: none; }
+.mission-tools .seg button[aria-pressed="true"] { border-bottom-color: var(--accent); background: transparent; color: var(--text); box-shadow: none; }
+.mission-tools .seg button:hover { color: var(--text); }
+.mission-workspace { display: grid; gap: 12px; }
+.mission-project-details { margin-top: 12px; }
+.mission-project-details .section-head h3 { text-transform: none; letter-spacing: 0; font-size: .78rem; font-weight: 500; }
+.mission-project-details .section-head { color: var(--text3); }
+.mission-check { display: grid; gap: 12px; margin-bottom: 16px; padding: 14px; border: 1px solid var(--sep); border-radius: 12px; background: var(--bg-elev); }
+.mission-check-heading { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
+.mission-check-heading h3 { font-size: .82rem; font-weight: 650; letter-spacing: -.01em; }
+.mission-preview-select { display: flex; align-items: center; gap: 6px; min-width: 0; color: var(--text3); font-size: .69rem; }
+.mission-preview-select select { max-width: 140px; padding: 4px 24px 4px 8px; border: 1px solid var(--sep); border-radius: 6px; background-color: var(--bg-elev); background-position: right 7px center; color: var(--text2); font-size: .72rem; cursor: pointer; }
+.mission-check-target { color: var(--text2); font-size: .78rem; line-height: 1.5; }
+.mission-check .btn { justify-content: center; min-height: 36px; padding: 8px 12px; font-size: .82rem; border-radius: 8px; }
+.mission-check .btn[disabled] { opacity: 1; background: var(--fill); color: var(--text3); }
+.mission-check-help { color: var(--text3); font-size: .72rem; line-height: 1.4; }
+.mission-budget { margin: 0 0 4px; padding: 14px; border: 1px solid var(--sep); border-radius: 12px; background: var(--bg-elev); }
+.mission-budget-heading { display: flex; justify-content: space-between; align-items: center; gap: 8px; color: var(--text2); font-size: .76rem; font-weight: 550; }
+.mission-budget-currency { color: var(--text3); font-size: .62rem; letter-spacing: .06em; }
+.mission-budget-balance { display: flex; align-items: baseline; flex-wrap: wrap; gap: 7px; margin: 6px 0 12px; }
+.mission-budget-balance strong { font-size: 1.5rem; line-height: 1.15; font-weight: 650; letter-spacing: -.035em; font-variant-numeric: tabular-nums; }
+.mission-budget-balance > span { font-size: .74rem; color: var(--text3); }
+.mission-budget-track { height: 4px; overflow: hidden; border-radius: 4px; background: var(--fill); }
+.mission-budget-track > span { display: block; height: 100%; border-radius: inherit; background: var(--accent); }
+.mission-budget-totals { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 5px 12px; margin-top: 9px; color: var(--text3); font-size: .7rem; }
+.mission-budget-totals b { margin-left: 4px; color: var(--text2); font-weight: 550; font-variant-numeric: tabular-nums; }
+.mission-budget.over .mission-budget-balance strong, .mission-budget-error { color: var(--red); }
+.mission-budget.over .mission-budget-track > span { background: var(--red); }
+.mission-budget-error, .mission-budget-warning { margin-top: 8px; font-size: .73rem; line-height: 1.4; }
+.mission-budget-warning { color: #92600d; }
 .equipment { display: grid; gap: 10px; }
 .equipment-note { font-size: .78rem; color: var(--text2); }.equipment-note summary, .equipment-more summary { cursor: pointer; }.equipment-note p { margin-top: 6px; line-height: 1.4; }
 .equipment-card { border: 1px solid var(--sep); border-radius: 12px; padding: 9px 10px; display: grid; gap: 7px; background: var(--bg-elev); transition: border-color .15s; }
@@ -51,8 +76,11 @@
 @keyframes mission-arrive { from { opacity: .3; transform: translateY(4px); } }
 @media (prefers-reduced-motion: reduce) { .mission-result { animation: none !important; } }
 
-.mission-tools .seg { flex-wrap: wrap; }.mission-tools .seg button { white-space: normal; flex: 1 1 auto; }
+.mission-tools .seg { flex-wrap: wrap; }.mission-tools .seg button { white-space: normal; }
 .completion-report { margin: 12px 0; padding: 18px; border-radius: 18px; border: 1px solid rgba(31,157,61,.25); background: linear-gradient(140deg,rgba(31,157,61,.06),var(--bg-elev)); display: grid; gap: 12px; }
 .completion-score { font-size: 2.8rem; letter-spacing: -.05em; font-weight: 700; line-height: 1; }.completion-score small { font-size: 1rem; letter-spacing: 0; color: var(--text2); }
 .completion-metrics { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }.completion-metrics div { display: grid; gap: 2px; }.completion-metrics span { color: var(--text2); font-size: .7rem; }.completion-metrics b { font-size: .92rem; }
 .completion-report details { font-size: .78rem; }.completion-report summary { cursor: pointer; }.completion-report ul { padding-left: 16px; }
+
+.mission-final-target { margin-bottom: 14px; }
+.mission-project-details:empty { display: none; }
