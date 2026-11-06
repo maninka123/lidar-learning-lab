@@ -21,6 +21,8 @@ async function api(method, path, body) {
   if (!r.ok) throw new Error(j.message || j.error || 'Request failed');
   return j;
 }
+/** A CSV cell. Text that starts with = + - @ (or a tab or return) would run as a formula in Excel or Sheets, so it gets a leading apostrophe. Numbers are left alone. */
+const csvText = (v) => { const t = String(v ?? ''); return '"' + ((typeof v !== 'number' && /^[=+\-@\t\r]/.test(t)) ? "'" + t : t).replace(/"/g, '""') + '"'; };
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 function toast(text, bad) { const t = $('toast'); t.textContent = text; t.className = 'msg ' + (bad ? 'bad' : 'good'); clearTimeout(toast.h); toast.h = setTimeout(() => t.classList.add('hidden'), 5000); }
 const run = async (f) => { try { await f(); } catch (e) { toast(e.message, true); } };
@@ -215,7 +217,7 @@ $('makeCodes').addEventListener('click', () => run(async () => {
 }));
 $('copyCodes').addEventListener('click', () => run(async () => { await navigator.clipboard.writeText(issued.map((c) => `${c.label}\t${c.code}`).join('\n')); toast('Copied'); }));
 $('csvCodes').addEventListener('click', () => {
-  const blob = new Blob(['label,code\n' + issued.map((c) => `"${c.label.replace(/"/g, '""')}",${c.code}`).join('\n')], { type: 'text/csv' });
+  const blob = new Blob(['label,code\n' + issued.map((c) => `${csvText(c.label)},${c.code}`).join('\n')], { type: 'text/csv' });
   const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'workshop-codes.csv'; a.click(); URL.revokeObjectURL(a.href);
 });
 boot();
@@ -317,7 +319,7 @@ $('chView').addEventListener('click', (e) => {
 });
 $('chClear').addEventListener('click', () => { if (confirm('Delete ALL challenge score records? This cannot be undone.')) run(async () => { await api('POST', 'challenge-clear', {}); await loadChallenge(); }); });
 $('chCsv').addEventListener('click', () => {
-  const q = (v) => '"' + String(v ?? '').replace(/"/g, '""') + '"';
+  const q = csvText;
   const head = ['sent (Sydney)', 'name', 'index', 'place', 'network', 'ip address', 'browser id', 'index numbers on this computer', 'kind', 'score', ...Object.values(TASK_SHORT).map((n) => n + ' (0-1)'), 'cost', 'budget', 'practice runs', 'final runs', 'equipment', 'pipeline', 'missions'];
   const sh = sharing(), rows = visibleSubs().map((s) => [fmtSydney(s.at), s.name, s.index, place(s), netName(s), s.ip || '', s.device || '', sh.n(s), s.kind, s.total, ...Object.keys(TASK_SHORT).map((k) => s.tasks[k] ?? 0), s.cost, s.budget, s.attempts.practice, s.attempts.final, [...s.equipment.lidars, ...s.equipment.cameras].join('; '), s.pipeline.join(' > '), (s.missions || []).map((m) => 'M' + m.number + ':' + m.status + ':' + m.score + ':' + m.attempts).join('; ')]);
   const csv = [head, ...rows].map((r) => r.map(q).join(',')).join('\n');
