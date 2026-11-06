@@ -4,7 +4,8 @@ export default defineConfig({
   testDir: './e2e',
   timeout: 180_000,
   expect: { timeout: 30_000 },
-  fullyParallel: false,
+  // One worker (the 3D tests are heavy), but every test is independent, so CI can split them across machines with --shard
+  fullyParallel: true,
   workers: 1,
   reporter: [['list']],
   use: {

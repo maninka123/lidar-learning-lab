@@ -3,8 +3,14 @@ on:
   push:
     branches: [main]
   pull_request:
+# a newer push replaces the run that is still going for the same branch
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
-  test:
+  # the four jobs below run side by side, so the whole check takes as long as the slowest one
+  build:
+    name: Type check and build
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -13,12 +19,55 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - run: npm run typecheck
+      - run: npm run build # tsc -b (the type check) and the production build
+
+  unit:
+    name: Unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
       - run: npm test
-      - run: npm run build
+
+  e2e:
+    name: Browser tests (${{ matrix.shard }}/3)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Cache the browser
+        id: pw
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
       - run: npx playwright install --with-deps chromium
-      - run: npm run test:e2e
+        if: steps.pw.outputs.cache-hit != 'true'
+      - run: npx playwright install-deps chromium
+        if: steps.pw.outputs.cache-hit == 'true'
+      - run: npx playwright test --shard=${{ matrix.shard }}/3
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: e2e-failures-${{ matrix.shard }}
+          path: test-results
+          retention-days: 7
+
   workshop-backend:
+    name: Workshop backend
     runs-on: ubuntu-latest
     defaults:
       run:
