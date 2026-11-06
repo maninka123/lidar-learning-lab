@@ -233,7 +233,7 @@ export default function Tab8() {
       <Seg value={pane} onChange={setPane} options={[{ value: 'direct', label: '1 Direct AI' }, { value: 'graph', label: '2 Scene graph' }, { value: 'ai', label: '3 Graph → AI' }]} label="Section" />
       {pane === 'direct' && (<>
       <Section title="Direct inference: give the point cloud to an AI">
-        <p className="hint">Skip the pipeline: send the raw points, as text, straight to <b>DeepSeek V4 Flash</b>. <span className="caption">Why DeepSeek? It is capable, easy to get a key for, and cheap. Points sent as text use many tokens, so cost matters for a whole class.</span></p>
+        <p className="hint">Skip the pipeline: send the raw points, as text, straight to <b>DeepSeek V4 Flash</b>.</p>
         <Slider label="Points to send" value={nPts} min={100} max={3000} step={100} onChange={setNPts} hint="Every point costs tokens (the model's unit of reading). More points cost more and can run over its limit." />
         <Toggle label="Include the colours" checked={withColour} onChange={setWithColour} />
         {preview && cloud && (
