@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Camera, Check, Crosshair, Dots, Eye, Plus, Radar } from '../../ui/icons';
-import { LIDARS, CAMERAS, sensorFor } from '../catalogue';
+import { LIDARS, SHOP_LIDARS, CAMERAS, sensorFor } from '../catalogue';
 import { PRICING, usd } from '../pricing';
 
 const KIND_LABEL: Record<string, string> = { low: 'Rotating', medium: 'Rotating', high: 'Rotating', multi: 'Rotating', solid: 'Solid-state', tls: 'Terrestrial', mobile: 'Mobile' };
@@ -8,7 +8,7 @@ const SPEC_ROWS = [['range', 'Range'], ['fov', 'Field of view'], ['resolution', 
 
 export function EquipmentCatalogue({ cameras, scale, canBuy, buy }: { cameras: boolean; scale: number; canBuy: (id: string) => boolean; buy: (id: string) => void }) {
   const [compare, setCompare] = useState<string[]>([]);
-  const items = cameras ? CAMERAS : LIDARS;
+  const items = cameras ? CAMERAS : SHOP_LIDARS;
   const specs = (id: string) => {
     const c = CAMERAS.find((x) => x.id === id); if (c) return { range: 'Light and geometry limited', fov: `${c.fov}°`, resolution: `${c.w} × ${c.h} px`, accuracy: 'Depends on calibration', density: `${(c.w * c.h / 1e6).toFixed(2)} MP`, use: c.id === 'cam-lowlight' ? 'Dark areas, low noise' : c.id === 'cam-wide' ? 'Broad view, fewer pixels per label' : 'Reading labels, needs light' };
     const it = LIDARS.find((x) => x.id === id)!;

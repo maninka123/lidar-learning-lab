@@ -7,6 +7,7 @@ import { TwinDesign, ChallengeSettings, costOf, pairedLidarOf, CostReport, HW_SE
 import { scoreTwin, scoreDetection, scoreColour, scoreChange, scoreSafety, safetyTruth, scoreQuality, combine, Grade, TaskScores, TwinScore, DetectionScore, ColourScore, ChangeScore, SafetyScore, QualityScore, SafetyTruth } from './grade';
 import { selectPoints, PointCloud } from '../core/pointcloud';
 import type { RegReport } from './register';
+import { inspectionCoverage, type InspectionCoverage } from './inspection';
 
 /** One complete evaluation of a team's system on one scenario: acquire → calibrate-and-colour → process → grade.
  *  It is a pure function of (design, pipeline, settings, seed), so the same input always gives the same grade. */
@@ -18,7 +19,7 @@ export const FINAL_SEEDS = [101, 202];
 export interface RunResult {
   seed: number; ok: boolean; error?: string; cost: CostReport; grade: Grade;
   tasks: { twin: TwinScore; detect: DetectionScore; colour: ColourScore; change: ChangeScore; quality: QualityScore; safety: SafetyScore };
-  coverage?: MeasuredCoverage; calibration?: { maxRms: number; validFraction: number }; updatedPreview?: PointCloud;
+  coverage?: MeasuredCoverage; calibration?: { maxRms: number; validFraction: number }; inspection?: InspectionCoverage; updatedPreview?: PointCloud;
   steps: StepInfo[]; /** how well the team's registration fitted the scans (RMSE and overlap): the settings are part of the pipeline, so the final evaluation uses them too */ registration?: RegReport; twinPreview?: PointCloud; objects: DetObject[]; refs: Target[]; found: { changes: ChangeFound[]; safety?: SafetyFound[] }; truth: { changes: ChangeTruth[]; safety: SafetyTruth[] };
   stats: { rays: number; raysA: number; points: number; acquireMs: number; pipelineMs: number };
 }
@@ -38,6 +39,7 @@ export function runScenario(cfg: RunConfig, seed: number): RunResult {
   const coverage = measuredCoverage(fA, A.visible.scans.map((s) => s.cloud));
   const errors = cfg.design.cameras.map((c, i) => rmsOf(residuals(calibrationTarget(c, HW_SEED, i, cfg.design.lights), c.cal.est, c.cal.fov)) * 1280 / cams[i].image.w);
   const calibration = { maxRms: errors.length ? Math.max(...errors) : Infinity, validFraction: errors.length ? errors.filter((e, i) => Number.isFinite(e) && e <= 4 && !!pairedLidarOf(cfg.design.cameras[i], cfg.design)).length / errors.length : 0 };
+  const inspection = inspectionCoverage(fA, cfg.design, A, errors);
   const t1 = Date.now();
   const out = runPipeline(cfg.pipeline, { A: A.visible, B: B?.visible, camerasA: cams }, seed);
   const t2 = Date.now();
@@ -61,7 +63,7 @@ export function runScenario(cfg: RunConfig, seed: number): RunResult {
     twinPreview = { ...twinPreview, colors: col.colors };
   }
   return {
-    ...base, ok: true, grade, tasks, coverage, calibration, updatedPreview: thin(out.B?.twin ?? out.B?.cloud, 40000), steps: out.steps.map((s) => ({ ...s, preview: thin(s.preview, 20000) })), registration: out.registration, twinPreview,
+    ...base, ok: true, grade, tasks, coverage, calibration, inspection, updatedPreview: thin(out.B?.twin ?? out.B?.cloud, 40000), steps: out.steps.map((s) => ({ ...s, preview: thin(s.preview, 20000) })), registration: out.registration, twinPreview,
     objects: preds.map((p) => ({ ...p, idx: new Int32Array(0) })), found: { changes: out.changes ?? [], safety: out.safety },
     stats: { rays: A.visible.stats.rays + (B?.visible.stats.rays ?? 0), raysA: A.visible.stats.rays, points: rawN, acquireMs: t1 - t0, pipelineMs: t2 - t1 },
   };

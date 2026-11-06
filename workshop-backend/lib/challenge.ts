@@ -123,7 +123,7 @@ export async function stopAccepting(s: Store): Promise<AcceptConfig> { const c =
 export type TaskKey = (typeof TASKS)[number];
 export interface ChallengeSettings { budget: number; priceScale: number; maxSubmissions: number; weights: Record<TaskKey, number>; enabled: Record<TaskKey, boolean> }
 export const DEFAULT_SETTINGS: ChallengeSettings = {
-  budget: 3000, priceScale: 1, maxSubmissions: 0,
+  budget: 7000, priceScale: 1, maxSubmissions: 0,
   weights: { twin: 20, detect: 20, colour: 10, change: 20, quality: 10, safety: 10, budget: 10 },
   enabled: { twin: true, detect: true, colour: true, change: true, quality: true, safety: true, budget: true },
 };

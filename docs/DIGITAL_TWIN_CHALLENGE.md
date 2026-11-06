@@ -4,15 +4,15 @@ The last tab of the lab. Students design a sensing system for a simulated factor
 
 ## Seven connected engineering missions
 
-Only the first mission is initially available. Each introduces a specific factory problem, exposes only relevant controls, and unlocks the next mission after measured performance passes. Students inspect results before choosing Continue. Previously unlocked missions remain available; there is no timer or required equipment count.
+Only the first mission is initially available. Each introduces a specific factory problem, exposes only relevant controls, and unlocks the next mission after measured performance passes. Students inspect results before choosing Continue. Previously unlocked missions remain available; there is no timer; the LiDAR count remains a design choice, while the visual inspection task requires a camera.
 
 | Mission | Passing criteria |
 |---|---|
-| 1. Design the sensing network | ≥70% measured coverage of critical production, inspection and loading areas; within budget |
-| 2. Align measurements | RMSE ≤8 cm and overlap ≥20%; a single scanner is judged by its surface accuracy |
+| 1. Design the sensing network | ≥70% measured coverage of the critical production, inspection and loading areas, **and** at least 100 / 80 / 80 measured points per m² of surface in production / inspection / loading; within budget |
+| 2. Align measurements | Scans aligned one at a time to within 2 cm and 0.15° of the surveyed scanner positions, overlap ≥20%; a single scanner is judged by its surface accuracy |
 | 3. Clean the cloud | ≥60% outliers removed, ≥80% valid monitoring-height measurements retained, ≥60% small-object measurements retained |
 | 4. Detect objects | Detection F1 ≥55% and small-object recall ≥25% |
-| 5. Add cameras and colour | ≥70% labels read correctly; all paired cameras have marker RMS ≤4 px normalised to 720p |
+| 5. Add cameras and colour | One calibrated, explicitly paired camera–LiDAR combination covers ≥80% of the critical inspection bay; ≥70% labels correct; marker RMS ≤4 px normalised to 720p |
 | 6. Changes and safety | Change F1 ≥50% and safety-zone accuracy ≥75%, independently |
 | 7. Commission the twin | All six validations current; final weighted score ≥60/100 over seeds 101 and 202 |
 
@@ -24,7 +24,9 @@ The 3D factory and plan remain available for positioning. Sensors can be selecte
 
 Planning shows geometric line-of-sight coverage. **Test measured coverage** separately ray-casts the selected hardware with noise and dropout and checks reference surfaces against actual returns within 15 cm. Red means no measured view; yellow one view; green two independent views; blue three or more. Switch between critical regions and the whole factory. Coverage, overlap, missing area and sampling density are distinct quantities.
 
-Registration exposes direct placement, point-to-point/plane ICP, starting pose, match distance, trimming, iterations and preview diagnostics. Cleaning and detection reuse the lab's processing algorithms, including selectable planes/clusters and parallel filters. Step previews compare input and output. Classification uses shape rules, not a neural network.
+Registration exposes direct placement, point-to-point/plane ICP, starting pose, match distance, trimming, iterations and preview diagnostics. Mission 2 guides students through Acquire scans → Align scans. Only the current scan (orange) and its reference/earlier scans (blue) are shown. Each alignment has a before/after preview and measured position, angle and overlap feedback; Next scan advances explicitly. Retrying an earlier scan clears its later results, and changing shared settings restarts the sequence. Evaluation becomes available once each scan has been tested. Cleaning and detection reuse the lab's processing algorithms, including selectable planes/clusters and parallel filters. Step previews compare input and output. Classification uses shape rules, not a neural network.
+
+The critical visual inspection bay is outlined in purple in 3D and on the plan. A 720p camera is specified and budgeted in new projects, initially unpaired and uncalibrated. Mission 5 requires one explicitly paired camera–LiDAR combination to cover at least five of its six label stations (≥80%). Coverage checks label readability, viewing direction, occlusion, LiDAR field of view and actual non-outlier LiDAR returns on those objects. The camera must also meet the measured ≤4 px calibration error. The final evaluation repeats this requirement in both unseen scenarios. Older projects retain their cameras; a camera-free project receives the specified camera on entering Mission 5 when the budget allows.
 
 Camera–LiDAR connections are stored on each camera (`pairedLidarId`) and used by calibration, acquisition, processing and final grading. Legacy unpaired cameras use the nearest installed scanner. A removed explicit partner requires re-pairing. Point provenance includes scan ids, so a camera colours only measurements belonging to its partner. Calibration shows measured/projected markers, initial/current error and manual parameters; assisted optimisation requires inspecting the error and trying a manual correction. Passing depends on measured error, not a “done” flag.
 
@@ -38,18 +40,18 @@ Each result carries a dependency fingerprint. LiDAR placement/resolution or rout
 
 ### Pricing and project budget
 
-Reference prices use USD, checked 2026-11-04, and **one simulation credit = US$5** before the instructor price scale. The default 3,000-credit allocation represents a US$15,000 educational project. Installation and resolution effort are simulated allowances, not vendor quotations. Existing instructor budgets and grading settings remain authoritative.
+Reference prices use USD, checked 2026-11-04, and **one simulation credit = US$5** before the instructor price scale. The default 7,000-credit allocation represents a US$35,000 educational project. Installation and resolution effort are simulated allowances, not vendor quotations. Existing instructor budgets and grading settings remain authoritative.
 
 - [Livox manufacturer launch announcement](https://www.livoxtech.com/mobile/de/news/mid360_launch): US$749 sample reference, labelled as a launch price rather than a current binding quote.
 - [Leica BLK360 official shop](https://shop.leica-geosystems.com/reality-capture/blk360/buy): US$26,500 commercial TLS reference; the simulator uses a generic TLS approximation.
 - Other generic scanner/camera classes are explicitly **estimated educational prices**, never claimed to be verified vendor quotations.
-- TLS survey hire is an **educational service estimate**, limited to two fixed surveyed stations per project. Repeated practice replays those stations. It does not provide a mobile survey or unrestricted extra stations.
+- **Only fixed, mounted LiDARs are sold.** A terrestrial scanner (or a hired survey station) or a mobile scanner on a platform would cover everything alone, so the sensor network would stop mattering. They stay defined in the code, so an older save still opens, but the budget check refuses them and asks for fixed sensors. The challenge is to choose sensors and mount them for coverage **and** enough point density in the critical areas.
 
 The shared budget carries through all missions. Purchases that raise an over-budget total are refused, and equipment may be removed or replaced. Expensive hardware cannot see through obstacles and cost efficiency remains secondary to technical results.
 
 ### Validation
 
-`tests/mission-strategies.test.ts` runs a lower-cost, balanced, higher-performance and deliberately poor system on actual ray-cast data; successful systems must pass all missions and the final variants. Fixtures in `tests/helpers/twinStrategies.ts` are test strategies, not student-facing solutions. Progression, migration, invalidation and legacy submission compatibility have dedicated tests. `e2e/mission-redesign.spec.ts` exercises the controls and a complete measured project in a real browser.
+`tests/mission-strategy-{low,balanced,high,poor}.test.ts` (one file each, so they run in parallel) run a lower-cost, balanced, higher-performance and deliberately poor system on actual ray-cast data; successful systems must pass all missions and the final variants. Fixtures in `tests/helpers/twinStrategies.ts` are test strategies, not student-facing solutions. Progression, migration, invalidation and legacy submission compatibility have dedicated tests. `e2e/mission-redesign.spec.ts` exercises the controls and a complete measured project in a real browser.
 
 Valid-point retention is evaluated in the fixed monitoring height range −0.15 to 3 m. Discarding ceiling/roof measurements is intentional for this task; small-object retention remains separately measured using provenance. This region is fixed and cannot be altered to game the retention metric.
 
@@ -57,13 +59,13 @@ Valid-point retention is evaluated in the fixed monitoring height range −0.15 
 
 The default-budget strategies passed all six practice gates and the two final scenarios. These are regression fixtures, not required solutions.
 
-| Strategy | Cost (of 3,000) | Critical coverage | Registration RMSE | Detection F1 | Labels correct | Change F1 | Final / 100 |
-|---|---:|---:|---:|---:|---:|---:|---:|
-| Lower cost | 2,282 | 79.5% | 7.14 cm | 61.0% | 90% | 60.0% | 74.8 |
-| Balanced | 2,782 | 83.7% | 7.33 cm | 58.5% | 70% | 70.6% | 76.3 |
-| Higher performance | 2,792 | 84.9% | 7.30 cm | 63.5% | 70% | 63.2% | 74.5 |
+| Strategy | LiDARs | Cost incl. cameras (of 7,000) | Critical coverage | Alignment error | Detection F1 | Labels correct | Change F1 | Final / 100 |
+|---|---|---:|---:|---:|---:|---:|---:|---:|
+| Lower cost | 128 + 32 + 16 ch | 2,322 | 72.8% | 0.4 cm / 0.04° | 58.5% | 80% | 71% (unseen A) | 75.7 |
+| Balanced | 64 + 32 + 16 + 32 ch | 2,542 | 77.4% | 0.7 cm / 0.03° | 60.2% | 80% | 71% (unseen A) | 77.3 |
+| Higher performance | 128 + 64 + 32 ch | 2,922 | 80.2% | 0.3 cm / 0.02° | 67.3% | 80% | 53% (unseen A) | 77.1 |
 
-All three retained 88–90% of valid monitoring-height points and 100% of the sampled small-object measurements, removed 94–95% of outliers, and correctly assessed the three practice safety zones. Detection of small objects was 2/7 (28.6%); retained points do not guarantee separation of objects that touch their support surfaces. The deliberately poor strategy failed initial coverage and could not unlock the next mission. Full run evidence is in [MISSION_VALIDATION.json](MISSION_VALIDATION.json).
+All three passed the measured noise-removal and point-retention gates, retained 100% of the sampled small-object measurements, and correctly assessed the three practice safety zones. Each also passed the new critical camera-bay requirement in practice and the final scenarios. Detection of small objects was 2/7 (28.6%); retained points do not guarantee separation of objects that touch their support surfaces. The deliberately poor strategy failed initial coverage and could not unlock the next mission. Full run evidence is in [MISSION_VALIDATION.json](MISSION_VALIDATION.json).
 
 ## Scoring (100 points, all weights editable)
 

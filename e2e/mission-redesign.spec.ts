@@ -53,13 +53,58 @@ const openTools = async (page: import('@playwright/test').Page, mission: number,
 test('catalogue compares real specifications, enforces budget and supports removal and resolution',async({page})=>{
  await page.goto('/');await page.getByTestId('nav-18').click();
  await page.getByLabel('Compare Low-resolution rotating (16 ch)',{exact:true}).click();await page.getByLabel('Compare Medium-resolution rotating (32 ch)',{exact:true}).click();await expect(page.getByTestId('equipment-compare')).toContainText('Resolution');
- await expect(page.getByTestId('twin-buy-tls')).toBeDisabled();await page.getByTestId('twin-buy-rot32').click();await page.getByTestId('twin-buy-rot32').click();
+ for(const retired of ['tls','tls-hire','mobile32'])await expect(page.getByTestId(`twin-buy-${retired}`)).toHaveCount(0);await page.getByTestId('twin-buy-rot32').click();await page.getByTestId('twin-buy-rot32').click();
  await expect(page.getByTestId('twin-owned')).toContainText('LiDAR 2');await page.getByRole('group',{name:'Mission tools'}).getByRole('button',{name:'Deploy',exact:true}).click();
  await page.getByTestId('twin-unit-l1').click();await page.getByLabel('Measurement resolution',{exact:true}).selectOption('fine');
  await expect.poll(()=>page.evaluate(()=>(window as any).__twin.getState().design.lidars[0].res)).toBe('fine');
  const tilt=page.getByLabel('Tilt up (+) / down (−)');await expect(tilt).toHaveAttribute('min','-90');await expect(tilt).toHaveAttribute('max','90');
  await expect(page.getByTestId('twin-plan').locator('canvas')).toBeVisible();await page.getByTestId('twin-plan-toggle').click();await expect(page.getByTestId('twin-plan').locator('canvas')).toHaveCount(0);
  await page.getByRole('group',{name:'Mission tools'}).getByRole('button',{name:'Equipment',exact:true}).click();await page.getByTestId('twin-remove-l1').click();await expect(page.getByTestId('twin-owned')).not.toContainText('LiDAR 2');
+});
+test('only fixed LiDARs are sold, and the budget stops purchases',async({page})=>{
+ await page.goto('/');await page.getByTestId('nav-18').click();
+ await expect(page.getByTestId('mission-brief')).toBeVisible();
+ await page.evaluate(()=>{const s=(window as any).__twin.getState();s.set({settings:{...s.settings,budget:3000}});});
+ await page.getByTestId('twin-buy-rot128').click();await page.getByTestId('twin-buy-rot128').click();
+ await expect(page.getByTestId('twin-buy-rot128')).toBeDisabled();
+});
+test('alignment focuses one scan, reviews results, and resets dependent scans when retried or retuned',async({page})=>{
+ await page.setViewportSize({width:1440,height:900});await openTools(page,1,5,['icp']);
+ await expect(page.getByTestId('align-panel')).toContainText('Start with a scan');
+ await expect(page.getByTestId('mission-evaluate')).toBeDisabled();
+ await page.getByTestId('align-go-acquire').click();
+ const acquire=await page.getByTestId('twin-acquire').boundingBox();expect(acquire!.y+acquire!.height).toBeLessThan(900);
+ await page.getByTestId('twin-acquire').click();await expect(page.getByTestId('twin-survey')).toBeVisible();
+ await page.getByTestId('align-open').click();await expect(page.getByTestId('align-next')).toBeDisabled();
+ await page.getByTestId('align-scan-1').click();await expect(page.getByTestId('align-result-1')).toBeVisible();
+ const next=await page.getByTestId('align-next').boundingBox();expect(next!.y+next!.height).toBeLessThan(900);
+ await page.screenshot({path:'output/playwright/alignment-laptop.png'});
+ await page.getByTestId('align-next').click();await expect(page.getByTestId('align-result-1')).toHaveCount(0);
+ await page.getByTestId('align-scan-2').click();await expect(page.getByTestId('align-summary')).toBeVisible();
+ await expect(page.getByTestId('mission-evaluate')).toBeEnabled();
+ await page.getByRole('button',{name:'Previous scan',exact:true}).click();await page.getByTestId('align-redo-1').click();
+ await expect(page.getByRole('progressbar',{name:'Scans tested'})).toHaveAttribute('aria-valuenow','1');
+ await expect(page.getByTestId('align-summary')).toHaveCount(0);await expect(page.getByTestId('mission-evaluate')).toBeDisabled();
+ await page.getByText('Alignment settings',{exact:true}).click();await page.getByLabel('Iterations',{exact:true}).focus();await page.keyboard.press('ArrowRight');
+ await expect(page.getByRole('progressbar',{name:'Scans tested'})).toHaveAttribute('aria-valuenow','0');
+ await expect(page.getByTestId('align-result-1')).toHaveCount(0);await expect(page.getByTestId('align-next')).toBeDisabled();
+ await page.getByTestId('align-scan-1').click();await expect(page.getByTestId('align-result-1')).toBeVisible();
+ await page.getByTestId('align-reset').click();await expect(page.getByRole('progressbar',{name:'Scans tested'})).toHaveAttribute('aria-valuenow','0');
+});
+test('critical inspection bay includes a camera and requires placement, pairing and calibration',async({page})=>{
+ await page.goto('/');await page.getByTestId('nav-18').click();await expect(page.getByTestId('mission-brief')).toBeVisible();
+ const save=initialSave();save.progress.current=4;save.progress.unlocked=4;save.stage=2;save.design={...save.design,lidars:sampleConfig('low').design.lidars};
+ await page.evaluate(save=>(window as any).__twin.getState().importSave(save),save);
+ const task=page.getByTestId('inspection-mission');await expect(task).toContainText('Already in your equipment');await expect(task).toContainText('Choose a LiDAR');
+ await expect(page.getByTestId('twin-unit-c1')).toHaveAttribute('aria-pressed','true');
+ await page.getByTestId('inspection-place').click();await expect(page.getByRole('group',{name:'Mission tools'}).getByRole('button',{name:'Deploy',exact:true})).toHaveAttribute('aria-pressed','true');
+ await expect(page.getByLabel('Height',{exact:true})).toBeVisible();
+ await page.getByTestId('inspection-calibrate').click();await expect(page.getByTestId('twin-pair-l1')).toBeVisible();
+ await expect(page.getByTestId('twin-cal-auto')).toBeDisabled();
+ await page.getByTestId('twin-pair-l1').click();await expect(task).toContainText('LiDAR 1 connected');
+ await expect(task).toContainText('Required · ≤4 px');
+ await expect.poll(()=>page.evaluate(()=>(window as any).__twin.getState().design.cameras[0].pairedLidarId)).toBe(save.design.lidars[0].id);
+ await page.screenshot({path:'output/playwright/critical-camera-bay.png'});
 });
 test('calibration pairing persists, assistance follows inspection, and output uses camera colours',async({page})=>{
  await openTools(page,4,3,['icp','crop','voxel','sor','ground','planes','euclid','classify']);
@@ -83,6 +128,23 @@ test('an actual connected project unlocks all seven missions and evaluates new f
  await expect(page.getByTestId('mission-brief')).toBeVisible();
  const save={...initialSave(),...sampleConfig('low')};await page.evaluate(save=>(window as any).__twin.getState().importSave(save),save);
  for(let mission=0;mission<6;mission++){
+  if(mission===1){
+   await expect(page.getByTestId('mission-evaluate')).toBeDisabled();
+   await page.getByTestId('twin-acquire').click();await expect(page.getByTestId('twin-survey')).toBeVisible();
+   await page.getByTestId('align-open').click();
+   for(let k=1;k<save.design.lidars.length;k++){
+    await expect(page.getByTestId(`align-row-${k}`)).toBeVisible();
+    await page.getByTestId(`align-scan-${k}`).click();await expect(page.getByTestId(`align-result-${k}`)).toBeVisible();
+    await expect(page.getByTestId(`align-result-${k}`)).toContainText('Position error');
+    const preview=page.getByRole('group',{name:'Alignment preview',exact:true});
+    await preview.getByRole('button',{name:'Before alignment',exact:true}).click();
+    await expect(preview.getByRole('button',{name:'Before alignment',exact:true})).toHaveAttribute('aria-pressed','true');
+    await preview.getByRole('button',{name:'After alignment',exact:true}).click();
+    if(k===1)await page.screenshot({path:'output/playwright/alignment-one-scan.png'});
+    if(k<save.design.lidars.length-1)await page.getByTestId('align-next').click();
+   }
+   await expect(page.getByTestId('align-summary')).toBeVisible();
+  }
   await page.getByTestId('mission-evaluate').click();await expect(page.getByTestId('mission-continue')).toBeVisible({timeout:120000});
   console.log(`Mission ${mission+1} passed`);
   await page.getByTestId('mission-continue').click();await expect(page.getByTestId(`twin-mission-${mission+2}`)).toHaveAttribute('aria-current','step');

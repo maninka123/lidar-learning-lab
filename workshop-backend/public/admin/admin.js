@@ -225,7 +225,7 @@ boot();
 // ---- Challenge scores: what students sent from the Industrial Digital Twin Challenge
 let ch = { subs: [], labels: {}, accept: { accepting: false, until: null }, settings: null }, chUnit = 'unlimited';
 const TASK_NAMES = { twin: 'Digital twin', detect: 'Object detection', colour: 'Colour-coded objects', change: 'Change detection', quality: 'Noise handling', safety: 'Safety and clearance', budget: 'Budget and efficiency' };
-const DEFAULT_SET = { budget: 3000, priceScale: 1, maxSubmissions: 0, weights: { twin: 20, detect: 20, colour: 10, change: 20, quality: 10, safety: 10, budget: 10 }, enabled: { twin: true, detect: true, colour: true, change: true, quality: true, safety: true, budget: true } };
+const DEFAULT_SET = { budget: 7000, priceScale: 1, maxSubmissions: 0, weights: { twin: 20, detect: 20, colour: 10, change: 20, quality: 10, safety: 10, budget: 10 }, enabled: { twin: true, detect: true, colour: true, change: true, quality: true, safety: true, budget: true } };
 const TASK_SHORT = { twin: 'Twin', detect: 'Objects', colour: 'Colour', change: 'Change', quality: 'Noise', safety: 'Safety', budget: 'Budget' };
 const openRows = new Set();
 function setView(v) {

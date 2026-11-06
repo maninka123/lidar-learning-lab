@@ -23,6 +23,9 @@ export const ZONES: { id: ZoneId; name: string; min: [number, number]; max: [num
 ];
 export const zoneAt = (x: number, y: number): ZoneId => ZONES.find((z) => x >= z.min[0] && x < z.max[0] && y >= z.min[1] && y < z.max[1])?.id ?? 'production';
 
+/** A visual task inside Inspection: the six front-facing container labels need camera–LiDAR coverage. */
+export const CRITICAL_CAMERA_ZONE = { name: 'Critical visual inspection bay', min: [-3.7, -7.5, 0.05] as Vec3, max: [3.4, -6.1, 1.3] as Vec3, target: .8 };
+
 export interface SafetyZone { id: string; name: string; min: [number, number]; max: [number, number]; zMin: number; zMax: number }
 export const SAFETY_ZONES: SafetyZone[] = [
   { id: 'forklift-route', name: 'Forklift route', min: [-11.5, -1.0], max: [11.5, 0.4], zMin: 0.1, zMax: 2.4 },

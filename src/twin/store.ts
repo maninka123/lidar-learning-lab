@@ -1,6 +1,6 @@
 import { emptyProgress, invalidateProgress, MISSIONS, readyForFinal, type MissionProgress } from './missions';
 import { create } from 'zustand';
-import { TwinDesign, EMPTY_DESIGN, ChallengeSettings, DEFAULT_SETTINGS, LIDARS, CAMERAS, RES_TIERS } from './catalogue';
+import { TwinDesign, EMPTY_DESIGN, ChallengeSettings, DEFAULT_SETTINGS, LIDARS, CAMERAS, RES_TIERS, inspectionCamera } from './catalogue';
 import { Block, BLOCKS } from './pipeline';
 import type { RunResult, FinalResult } from './runner';
 
@@ -14,7 +14,7 @@ export interface TwinSave {
 }
 const KEY = 'lidar-lab-twin';
 
-export const initialSave = (): TwinSave => ({ version: 2, progress: emptyProgress(), team: '', members: [], settings: DEFAULT_SETTINGS, design: EMPTY_DESIGN, pipeline: [], saved: [], attempts: [], finalSubmitted: null, stage: 1, student: { name: '', index: '' }, startedAt: Date.now(), sent: [] });
+export const initialSave = (): TwinSave => ({ version: 2, progress: emptyProgress(), team: '', members: [], settings: DEFAULT_SETTINGS, design: { ...EMPTY_DESIGN, cameras: [inspectionCamera()] }, pipeline: [], saved: [], attempts: [], finalSubmitted: null, stage: 1, student: { name: '', index: '' }, startedAt: Date.now(), sent: [] });
 
 export function migrateSave(value: unknown): TwinSave | null {
   if (!value || typeof value !== 'object') return null;

@@ -3,7 +3,7 @@ import type { PointCloud } from '../core/pointcloud';
 import { referenceOf } from './grade';
 import { zoneAt, type Factory } from './factory';
 
-export interface MeasuredCoverage { overall: number; critical: number; overlap: number; density: number; zones: Record<string, number>; positions: Float32Array; colours: Uint8Array }
+export interface MeasuredCoverage { overall: number; critical: number; overlap: number; density: number; zones: Record<string, number>; /** measured points per square metre of each zone's surface (up to 3 m high) */ zoneDensity: Record<string, number>; positions: Float32Array; colours: Uint8Array }
 /** Samples are reached only when measured returns are within 15 cm. Multiple independent scanner views are tracked separately. */
 export function measuredCoverage(f: Factory, clouds: PointCloud[]): MeasuredCoverage {
   const samples = referenceOf(f, 12000).samples, trees = clouds.filter((c) => c.count).map((c) => new KDTree(c.positions, c.count));
@@ -18,5 +18,8 @@ export function measuredCoverage(f: Factory, clouds: PointCloud[]): MeasuredCove
     zones[zone] ??= { all: 0, seen: 0 }; zones[zone].all += area; if (n) zones[zone].seen += area;
     pos.push(x, y, z); rgb.push(...(n === 0 ? [230, 57, 70] : n === 1 ? [235, 184, 40] : n === 2 ? [40, 170, 90] : [29, 120, 220]));
   }
-  return { overall: total ? seen / total : 0, critical: criticalTotal ? criticalSeen / criticalTotal : 0, overlap: total ? overlap / total : 0, density: seen ? clouds.reduce((a, c) => a + c.count, 0) / seen : 0, zones: Object.fromEntries(Object.entries(zones).map(([k, v]) => [k, v.all ? v.seen / v.all : 0])), positions: Float32Array.from(pos), colours: Uint8Array.from(rgb) };
+  const pts: Record<string, number> = {};
+  for (const c of clouds) for (let i = 0; i < c.count; i++) { if (c.positions[i * 3 + 2] > 3) continue; const zn = zoneAt(c.positions[i * 3], c.positions[i * 3 + 1]); pts[zn] = (pts[zn] ?? 0) + 1; }
+  const zoneDensity = Object.fromEntries(Object.entries(zones).map(([k, v]) => [k, v.all ? (pts[k] ?? 0) / v.all : 0]));
+  return { overall: total ? seen / total : 0, critical: criticalTotal ? criticalSeen / criticalTotal : 0, overlap: total ? overlap / total : 0, density: seen ? clouds.reduce((a, c) => a + c.count, 0) / seen : 0, zoneDensity, zones: Object.fromEntries(Object.entries(zones).map(([k, v]) => [k, v.all ? v.seen / v.all : 0])), positions: Float32Array.from(pos), colours: Uint8Array.from(rgb) };
 }

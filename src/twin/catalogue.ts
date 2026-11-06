@@ -20,6 +20,8 @@ export interface LidarItem {
   /** most rays one scan may use: how long the scanner is allowed to run for one scan */
   maxRays: number;
   mobile?: boolean; blurb: string;
+  /** no longer sold in the challenge (kept so an older save still reads): a terrestrial or mobile scanner covers everything alone, so the sensor network would not matter */
+  retired?: boolean;
 }
 export const LIDARS: LidarItem[] = [
   { id: 'rot16', name: 'Low-resolution rotating (16 ch)', preset: 'rot16', kind: 'low', cost: 200, noise: 0.04, dropout: 0.04, outliers: 0.012, maxRays: 120000, blurb: 'Cheap and sparse: 16 beams. Good for big objects, weak on small ones.' },
@@ -28,10 +30,13 @@ export const LIDARS: LidarItem[] = [
   { id: 'rot128', name: 'High-resolution rotating (128 ch)', preset: 'rot128', kind: 'high', cost: 1000, noise: 0.015, dropout: 0.02, outliers: 0.005, maxRays: 300000, blurb: '128 beams: dense. Expensive.' },
   { id: 'mid360', name: 'Solid-state wide (non-repeating scan)', preset: 'mid360', kind: 'solid', cost: 150, noise: 0.03, dropout: 0.04, outliers: 0.01, maxRays: 150000, blurb: 'No moving parts. Covers the upper hemisphere well, little below the horizon.' },
   { id: 'avia', name: 'Solid-state narrow, long range', preset: 'avia', kind: 'solid', cost: 500, noise: 0.025, dropout: 0.04, outliers: 0.01, maxRays: 150000, blurb: '70° wide: has to be aimed.' },
-  { id: 'tls', name: 'TLS high-density scanner', preset: 'tls', kind: 'tls', cost: 5300, noise: 0.003, dropout: 0.01, outliers: 0.002, maxRays: 600000, blurb: 'Very dense and precise, but very expensive and slow.' },
-  { id: 'tls-hire', name: 'Hire a TLS survey station', preset: 'tls', kind: 'tls', cost: 450, noise: 0.003, dropout: 0.01, outliers: 0.002, maxRays: 600000, blurb: 'One fixed surveyed station, at most two. Practice replays the same station; it cannot patrol the factory.' },
-  { id: 'mobile32', name: 'Mobile LiDAR (32 ch), needs the platform', preset: 'rot32', kind: 'mobile', cost: 400, noise: 0.03, dropout: 0.03, outliers: 0.01, maxRays: 60000, mobile: true, blurb: 'Rides a platform along a route: many scans, drifting position.' },
+  { id: 'tls', name: 'TLS high-density scanner', preset: 'tls', kind: 'tls', cost: 5300, noise: 0.003, dropout: 0.01, outliers: 0.002, maxRays: 600000, retired: true, blurb: 'Very dense and precise, but very expensive and slow.' },
+  { id: 'tls-hire', name: 'Hire a TLS survey station', preset: 'tls', kind: 'tls', cost: 450, noise: 0.003, dropout: 0.01, outliers: 0.002, maxRays: 600000, retired: true, blurb: 'One fixed surveyed station, at most two. Practice replays the same station; it cannot patrol the factory.' },
+  { id: 'mobile32', name: 'Mobile LiDAR (32 ch), needs the platform', preset: 'rot32', kind: 'mobile', cost: 400, noise: 0.03, dropout: 0.03, outliers: 0.01, maxRays: 60000, mobile: true, retired: true, blurb: 'Rides a platform along a route: many scans, drifting position.' },
 ];
+
+/** What the shop sells: fixed, mounted LiDARs. The aim is a network of them placed for the best coverage. */
+export const SHOP_LIDARS = LIDARS.filter((l) => !l.retired);
 
 export interface CameraItem {
   id: string; name: string; w: number; h: number; fov: number; cost: number;
@@ -56,7 +61,7 @@ export const TASK_KEYS: TaskKey[] = ['twin', 'detect', 'colour', 'change', 'qual
 export const TASK_NAMES: Record<TaskKey, string> = { twin: 'Digital twin', detect: 'Object detection', colour: 'Colour-coded objects', change: 'Change detection', quality: 'Noise handling', safety: 'Safety and clearance', budget: 'Budget and efficiency' };
 export interface ChallengeSettings { budget: number; priceScale: number; maxSubmissions: number; weights: Record<TaskKey, number>; enabled: Record<TaskKey, boolean> }
 export const DEFAULT_SETTINGS: ChallengeSettings = {
-  budget: 3000, priceScale: 1, maxSubmissions: 0, // 0 = grade as many times as you like
+  budget: 7000, priceScale: 1, maxSubmissions: 0, // 0 = grade as many times as you like
   weights: { twin: 20, detect: 20, colour: 10, change: 20, quality: 10, safety: 10, budget: 10 },
   enabled: { twin: true, detect: true, colour: true, change: true, quality: true, safety: true, budget: true },
 };
@@ -64,16 +69,19 @@ export const DEFAULT_SETTINGS: ChallengeSettings = {
 // ----------------------------------------------------------------------------- what the team has bought and placed
 export interface LidarUnit { id: string; item: string; res: ResTier; x: number; y: number; z: number; yaw: number; pitch: number }
 export interface CameraCal { est: Extrinsic; fov: number; done: boolean }
-export interface CameraUnit { id: string; item: string; x: number; y: number; z: number; yaw: number; pitch: number; kit: boolean; cal: CameraCal; pairedLidarId?: string }
+export interface CameraUnit { id: string; item: string; x: number; y: number; z: number; yaw: number; pitch: number; kit: boolean; cal: CameraCal; pairedLidarId?: string | null }
 export interface LightUnit { id: string; x: number; y: number; z: number }
 export interface TwinDesign { lidars: LidarUnit[]; cameras: CameraUnit[]; lights: LightUnit[]; platform: boolean; route: [number, number][]; routeSteps: number; distortion: boolean }
 export const EMPTY_DESIGN: TwinDesign = { lidars: [], cameras: [], lights: [], platform: false, route: [[-9, -0.3], [9, -0.3]], routeSteps: 10, distortion: true };
+export const INSPECTION_CAMERA_ID = 'inspection-camera';
+/** The specified camera is budgeted from the start, but students must mount, pair and calibrate it. */
+export const inspectionCamera = (): CameraUnit => ({ id: INSPECTION_CAMERA_ID, item: 'cam-mid', x: -9, y: -4, z: 1.8, yaw: Math.PI / 2, pitch: 0, kit: false, pairedLidarId: null, cal: { est: { tx: -9, ty: -4, tz: 1.8, yawDeg: 90, pitchDeg: 0 }, fov: 70, done: false } });
 
 export const lidarItem = (id: string) => LIDARS.find((l) => l.id === id) ?? LIDARS[0];
 export const cameraItem = (id: string) => CAMERAS.find((c) => c.id === id) ?? CAMERAS[0];
 export const isMobile = (u: LidarUnit) => !!lidarItem(u.item).mobile;
 /** Legacy cameras use their nearest scanner until the student explicitly pairs them. */
-export const pairedLidarOf = (c: CameraUnit, d: TwinDesign): LidarUnit | undefined => c.pairedLidarId ? d.lidars.find((u) => u.id === c.pairedLidarId) : d.lidars.reduce<LidarUnit | undefined>((best, u) => !best || Math.hypot(u.x - c.x, u.y - c.y) < Math.hypot(best.x - c.x, best.y - c.y) ? u : best, undefined);
+export const pairedLidarOf = (c: CameraUnit, d: TwinDesign): LidarUnit | undefined => c.pairedLidarId !== undefined ? d.lidars.find((u) => u.id === c.pairedLidarId) : d.lidars.reduce<LidarUnit | undefined>((best, u) => !best || Math.hypot(u.x - c.x, u.y - c.y) < Math.hypot(best.x - c.x, best.y - c.y) ? u : best, undefined);
 
 export interface CostLine { label: string; cost: number }
 export interface CostReport { lines: CostLine[]; total: number; remaining: number; errors: string[]; warnings: string[]; ok: boolean }
@@ -89,13 +97,13 @@ export function costOf(d: TwinDesign, s: ChallengeSettings): CostReport {
   d.lights.forEach((_, i) => { add(`Lighting unit ${i + 1}`, LIGHT_UNIT.cost); add(`Install light ${i + 1}`, INSTALL.light); });
   if (d.platform) add('Mobile scanning platform', MOBILE_PLATFORM.cost);
   const total = lines.reduce((a, l) => a + l.cost, 0), mobiles = d.lidars.filter(isMobile).length;
+  for (const u of d.lidars) if (lidarItem(u.item).retired && !errors.some((e) => e.includes(lidarItem(u.item).name))) errors.push(`${lidarItem(u.item).name} is no longer sold here: a single terrestrial or mobile scanner would cover everything alone. Replace it with fixed, mounted LiDARs.`);
+  if (d.platform) errors.push('Mobile scanning is not part of this challenge any more: remove the mobile platform.');
   if (d.lidars.length > LIMITS.lidars) errors.push(`At most ${LIMITS.lidars} LiDARs.`);
   if (d.cameras.length > LIMITS.cameras) errors.push(`At most ${LIMITS.cameras} cameras.`);
   if (d.lights.length > LIMITS.lights) errors.push(`At most ${LIMITS.lights} lighting units.`);
   if (d.lidars.filter((u) => u.item === 'tls-hire').length > 2) errors.push('At most two hired TLS survey stations.');
   if (mobiles > 1) errors.push('Only one mobile LiDAR fits on the platform.');
-  if (mobiles && !d.platform) errors.push('A mobile LiDAR needs the mobile scanning platform.');
-  if (d.platform && !mobiles) warnings.push('You bought the mobile platform but no mobile LiDAR.');
   if (!d.lidars.length) errors.push('Buy and place at least one LiDAR.');
   if (total > s.budget) errors.push(`Over budget by ${usd(total - s.budget)}.`);
   return { lines, total, remaining: s.budget - total, errors, warnings, ok: errors.length === 0 };

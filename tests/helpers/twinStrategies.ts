@@ -4,7 +4,8 @@ import { calibrationTarget, autoCalibrate, nominalOf } from '../../src/twin/came
 const lid = (item: string, x: number, y: number, i: number): LidarUnit => ({ id: `l${i}`, item, res: 'standard', x, y, z: 1.8, yaw: 0, pitch: 0 });
 export function sampleConfig(type: string) {
  const positions = [[0,-2],[7,3],[-7,5],[7,-1],[-7,-1],[1,5]];
- const types = type === 'low' ? ['tls-hire','tls-hire','mid360','mid360','mid360','mid360'] : type === 'balanced' ? ['tls-hire','tls-hire','mid360','mid360','rot32','rot32'] : type === 'high' ? ['tls-hire','tls-hire','rot128','mid360'] : ['rot16'];
+ // fixed, mounted LiDARs only: low = 128 + 32 + 16 channels, balanced = 64 + 32 + 16 + 32, high = 128 + 64 + 32, poor = a single 16-channel
+ const types = type === 'low' ? ['rot128','rot32','rot16'] : type === 'balanced' ? ['hdl64','rot32','rot16','rot32'] : type === 'high' ? ['rot128','hdl64','rot32'] : ['rot16'];
  const lidars = types.map((t,i) => lid(t, positions[i][0], positions[i][1], i));
  const cameras: CameraUnit[] = [[0,-3,-90],[7,3,90],[-6,0,-90],[5,3,70]].map(([x,y,yaw],i) => {
   const c: CameraUnit = { id: `c${i}`, item: i===3?'cam-lowlight':'cam-mid', x,y,z:1.8,yaw:yaw*Math.PI/180,pitch:0,kit:false,pairedLidarId:lidars[(i===2?0:i===3?1:i)%lidars.length].id,cal:{ est:{tx:x,ty:y,tz:1.8,yawDeg:yaw,pitchDeg:0},fov:70,done:false} };

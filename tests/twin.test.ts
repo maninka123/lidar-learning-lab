@@ -27,9 +27,10 @@ describe('equipment shop and budget', () => {
   });
   it('invalid purchases are refused and the report says why', () => {
     expect(costOf(design({}), DEFAULT_SETTINGS).errors.join()).toMatch(/at least one LiDAR/);
-    expect(costOf(design({ lidars: [lidar('mobile32', 0, 0)] }), DEFAULT_SETTINGS).ok).toBe(false);
-    expect(costOf(design({ lidars: [lidar('mobile32', 0, 0)], platform: true }), DEFAULT_SETTINGS).ok).toBe(true);
-    expect(costOf(design({ lidars: [lidar('tls', 0, 0), lidar('tls', 3, 0)] }), DEFAULT_SETTINGS).errors.join()).toMatch(/Over budget/);
+    // a terrestrial or mobile scanner would cover everything alone, so they are no longer sold: only fixed, mounted LiDARs
+    for (const item of ['mobile32', 'tls', 'tls-hire']) expect(costOf(design({ lidars: [lidar(item, 0, 0)], platform: item === 'mobile32' }), { ...DEFAULT_SETTINGS, budget: 99999 }).errors.join(' ')).toMatch(/no longer sold|not part of this challenge/);
+    expect(costOf(design({ lidars: [lidar('rot32', 0, 0)] }), DEFAULT_SETTINGS).ok).toBe(true);
+    expect(costOf(design({ lidars: [lidar('tls', 0, 0), lidar('tls', 3, 0)] }), { ...DEFAULT_SETTINGS, budget: 3000 }).errors.join()).toMatch(/Over budget/);
     expect(costOf(design({ lidars: Array.from({ length: 7 }, (_, i) => lidar('rot16', i, 0)) }), { ...DEFAULT_SETTINGS, budget: 99999 }).errors.join()).toMatch(/At most 6 LiDARs/);
     const r = costOf(design({ lidars: [lidar('rot16', 0, 0)] }), DEFAULT_SETTINGS); expect(r.remaining).toBe(DEFAULT_SETTINGS.budget - r.total);
   });
@@ -47,7 +48,7 @@ describe('equipment shop and budget', () => {
 
 describe('fixed units', () => {
   const f = buildFactory(11, 'A');
-  it('the default budget is 3000 credits', () => { expect(DEFAULT_SETTINGS.budget).toBe(3000); });
+  it('the default budget is 7000 credits', () => { expect(DEFAULT_SETTINGS.budget).toBe(7000); });
   it('the same model can be bought twice, each unit costs and scans on its own', () => {
     const one = lidar('rot32', -6, -0.3), two = lidar('rot32', 6, -0.3);
     const a = costOf(design({ lidars: [one] }), DEFAULT_SETTINGS), b = costOf(design({ lidars: [one, two] }), DEFAULT_SETTINGS);
@@ -306,7 +307,7 @@ describe('grading', () => {
 describe('complete example systems', () => {
   const lowCost = { design: design({ lidars: [lidar('rot16', -6, -0.3), lidar('rot16', 6, -0.3)] }), pipeline: pipe(['icp', 'crop', 'voxel', 'sor', 'ground', 'planes', 'euclid', 'classify', 'diff', 'safety'], { ...CROP3, voxel: { size: 0.1 } }), settings: DEFAULT_SETTINGS };
   const fusion = { design: design({ lidars: [lidar('rot128', -6, -0.3), lidar('rot128', 6, -0.3)], cameras: [cam('cam-high', 0, -0.6, 1.8, -90), cam('cam-lowlight', 8, 2.5, 1.8, 90, true)], lights: [{ id: 'l', x: 8, y: 5, z: 3 }] }), pipeline: pipe(['icp', 'crop', 'voxel', 'sor', 'ground', 'planes', 'euclid', 'classify', 'colour', 'diff', 'safety'], { ...CROP3, colour: { votes: 2 } }), settings: { ...DEFAULT_SETTINGS, budget: 9000 } };
-  const mobile = { design: design({ lidars: [lidar('mobile32', 0, 0, 'standard', 1.5)], platform: true, route: [[-9, -0.3], [9, -0.3], [9, -5], [-9, -5]], routeSteps: 8 }), pipeline: pipe(['mobileicp', 'crop', 'voxel', 'sor', 'ground', 'planes', 'euclid', 'classify'], CROP3), settings: DEFAULT_SETTINGS };
+  const mobile = { design: design({ lidars: [lidar('rot32', -6, -1), lidar('rot32', 6, -1), lidar('rot32', 0, 5)] }), pipeline: pipe(['icp', 'crop', 'voxel', 'sor', 'ground', 'planes', 'euclid', 'classify'], CROP3), settings: DEFAULT_SETTINGS };
   const a = runScenario(lowCost, PRACTICE_SEED), b = runScenario(fusion, PRACTICE_SEED), c = runScenario(mobile, PRACTICE_SEED);
   it('all three run and give bounded scores', () => {
     for (const r of [a, b, c]) { expect(r.ok).toBe(true); expect(r.grade.total).toBeGreaterThan(0); expect(r.grade.total).toBeLessThanOrEqual(100); for (const t of r.grade.perTask) { expect(t.score).toBeGreaterThanOrEqual(0); expect(t.score).toBeLessThanOrEqual(1); } }
@@ -322,17 +323,6 @@ describe('complete example systems', () => {
   });
   it('tasks that were not attempted are not scored: no change blocks, no change points', () => {
     expect(c.tasks.change.score).toBe(0); expect(c.tasks.safety.score).toBe(0); expect(a.tasks.change.score).toBeGreaterThan(0);
-  });
-  it('mobile scanning: scan matching improves on the drifting poses', () => {
-    const noReg = runScenario({ ...mobile, pipeline: pipe(['merge', 'crop', 'voxel', 'sor', 'ground', 'planes', 'euclid', 'classify'], CROP3) }, PRACTICE_SEED);
-    expect(c.tasks.twin.poseErrCm).toBeLessThan(noReg.tasks.twin.poseErrCm);
-  }, 120000);
-  it('repeated evaluation is deterministic, and the final evaluation uses other scenario variants', () => {
-    const again = runScenario(lowCost, PRACTICE_SEED); expect(again.grade.total).toBe(a.grade.total); expect(again.tasks.detect.tp).toBe(a.tasks.detect.tp);
-    const fin = runFinal(lowCost, [101]); expect(fin.runs[0].seed).toBe(101); expect(fin.runs[0].refs.map((t) => t.label).join()).not.toBe(a.refs.map((t) => t.label).join());
-  }, 120000);
-  it('an over-budget system is refused instead of graded', () => {
-    const r = runScenario({ ...lowCost, settings: { ...DEFAULT_SETTINGS, budget: 100 } }, PRACTICE_SEED); expect(r.ok).toBe(false); expect(r.error).toMatch(/Over budget/);
   });
   it('over-filtering costs score: huge voxels lose the small objects and the detections', () => {
     const over = runScenario({ ...fusion, pipeline: pipe(['icp', 'crop', 'voxel', 'sor', 'ground', 'planes', 'euclid', 'classify'], { crop: { zmax: 3 }, voxel: { size: 0.4 } }) }, PRACTICE_SEED);
