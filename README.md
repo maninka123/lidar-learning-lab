@@ -101,7 +101,7 @@ The built-in scenes are procedural (MIT). The real scans come from public datase
 - **On the website:** paste your own key into the box that appears. It stays in your browser.
 - **On your own computer:** copy `.env.example` to `.env.local`, put `DEEPSEEK_API_KEY=your-key` in it and run `npm run dev`. The key stays on your machine and nothing needs pasting.
 
-> **Why DeepSeek?** It is capable, easy to get a key for, and cheap. Cost matters because the lab sends point clouds as text, which uses many tokens, and one shared workshop key has to serve a whole class.
+> **Why DeepSeek?** It offers a strong balance of reasoning capabilities, API accessibility, and cost efficiency, making it suitable for interactive classroom-scale workshops.
 
 Everything else works without any key.
 
