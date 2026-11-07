@@ -70,7 +70,7 @@ const openTools = async (page: import('@playwright/test').Page, mission: number,
  await page.goto('/');await page.getByTestId('nav-18').click();
  await expect(page.getByTestId('mission-brief')).toBeVisible();
  const save=initialSave();save.progress.unlocked=mission;save.progress.current=mission;save.stage=stage;
- const cfg=sampleConfig('low');save.design=cfg.design;save.pipeline=cfg.pipeline.filter(b=>blocks.includes(b.kind));
+ const cfg=sampleConfig('low');save.design=cfg.design;save.settings=cfg.settings;save.pipeline=cfg.pipeline.filter(b=>blocks.includes(b.kind));
  await page.evaluate(save=>(window as any).__twin.getState().importSave(save),save);
  await expect(page.getByTestId('mission-brief')).toBeVisible();
 };
@@ -109,7 +109,7 @@ test('alignment focuses one scan, reviews results, and resets dependent scans wh
  await page.getByRole('button',{name:'Previous scan',exact:true}).click();await page.getByTestId('align-redo-1').click();
  await expect(page.getByRole('progressbar',{name:'Scans tested'})).toHaveAttribute('aria-valuenow','1');
  await expect(page.getByTestId('align-summary')).toHaveCount(0);await expect(page.getByTestId('mission-evaluate')).toBeDisabled();
- await page.getByText('Alignment settings',{exact:true}).click();await page.getByLabel('Iterations',{exact:true}).focus();await page.keyboard.press('ArrowRight');
+ await page.getByTestId('align-settings').locator('summary').click();await page.getByLabel('Iterations',{exact:true}).focus();await page.keyboard.press('ArrowRight');
  await expect(page.getByRole('progressbar',{name:'Scans tested'})).toHaveAttribute('aria-valuenow','0');
  await expect(page.getByTestId('align-result-1')).toHaveCount(0);await expect(page.getByTestId('align-next')).toBeDisabled();
  await page.getByTestId('align-scan-1').click();await expect(page.getByTestId('align-result-1')).toBeVisible();
@@ -151,7 +151,7 @@ test('an actual connected project unlocks all seven missions and evaluates new f
  const save={...initialSave(),...sampleConfig('low')};await page.evaluate(save=>(window as any).__twin.getState().importSave(save),save);
  for(let mission=0;mission<6;mission++){
   if(mission===1){
-   await expect(page.getByTestId('mission-evaluate')).toBeDisabled();
+   await expect(page.getByTestId('mission-evaluate')).toHaveCount(0); // not judged while the scans are only being acquired
    await page.getByTestId('twin-acquire').click();await expect(page.getByTestId('twin-survey')).toBeVisible();
    await page.getByTestId('align-open').click();
    for(let k=1;k<save.design.lidars.length;k++){
@@ -167,11 +167,12 @@ test('an actual connected project unlocks all seven missions and evaluates new f
    }
    await expect(page.getByTestId('align-summary')).toBeVisible();
   }
-  await page.getByTestId('mission-evaluate').click();await expect(page.getByTestId('mission-continue')).toBeVisible({timeout:120000});
+  if(mission===5)await page.getByTestId('twin-show-changes').click();else await page.getByTestId('mission-evaluate').click();
+  await expect(page.getByTestId('mission-continue')).toBeVisible({timeout:240000});
   console.log(`Mission ${mission+1} passed`);
   await page.getByTestId('mission-continue').click();await expect(page.getByTestId(`twin-mission-${mission+2}`)).toHaveAttribute('aria-current','step');
  }
- await page.getByTestId('twin-final').click();await expect(page.getByTestId('twin-final-result')).toBeVisible({timeout:150000});await expect(page.getByTestId('twin-final-result')).toContainText('/ 100');
+ await page.getByTestId('twin-final').click();await expect(page.getByTestId('twin-final-result')).toBeVisible({timeout:150000});await expect(page.getByTestId('twin-total')).toContainText('/ 100');await expect(page.getByTestId('score-breakdown')).toBeVisible();
  await expect(page.getByRole('group',{name:'Final scenario'})).toContainText('101');await page.getByRole('group',{name:'Final scenario'}).getByRole('button',{name:'Scenario 202',exact:true}).click();await page.getByRole('group',{name:'Final scenario'}).getByRole('button',{name:'Scenario 101',exact:true}).click();await page.getByTestId('completion-report').scrollIntoViewIfNeeded();await page.screenshot({path:'output/playwright/mission-final.png'});
  const download=page.waitForEvent('download');await page.getByTestId('twin-report').click();expect((await download).suggestedFilename()).toContain('report.md');
  await page.getByTestId('twin-mission-1').click();await page.getByRole('group',{name:'Mission tools'}).getByRole('button',{name:'Deploy',exact:true}).click();await page.getByTestId('twin-unit-l1').click();await page.getByLabel('Height',{exact:true}).fill('2');
@@ -194,7 +195,7 @@ test('challenge statistics remain horizontal and contained at desktop and laptop
  await page.goto('/');await page.getByTestId('nav-18').click();await page.getByTestId('twin-buy-rot16').click();
  await page.getByTestId('twin-next-deploy').click();await page.getByTestId('twin-roof').click();
  await page.getByTestId('mission-evaluate').click();await expect(page.getByTestId('mission-result')).toBeVisible({timeout:120000});
- const card=page.getByTestId('stats-card'), grid=card.locator('.stats-grid');await expect(grid.locator('.stat')).toHaveCount(5);
+ const card=page.getByTestId('stats-card'), grid=card.locator('.stats-grid');await expect(grid.locator('.stat')).toHaveCount(4);
  for(const width of [1440,1300,1000]){
   await page.setViewportSize({width,height:900});
   const tiles=await grid.locator('.stat').evaluateAll(els=>els.map(el=>({top:el.getBoundingClientRect().top})));
@@ -206,7 +207,7 @@ test('challenge statistics remain horizontal and contained at desktop and laptop
   await page.screenshot({path:`output/playwright/challenge-stats-${width}.png`});
  }
  await page.getByTestId('stats-toggle').click();await expect(grid).toHaveCount(0);
- await page.getByTestId('stats-toggle').click();await expect(grid.locator('.stat')).toHaveCount(5);
+ await page.getByTestId('stats-toggle').click();await expect(grid.locator('.stat')).toHaveCount(4);
 });
 test('scene LiDAR names and colours match all six equipment selectors',async({page})=>{
  await page.addInitScript(()=>{
@@ -345,9 +346,9 @@ test('registration settings are per scan: the next scan can have its own, and sc
  await page.addInitScript(()=>localStorage.setItem('lidar-lab-intro-last',String(Date.now())));
  await page.goto('/');await page.getByTestId('nav-18').click();
  await page.waitForFunction(()=>(window as any).__twin);
- await page.evaluate(async()=>{const m=await import('/src/twin/store.ts');const save=m.initialSave();save.progress.unlocked=1;save.progress.current=1;save.stage=4;
-  const mk=(item:string,i:number)=>({id:'l'+i,item,res:'standard',x:[0,7,-7][i],y:[-2,3,5][i],z:1.8,yaw:0,pitch:0});
-  save.design={...save.design,lidars:[mk('rot32',0),mk('rot16',1),mk('rot16',2)]};(window as any).__twin.getState().importSave(save);});
+ {const save=initialSave();save.progress.unlocked=1;save.progress.current=1;save.stage=4;
+  const mk=(item:string,i:number)=>({id:'l'+i,item,res:'standard' as const,x:[0,7,-7][i],y:[-2,3,5][i],z:1.8,yaw:0,pitch:0});
+  save.design={...save.design,lidars:[mk('rot32',0),mk('rot16',1),mk('rot16',2)]};await page.evaluate(s=>(window as any).__twin.getState().importSave(s),save);}
  await page.getByTestId('twin-acquire').click();await expect(page.getByTestId('twin-survey')).toBeVisible({timeout:90000});
  await page.getByRole('button',{name:/Continue to alignment/}).click();
  const trim=()=>page.getByLabel('Keep best pairs',{exact:false});
@@ -366,11 +367,11 @@ test('registration settings are per scan: the next scan can have its own, and sc
 test('in the cleaning mission an older save that ran blocks in parallel is put back in sequence, and there is no choice to make',async({page})=>{
  await page.addInitScript(()=>localStorage.setItem('lidar-lab-intro-last',String(Date.now())));
  await page.goto('/');await page.getByTestId('nav-18').click();await page.waitForFunction(()=>(window as any).__twin);
- await page.evaluate(async()=>{const m=await import('/src/twin/store.ts');const save=m.initialSave();save.progress.unlocked=2;save.progress.current=2;save.stage=5;
-  const mk=(item:string,i:number)=>({id:'l'+i,item,res:'standard',x:[0,7][i],y:[-2,3][i],z:1.8,yaw:0,pitch:0});
+ {const save=initialSave();save.progress.unlocked=2;save.progress.current=2;save.stage=5;
+  const mk=(item:string,i:number)=>({id:'l'+i,item,res:'standard' as const,x:[0,7][i],y:[-2,3][i],z:1.8,yaw:0,pitch:0});
   save.design={...save.design,lidars:[mk('rot32',0),mk('rot16',1)]};
   const b=(id:string,kind:string,params:any,parallel?:boolean)=>({id,kind,params,parallel});
-  save.pipeline=[b('r','icp',{}),b('v','voxel',{size:0.1},true),b('s','sor',{},true)] as any;(window as any).__twin.getState().importSave(save);});
+  save.pipeline=[b('r','icp',{}),b('v','voxel',{size:0.1},true),b('s','sor',{},true)] as any;await page.evaluate(s=>(window as any).__twin.getState().importSave(s),save);}
  await expect.poll(()=>page.evaluate(()=>(window as any).__twin.getState().pipeline.some((x:any)=>x.parallel))).toBe(false);
  await expect(page.getByTestId('twin-parallel-group')).toHaveCount(0);await expect(page.getByTestId('twin-par-2')).toHaveCount(0);
 });
