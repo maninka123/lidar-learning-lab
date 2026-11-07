@@ -21,11 +21,11 @@ import { Btn, Callout, Section, Select, Seg, Slider, Toggle, ToolbarSwitch } fro
 import { KindLegend } from '../ui/shared';
 import { SceneLayer, CloudLayer, PolyLine, Marker, BoxOutline, TextSprite } from '../ui/three';
 import { Plan2D } from '../ui/Plan2D';
-import { Crosshair, Play, Plus, Trash2, Download, Upload, Circle } from '../ui/icons';
+import { Crosshair, Play, Plus, Download, Upload, Circle } from '../ui/icons';
 import { runTask } from '../engine/client';
 import { downloadBlob } from '../io/load';
-import { buildFactory, zoneAt, ZONES, SAFETY_ZONES, TWIN_CLASSES, CRITICAL_CAMERA_ZONE } from '../twin/factory';
-import { LIDARS, CAMERAS, LIGHT_UNIT, LOWLIGHT_KIT, MOBILE_PLATFORM, RES_TIERS, INSTALL, TASK_KEYS, TASK_NAMES, LIMITS, costOf, lidarItem, cameraItem, newId, isMobile, HW_SEED, TwinDesign, LidarUnit, CameraUnit, TaskKey } from '../twin/catalogue';
+import { buildFactory, ZONES, SAFETY_ZONES, TWIN_CLASSES, CRITICAL_CAMERA_ZONE } from '../twin/factory';
+import { LIGHT_UNIT, LOWLIGHT_KIT, MOBILE_PLATFORM, RES_TIERS, INSTALL, LIMITS, costOf, lidarItem, cameraItem, newId, isMobile, HW_SEED, TwinDesign, LidarUnit, CameraUnit } from '../twin/catalogue';
 import { raysFor, acquireSurvey, Survey } from '../twin/acquire';
 import { camPose, nominalOf, makeSampler, colourPoints, renderPreview, trueExtrinsic } from '../twin/camera';
 import { BayInset, type BayView, type LabelEvent } from '../twin/ui/BayInset';
@@ -661,12 +661,6 @@ export default function TabTwin() {
   );
 
   const fb = practice ? feedbackFor(practice) : null;
-  const gradeRows = (g: { total: number; perTask: { key: TaskKey; points: number; weight: number; score: number; enabled: boolean }[] }) => (
-    <table className="table" data-testid="twin-grade-table"><thead><tr><td>Task</td><td>Score</td><td>Points</td></tr></thead><tbody>
-      {g.perTask.map((t) => <tr key={t.key} style={{ opacity: t.enabled ? 1 : 0.4 }}><td>{TASK_NAMES[t.key]}</td><td className="mono">{pct(t.score)}</td><td className="mono">{t.points.toFixed(1)} / {t.enabled ? t.weight : 0}</td></tr>)}
-      <tr><td><b>Total</b></td><td /><td className="mono" data-testid="twin-total"><b>{g.total.toFixed(1)} / 100</b></td></tr>
-    </tbody></table>
-  );
 
   const panel = (() => {
     switch (stage) {
@@ -738,14 +732,14 @@ export default function TabTwin() {
             </Section>
           )}
           <p className="hint">{mission === 4 ? 'Click the plan (top left) or the scene to move the camera, then turn and tilt it to aim at the outlined bay.' : 'Click the plan (top left) to move the selected unit. Numbers are in the card below the view.'}</p>
-          {cov && <p className="hint" data-testid="twin-coverage-note">Coverage counts surface with a clear line of sight (red dots are unseen). Run the measured test to add point density, noise and dropout.</p>}
+          {cov && <p className="hint" data-testid="twin-coverage-note">Red dots are surfaces no LiDAR sees. The measured test adds point density, noise and dropout.</p>}
           {mission !== 4 && <Toggle label="Show the safety zones" checked={showZones} onChange={setShowZones} />}
         </>
       );
       case 3: return (
         <>
           {mission !== 4 && <div className="btn-row"><Btn sm onClick={() => T.set({ stage: 1 })}>← Change equipment</Btn></div>}
-          {mission === 4 && <p className="hint" data-testid="twin-combined-note">Your LiDAR clouds are already registered into one. The camera is registered with that combined cloud, cropped to the inspection bay: match the red crosses to the green squares, then watch the bay points take the camera's colours.</p>}
+          {mission === 4 && <p className="hint" data-testid="twin-combined-note">The LiDARs are already one cloud. Calibrate the camera against the bay part of it: match the red markers to the green ones.</p>}
           {mission !== 4 && <Callout kind="edu" title="How calibration works">
             <ol style={{ margin: 0, paddingLeft: '1.2rem', display: 'grid', gap: 3 }}>
               <li><b>Connect</b> each camera to a LiDAR: drag a wire from its dot (several cameras can share one).</li>
@@ -786,7 +780,6 @@ export default function TabTwin() {
       );
       case 5: {
         if (mission === 5) return <ChangesExplorer shown={!!practice && !!T.progress.results[5] && !T.progress.results[5].stale} busy={!!T.busy} changes={practice?.found.changes ?? []} safety={practice?.found.safety ?? []} focus={changeFocus} onFocus={setChangeFocus} onShow={() => void showChanges()} best={bestChange} reality={practice ? { real: practice.tasks.change.truth, matched: practice.tasks.change.tp } : undefined} />;
-        const names = (ks: BlockKind[]) => ks.map((k) => BLOCKS[k].name.replace(/ \(.*\)$/, ''));
         const has = (kinds: BlockKind[]) => T.pipeline.some((x) => kinds.includes(x.kind) && !x.bypass);
         const checklist: { ok: boolean; text: string; add?: BlockKind }[] = [
           { ok: has(['icp', 'mobileicp', 'merge']), text: 'The scans are joined (registration)' },
@@ -907,10 +900,10 @@ export default function TabTwin() {
           <div className="pipe-overlay" role="dialog" aria-label="Pipeline builder (expanded)" data-testid="twin-pipe-overlay">
             <div className="pipe-overlay-head">
               <div style={{ flex: 1, minWidth: 260 }}><b style={{ fontSize: '1.15rem' }}>Your pipeline</b>
-                <div className="caption">Each phase feeds the next (→). Inside a phase, blocks run one after another (↓), or side by side when you set them to parallel.</div></div>
+                <div className="caption">Each phase feeds the next. Blocks in a phase run one after another.</div></div>
               <Btn sm onClick={() => setPipeExpanded(false)} testId="twin-collapse-builder">Collapse ⤡</Btn>
             </div>
-            <div data-testid="twin-checklist-wide" className="pipe-chips">{checklist.filter((c, i) => mission === 1 ? i === 0 : false).map((c) => <span key={c.text} className={`pipe-chip ${c.ok ? 'ok' : ''}`}>{c.ok ? '✓' : '○'} {c.text}</span>)}</div>
+            <div data-testid="twin-checklist-wide" className="pipe-chips">{checklist.filter((_c, i) => mission === 1 ? i === 0 : false).map((c) => <span key={c.text} className={`pipe-chip ${c.ok ? 'ok' : ''}`}>{c.ok ? '✓' : '○'} {c.text}</span>)}</div>
             {lanesView(true)}
           </div>, document.body);
         return (
@@ -921,7 +914,7 @@ export default function TabTwin() {
               <Btn sm onClick={() => setPipeExpanded(true)} testId="twin-expand-builder" title="Open the builder full size">Expand ⤢</Btn>
               <Btn sm onClick={() => T.set({ pipeline: T.pipeline.filter((b) => !missionDef.blocks.includes(b.kind)), practice: null })}>Clear mission tools</Btn>
             </div>
-            <div data-testid="twin-checklist" style={{ display: 'grid', gap: 2 }}>{checklist.filter((c, i) => mission === 1 ? i === 0 : false).map((c) => <div key={c.text} className="caption" style={{ color: c.ok ? '#30a14e' : undefined }}>{c.ok ? '✓' : '○'} {c.text}{!c.ok && c.add && mission === 3 && <button className="btn sm" style={{ marginLeft: 8 }} data-testid={`twin-add-${c.add}`} onClick={() => T.set({ pipeline: insertBlock(T.pipeline, newBlock(c.add!)), practice: null })}>+ Add {BLOCKS[c.add].name.replace(/ \(.*\)$/, '').toLowerCase()}</button>}</div>)}</div>
+            <div data-testid="twin-checklist" style={{ display: 'grid', gap: 2 }}>{checklist.filter((_c, i) => mission === 1 ? i === 0 : false).map((c) => <div key={c.text} className="caption" style={{ color: c.ok ? '#30a14e' : undefined }}>{c.ok ? '✓' : '○'} {c.text}{!c.ok && c.add && mission === 3 && <button className="btn sm" style={{ marginLeft: 8 }} data-testid={`twin-add-${c.add}`} onClick={() => T.set({ pipeline: insertBlock(T.pipeline, newBlock(c.add!)), practice: null })}>+ Add {BLOCKS[c.add].name.replace(/ \(.*\)$/, '').toLowerCase()}</button>}</div>)}</div>
             {chk.global.map((g) => <div key={g} className="caption" style={{ color: '#ff453a' }}>⚠ {g}</div>)}
             {!chk.ok && !chk.global.length && <p className="hint">Fix the ⚠ messages in the blocks below to run.</p>}
             {pipeExpanded ? <p className="hint" data-testid="twin-expanded-note">The builder is open full size. Press Collapse to bring it back here.</p> : lanesView(false)}
@@ -992,7 +985,7 @@ export default function TabTwin() {
           <div className="btn-row" style={{ flexWrap: 'wrap' }}>
             <Btn variant="good" onClick={submitFinal} busy={!!T.busy} disabled={!readyForFinal(T.progress) || !cost.ok || !chk.ok || (T.settings.maxSubmissions > 0 && finalsUsed >= T.settings.maxSubmissions)} testId="twin-final">Final evaluation{T.settings.maxSubmissions > 0 ? ` (${Math.max(0, T.settings.maxSubmissions - finalsUsed)} left)` : ''}</Btn>
           </div>
-          {T.final && currentPass(T.progress.results[6]) && <div className="celebrate-card" data-testid="celebrate-card"><h3>Your digital twin is commissioned</h3><p>All seven missions are complete. Celebrate it: add your name, then watch the point cloud celebration, keep it as a video and save your certificate as a picture.</p><Btn variant="primary" onClick={() => setCelebrate(true)} testId="twin-celebrate">Celebrate and get my certificate</Btn></div>}
+          {T.final && currentPass(T.progress.results[6]) && <div className="celebrate-card" data-testid="celebrate-card"><h3>Your digital twin is commissioned</h3><p>All seven missions are done. Add your name to watch the celebration, download it as a video and save your certificate.</p><Btn variant="primary" onClick={() => setCelebrate(true)} testId="twin-celebrate">Celebrate and get my certificate</Btn></div>}
           {(() => { const todo = MISSIONS.slice(0, 6).map((m, i) => ({ m, i })).filter(({ i }) => !currentPass(T.progress.results[i]));
             return todo.length ? <div className="final-todo" data-testid="final-todo"><b>Finish these first</b>{todo.map(({ m, i }) => <button key={i} type="button" onClick={() => goMission(i)}>{i + 1} · {m.title}{T.progress.results[i]?.stale ? ' (run it again)' : ''}</button>)}</div>
               : !cost.ok ? <p className="hint">{cost.errors[0]}</p> : !T.final ? <p className="hint">Runs your system, unchanged, on 2 other scenarios and averages them.</p> : null; })()}
@@ -1095,9 +1088,9 @@ export default function TabTwin() {
   const planLayers = { ...basePlan, paths: [...((basePlan as { paths?: { pts: [number, number][]; color: string; dashed?: boolean }[] }).paths ?? []), ...zonePaths], markers: [...basePlan.markers, ...taskMarks] };
   const result = d.lidars.length ? T.progress.results[mission] : null;
   const stats = result ? currentMissionMetrics(result, cost.total, T.settings.budget).filter((m) => m.unit !== 'credits').map((m) => ({ k: m.label, v: fmtMetric(m.value, m.unit), s: m.info ? 'For information' : result.stale ? 'Revalidation required' : !Number.isFinite(m.value) ? (mission === 3 ? (T.pipeline.some((b) => (b.kind === 'euclid' || b.kind === 'dbscan') && !b.bypass) ? 'Add Classify to score' : 'Add clustering + Classify') : 'Not measured yet') : `Target ${m.lower ? '≤' : '≥'} ${fmtMetric(m.target, m.unit)}` })) : [{ k: 'Project budget', v: `${usd(cost.remaining)} left`, s: `${usd(cost.total)} spent of ${usd(T.settings.budget)}` }];
-  const legend = stage === 5 && mission === 1 ? [{ color: '#1d78dc', label: 'Reference + earlier scans' }, { color: '#f4a21e', label: 'Current scan' }] : mission === 4 && [2, 3].includes(stage) ? [{ color: '#3b82f6', label: 'Point cloud' }, { color: '#af52de', label: 'Inspection bay: the camera’s own colours' }] : stage === 2 && soloCov ? [{ color: UNIT_COLOURS[soloIndex % 6], label: `Only what LiDAR ${soloIndex + 1} sees` }] : stage === 2 ? [{ color: HEAT[0], label: 'No LiDAR sees it' }, { color: HEAT[1], label: 'One LiDAR' }, { color: HEAT[2], label: 'Two or more LiDARs' }] : stage === 6 ? [{ color: '#ff453a', label: 'True surface not covered' }] : stage === 7 ? [{ color: '#30d158', label: 'Found' }, { color: '#ff9f0a', label: 'Misnamed' }, { color: '#ff453a', label: 'Missed' }] : ZONES.map((z, i) => ({ color: ['#c7a28a', '#9ab', '#8ac', '#bb9', '#667'][i], label: z.name }));
+  const legend = mission === 5 ? [] : stage === 5 && mission === 1 ? [{ color: '#1d78dc', label: 'Reference + earlier scans' }, { color: '#f4a21e', label: 'Current scan' }] : mission === 4 && [2, 3].includes(stage) ? [{ color: '#3b82f6', label: 'Point cloud' }, { color: '#af52de', label: 'Inspection bay: the camera’s own colours' }] : stage === 2 && soloCov ? [{ color: UNIT_COLOURS[soloIndex % 6], label: `Only what LiDAR ${soloIndex + 1} sees` }] : stage === 2 ? [{ color: HEAT[0], label: 'No LiDAR sees it' }, { color: HEAT[1], label: 'One LiDAR' }, { color: HEAT[2], label: 'Two or more LiDARs' }] : stage === 6 ? [{ color: '#ff453a', label: 'True surface not covered' }] : stage === 7 ? [{ color: '#30d158', label: 'Found' }, { color: '#ff9f0a', label: 'Misnamed' }, { color: '#ff453a', label: 'Missed' }] : ZONES.map((z, i) => ({ color: ['#c7a28a', '#9ab', '#8ac', '#bb9', '#667'][i], label: z.name }));
   void STATUS_COLOURS;
-  const celebration = <CompletionExperience open={celebrate} onClose={() => setCelebrate(false)} sendScore={workshopConfigured() && accept.known && accept.accepting && T.final ? { accepting: true, defaultIndex: T.student.index, alreadySent: T.sent.some((x) => x.kind === 'final'), send: async (name, index) => {
+  const celebration = <CompletionExperience open={celebrate} onClose={() => setCelebrate(false)} defaultName={T.student.name} sendScore={workshopConfigured() && accept.known && accept.accepting && T.final ? { accepting: true, defaultIndex: T.student.index, alreadySent: T.sent.some((x) => x.kind === 'final'), send: async (name, index) => {
     T.set({ student: { ...T.student, name, index } });
     const body = buildSubmission({ name, index, consent: true, team: T.team }, { practice: T.practice, final: T.final, design: d, pipeline: T.pipeline, settings: T.settings, attempts: T.attempts, startedAt: T.startedAt, progress: T.progress }, 'final');
     if (!body) return { ok: false, message: 'Run the final evaluation first.' };
@@ -1130,6 +1123,6 @@ export default function TabTwin() {
       </div>
       <div className="time-caption" data-testid="time-caption">{tick === 0 ? 'Time A: the factory as it was at commissioning.' : tick === 1 ? `${practice!.found.changes.filter((c) => c.kind === 'moved').length} objects moved (orange = where they are now, red = where they were).` : tick === 2 ? `${practice!.found.changes.filter((c) => c.kind === 'added').length} appeared (green) and ${practice!.found.changes.filter((c) => c.kind === 'removed').length} are gone (red).` : `Time B: ${bayLook?.events.length ?? 0} labels have changed colour.`}{activeAlerts.filter((a) => a.step === tick).map((a, i) => <span key={i} className="alert"> ⚠ {a.text}.</span>)}</div>
     </div>
-  </>}{stage >= 2 && <div className="overlay glass card" style={{ left: 12, top: 10, width: planOpen ? 268 : 'auto', padding: 6 }} data-testid="twin-plan"><div className="plan-head"><b>Plan</b><button className="stats-toggle" onClick={() => setPlanOpen((o) => !o)} aria-expanded={planOpen} title={planOpen ? 'Fold the plan away' : 'Show the plan'} data-testid="twin-plan-toggle">{planOpen ? 'Hide' : 'Show'}</button></div>{planOpen && <Plan2D scene={scene} height={176} onClick={stage === 2 ? (x: number, y: number) => place(x, y, true) : undefined} layers={planLayers} />}</div>}<KindLegend top={legendTop} items={legend} active={stage === 2 && !soloCov && mission === 0 ? legendOnly : null} onPick={stage === 2 && !soloCov && mission === 0 ? (k) => setLegendOnly((cur) => (cur === k ? null : k)) : undefined} side={stage >= 2 ? 'right' : 'left'} /></>}
+  </>}{stage >= 2 && <div className="overlay glass card" style={{ left: 12, top: 10, width: planOpen ? 268 : 'auto', padding: 6 }} data-testid="twin-plan"><div className="plan-head"><b>Plan</b><button className="stats-toggle" onClick={() => setPlanOpen((o) => !o)} aria-expanded={planOpen} title={planOpen ? 'Fold the plan away' : 'Show the plan'} data-testid="twin-plan-toggle">{planOpen ? 'Hide' : 'Show'}</button></div>{planOpen && <Plan2D scene={scene} height={176} onClick={stage === 2 ? (x: number, y: number) => place(x, y, true) : undefined} layers={planLayers} />}</div>}{legend.length > 0 && <KindLegend top={legendTop} items={legend} active={stage === 2 && !soloCov && mission === 0 ? legendOnly : null} onPick={stage === 2 && !soloCov && mission === 0 ? (k) => setLegendOnly((cur) => (cur === k ? null : k)) : undefined} side={stage >= 2 ? 'right' : 'left'} />}</>}
     viewExtras={<>{mission === 6 && T.final && <Seg label="Final scenario" value={finalVariant} onChange={setFinalVariant} options={T.final.runs.map((r, value) => ({ value, label: `Scenario ${r.seed}` }))} />}{(stage === 5 || stage === 6) && mission >= 2 && mission <= 4 && <Btn sm icon={<Circle size={15} />} onClick={() => setCloudColour((c) => (c === 'objects' ? 'solid' : c === 'solid' ? 'intensity' : c === 'intensity' ? 'height' : hasObjectView ? 'objects' : 'solid'))} testId="twin-colour-mode" title="Click to change how the points are coloured: solid, intensity, height">Colour: {cloudColour === 'objects' ? 'By object' : cloudColour === 'solid' ? 'Solid' : cloudColour === 'intensity' ? 'Intensity' : 'Height'}</Btn>}{stage === 5 && mission >= 2 && mission <= 3 && step?.removed && <span className="hint" data-testid="twin-removed-key" style={{ color: '#ff453a', fontWeight: 600 }}>● Red = removed by this step</span>}{mission === 0 && stage <= 2 && <ToolbarSwitch label="Zone names" checked={zoneNames} onChange={setZoneNames} testId="twin-zone-names" title="Show or hide the names on the critical-area boxes" />}<ToolbarSwitch label="Roof" checked={roof} onChange={setRoof} testId="twin-roof" title={roof ? 'Roof on: the complete view. Switch it off to see inside.' : 'Roof off: the roof and its points are gone.'} /><Seg<'scene' | 'points' | 'both'> value={viewMode} onChange={setViewMode} block={false} label="What the 3D view shows" options={[{ value: 'scene', label: 'Scene' }, { value: 'points', label: 'Points' }, { value: 'both', label: 'Both' }]} /></>} />;
 }

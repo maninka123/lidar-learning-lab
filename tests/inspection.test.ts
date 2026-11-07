@@ -3,7 +3,8 @@ import { acquireSurvey } from '../src/twin/acquire';
 import { buildFactory } from '../src/twin/factory';
 import { inspectionCoverage } from '../src/twin/inspection';
 import { initialSave } from '../src/twin/store';
-import { INSPECTION_CAMERA_ID, pairedLidarOf } from '../src/twin/catalogue';
+import { INSPECTION_CAMERA_ID, pairedLidarOf, DEFAULT_SETTINGS } from '../src/twin/catalogue';
+import { migrateSave } from '../src/twin/store';
 import { sampleConfig } from './helpers/twinStrategies';
 
 const factory = buildFactory(11, 'A');
@@ -17,6 +18,15 @@ describe('critical camera inspection bay', () => {
     expect(camera).toMatchObject({ id: INSPECTION_CAMERA_ID, item: 'cam-mid', pairedLidarId: 'all', cal: { done: false } });
     expect(pairedLidarOf(camera, design)).toBeUndefined(); // the combined cloud is not one scanner
     expect(inspectionCoverage(factory, { ...design, cameras: [camera] }).coverage).toBeLessThan(.8);
+  });
+  it('an older save whose camera had no connection recorded is calibrated against the combined cloud', () => {
+    const save = JSON.parse(JSON.stringify(initialSave())); delete save.design.cameras[0].pairedLidarId; save.design.cameras.push({ ...save.design.cameras[0], id: 'c-null', pairedLidarId: null });
+    const out = migrateSave(save)!; expect(out.design.cameras.map((c) => c.pairedLidarId)).toEqual(['all', 'all']);
+  });
+  it('a save with the earlier score weights takes the current scoring, one that already has the completion part keeps its own', () => {
+    const old = JSON.parse(JSON.stringify(initialSave())); delete old.settings.weights.completion; old.settings.weights.twin = 33;
+    expect(migrateSave(old)!.settings.weights).toEqual(DEFAULT_SETTINGS.weights);
+    const custom = JSON.parse(JSON.stringify(initialSave())); custom.settings.weights.twin = 33; expect(migrateSave(custom)!.settings.weights.twin).toBe(33);
   });
   it('accepts a real scan with a calibrated camera and overlapping views on the inspection labels', () => {
     const result = inspectionCoverage(factory, design, survey, [.5]);

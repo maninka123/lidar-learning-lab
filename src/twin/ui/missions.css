@@ -333,7 +333,7 @@
 .bay-events i { display: inline-block; width: .6rem; height: .6rem; border-radius: 50%; }
 .bay-events em { font-style: normal; color: var(--text3); }
 @keyframes bay-pop { from { transform: scale(.96); opacity: 0; } to { transform: none; opacity: 1; } }
-.time-play { right: 12px; bottom: 12px; width: min(440px, calc(100% - 330px)); padding: 8px 10px; display: grid; gap: 6px; }
+.time-play { right: 12px; bottom: 12px; width: min(560px, calc(100% - 24px)); padding: 8px 10px; display: grid; gap: 6px; }
 .time-stops { display: grid; grid-template-columns: auto repeat(4, minmax(0, 1fr)); gap: 6px; align-items: stretch; }
 .time-stops button { border: 0; border-radius: 10px; padding: 6px 4px; background: var(--fill); color: var(--text2); font: inherit; font-size: .7rem; font-weight: 650; cursor: pointer; line-height: 1.2; }
 .time-stops button[aria-pressed="true"] { background: var(--accent, #0a84ff); color: #fff; }
@@ -341,7 +341,7 @@
 .time-caption { font-size: .72rem; color: var(--text2); line-height: 1.4; min-height: 2.2em; }
 .time-caption .alert { color: #ff2d55; font-weight: 700; }
 
-.safety-warning { left: 50%; transform: translateX(-50%); top: 96px; max-width: min(520px, 60%); padding: 8px 14px; display: grid; gap: 2px; border: 2px solid #ff2d55; font-size: .8rem; animation: bay-pop .35s ease-out; }
+.safety-warning { left: 12px; top: 236px; width: min(292px, calc(100% - 24px)); padding: 8px 12px; display: grid; gap: 2px; border: 2px solid #ff2d55; font-size: .78rem; animation: bay-pop .35s ease-out; } /* below the plan, so nothing covers it */
 .safety-warning b { color: #ff2d55; }
 .safety-warning .now { font-weight: 700; }
 

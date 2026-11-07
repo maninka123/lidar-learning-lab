@@ -30,7 +30,7 @@ interface Props {
 export function ChangesExplorer({ shown, busy, changes, safety, focus, onFocus, onShow, best, reality, colourView }: Props) {
   const count = (k: ChangeFound['kind']) => changes.filter((c) => c.kind === k).length, affected = safety.filter((z) => z.violated).length;
   return <section className="changes-explorer" data-testid="changes-explorer" aria-label="Changes and safety">
-    <p className="changes-intro">Compare Time A (commissioning) with Time B (today). Press the button: your data is compared with the best settings chosen for it. Click anything in the lists to see it in 3D.</p>
+    <p className="changes-intro">Compare Time A with Time B, using the best settings for your data. Click any change or zone to see it in 3D.</p>
     <Btn variant="primary" block onClick={onShow} busy={busy} testId="twin-show-changes">{shown ? 'Show again' : 'Show changes and safety'}</Btn>
     {shown && <>
       <div className="changes-chips" data-testid="changes-summary">

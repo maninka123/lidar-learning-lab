@@ -39,7 +39,7 @@ Go through the tabs in order, one idea at a time, about five minutes each. Each 
 | 16 | **Moving Scene & Temporal Graph** | A vehicle scans a street every 0.8 s. Each frame is segmented, objects are tracked between frames, and events (approaching, crossing, passing) become a temporal scene graph a language model can answer questions from. |
 | 17 | **Scan to CAD** | Slice a classroom, find wall lines, square the corners, export a DXF floor plan. |
 | 18 | **Image to 3D** | Choose a scene, try three reconstruction methods, then mesh, align with scale and view the error map. |
-| 19 | **Industrial Digital Twin Challenge** | Seven unlocking missions: design, register, clean, detect, add cameras, check changes and safety, then commission the system on unseen scenarios. Graded on real results; scores can go to the instructor. See docs/DIGITAL_TWIN_CHALLENGE.md. |
+| 19 | **Industrial Digital Twin Challenge** | Seven unlocking missions: design, register, clean, detect, add cameras, see what changed (one click), then a final score on unseen scenarios and a certificate with a point-cloud celebration. Finishing everything earns most of the score; scores can go to the instructor if they are accepting submissions. See docs/DIGITAL_TWIN_CHALLENGE.md. |
 | 20 | **Thank You** | A calm closing page with an optional, anonymous feedback form. The admin page has a Feedback & Insights tab. See docs/FEEDBACK.md. |
 
 Viewport: left-drag rotates, right-drag or the **Pan** button moves the cloud, wheel zooms.

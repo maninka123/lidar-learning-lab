@@ -1,5 +1,5 @@
-import { PointCloud, concatClouds, selectPoints, transformCloud } from '../core/pointcloud';
-import { Rigid, Vec3, identity, rigidCompose, rotationAngle } from '../core/math';
+import { PointCloud, selectPoints, transformCloud } from '../core/pointcloud';
+import { Rigid, Vec3 } from '../core/math';
 import { KDTree } from '../core/kdtree';
 import * as ops from '../processing/ops';
 import { detectPlanes } from '../apps/planes';

@@ -20,7 +20,7 @@ export function ScoreBreakdown({ grade }: { grade: Grade }) {
     <div className="score-stack" role="img" aria-label="Points from each part of the score">{on.map((t) => <i key={t.key} title={`${TASK_NAMES[t.key]}: ${t.points.toFixed(1)} points`} style={{ width: `${t.points}%`, background: COLOUR[t.key] }} />)}<i className="rest" style={{ width: `${Math.max(0, 100 - grade.total)}%` }} /></div>
     <p className="score-how">How the score is made: each part is scored 0–100%, then counted by its weight. The points add up to the total.</p>
     <ul className="score-rows">{on.map((t) => <li key={t.key}>
-      <div className="score-row-head"><span className="dot" style={{ background: COLOUR[t.key] }} /><b>{TASK_NAMES[t.key]}</b><em>{t.points.toFixed(1)} <small>/ {((100 * t.weight) / on.reduce((a, x) => a + x.weight, 0)).toFixed(0)}</small></em></div>
+      <div className="score-row-head"><span className="dot" style={{ background: COLOUR[t.key] }} /><b>{TASK_NAMES[t.key]}</b><em>{t.points.toFixed(1)} <small>/ {((100 * t.weight) / (on.reduce((a, x) => a + x.weight, 0) || 1)).toFixed(0)}</small></em></div>
       <div className="score-bar"><i style={{ width: `${Math.round(t.score * 100)}%`, background: COLOUR[t.key] }} /></div>
       <small>{Math.round(t.score * 100)}% · {MEANING[t.key]}</small>
     </li>)}</ul>

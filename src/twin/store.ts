@@ -28,10 +28,12 @@ export function migrateSave(value: unknown): TwinSave | null {
   const base = initialSave();
   const raw = o.progress, unlocked = Math.max(0, Math.min(6, Math.floor(Number.isFinite(raw?.unlocked) ? raw!.unlocked : 0)));
   const progress: MissionProgress = raw ? { current: Math.max(0, Math.min(unlocked, Math.floor(Number.isFinite(raw.current) ? raw.current : 0))), unlocked, results: Array.from({ length: 7 }, (_, i) => Array.isArray(raw.results) && raw.results[i] && typeof raw.results[i]?.fingerprint === 'string' && Array.isArray(raw.results[i]?.metrics) && Array.isArray(raw.results[i]?.feedback) ? raw.results[i] : null), attempts: Array.from({ length: 7 }, (_, i) => Number.isFinite(raw.attempts?.[i]) ? Math.max(0, raw.attempts[i]) : 0) } : emptyProgress();
-  const settings = { ...DEFAULT_SETTINGS, ...o.settings, budgetVersion: 4 as const, budget: budgetFor(o.settings ?? {}), weights: { ...DEFAULT_SETTINGS.weights, ...o.settings?.weights }, enabled: { ...DEFAULT_SETTINGS.enabled, ...o.settings?.enabled } };
+  // a save from before the score had a completion part carries the old weights, which no longer add up to the new scoring: it takes the current ones
+  const oldScoring = !!o.settings?.weights && !('completion' in o.settings.weights);
+  const settings = { ...DEFAULT_SETTINGS, ...o.settings, budgetVersion: 4 as const, budget: budgetFor(o.settings ?? {}), weights: oldScoring ? { ...DEFAULT_SETTINGS.weights } : { ...DEFAULT_SETTINGS.weights, ...o.settings?.weights }, enabled: oldScoring ? { ...DEFAULT_SETTINGS.enabled } : { ...DEFAULT_SETTINGS.enabled, ...o.settings?.enabled } };
   // Legacy equipment, pipelines and attempts survive. Old stage visits do not count as measured mission passes.
   const design = standardRes({ ...EMPTY_DESIGN, ...o.design });
-  design.cameras = design.cameras.map((c) => (c.pairedLidarId === null ? { ...c, pairedLidarId: ALL_LIDARS } : c)); // the clouds are registered into one: a camera that was waiting to be paired uses the combined cloud
+  design.cameras = design.cameras.map((c) => (c.pairedLidarId === null || c.pairedLidarId === undefined ? { ...c, pairedLidarId: ALL_LIDARS } : c)); // the clouds are registered into one: a camera that was waiting to be paired uses the combined cloud
   const merged = { ...base, ...o, version: 2 as const, settings, progress, design };
   merged.progress = invalidateProgress(progress, { design: merged.design, pipeline: merged.pipeline, settings });
   merged.stage = (MISSIONS[progress.current].tools as readonly number[]).includes(o.stage ?? -1) ? o.stage! : MISSIONS[progress.current].tools[0];

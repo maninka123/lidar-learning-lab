@@ -13,8 +13,8 @@ Only the first mission is initially available. Each introduces a specific factor
 | 3. Clean the cloud | ≥60% outliers removed, ≥80% valid monitoring-height measurements retained, ≥60% small-object measurements retained |
 | 4. Detect objects | At least 70% of the objects found (the share named correctly is shown for information) |
 | 5. Add cameras and colour | One calibrated camera, registered with the combined LiDAR cloud, covers ≥80% of the critical inspection bay; marker RMS below 3 px normalised to 720p |
-| 6. Changes and safety | Not graded: one click shows what changed between Time A and Time B (changed points in colour, a zoomed look at the colour labels) and which safety zones are affected, using the best settings found for the student's data |
-| 7. Commission the twin | All six validations current; final weighted score ≥60/100 over seeds 101 and 202 |
+| 6. See what changed | Not graded: one click shows what changed between Time A and Time B (changed points in colour, a zoomed look at the colour labels) and which safety zones are affected, using the best settings found for the student's data |
+| 7. Final score and certificate | All six earlier tasks current; final weighted score ≥60/100 over seeds 101 and 202. Finishing every task earns most of the score (see Scoring); the student can then add a name, watch a point-cloud celebration, download it as a video and save a certificate image |
 
 These are minimum educational thresholds, not industrial performance claims. The initial proposed 5 cm / 65% detection / 65% change thresholds were too restrictive for the simplified geometry, partial surfaces and clustering. The automated strategy validation documents the achieved values. Excellent requires stronger performance than Passed; perfection is not necessary.
 
@@ -59,11 +59,11 @@ Valid-point retention is evaluated in the fixed monitoring height range −0.15 
 
 The reference strategies, using a custom 7,000-credit (US$35,000) validation budget, passed all six practice gates and the two final scenarios. These are regression fixtures, not required solutions.
 
-| Strategy | LiDARs | Cost incl. cameras (of 7,000) | Critical coverage | Alignment error | Detection F1 | Labels correct | Change F1 | Final / 100 |
+| Strategy | LiDARs | Cost incl. cameras (of 7,000) | Critical coverage | Objects found | Named correctly | Camera marker error | Changes found | Final / 100 |
 |---|---|---:|---:|---:|---:|---:|---:|---:|
-| Lower cost | 128 + 32 + 16 ch | 2,322 | 72.8% | 0.4 cm / 0.04° | 58.5% | 80% | 71% (unseen A) | 75.7 |
-| Balanced | 64 + 32 + 16 + 32 ch | 2,542 | 77.4% | 0.7 cm / 0.03° | 60.2% | 80% | 71% (unseen A) | 77.3 |
-| Higher performance | 128 + 64 + 32 ch | 2,922 | 80.2% | 0.3 cm / 0.02° | 67.3% | 80% | 53% (unseen A) | 77.1 |
+| Lower cost | 128 + 32 + 16 ch | 2,322 | 72.8% | 81.4% | 77.1% | 1.0 px | 9 | 92.6 |
+| Balanced | 64 + 32 + 16 + 32 ch | 2,542 | 77.4% | 81.4% | 82.9% | 1.0 px | 8 | 92.8 |
+| Higher performance | 128 + 64 + 32 ch | 2,922 | 80.2% | 83.7% | 80.6% | 1.0 px | 10 | 92.7 |
 
 All three passed the measured noise-removal and point-retention gates, retained 100% of the sampled small-object measurements, and correctly assessed the three practice safety zones. Each also passed the new critical camera-bay requirement in practice and the final scenarios. Detection of small objects was 2/7 (28.6%); retained points do not guarantee separation of objects that touch their support surfaces. The deliberately poor strategy failed initial coverage and could not unlock the next mission. Full run evidence is in [MISSION_VALIDATION.json](MISSION_VALIDATION.json).
 
@@ -71,15 +71,16 @@ All three passed the measured noise-removal and point-retention gates, retained 
 
 | Task | Points | Measured |
 |---|---|---|
-| Digital twin | 25 | share of the true surface below 3 m covered (radius 15 cm), median distance to the true surface (exact distance to the geometry), floating points, consistency of the scans with each other |
-| Object detection | 25 | one-to-one (Hungarian) matching by 3D IoU (small objects by centre distance): the share of the objects found, centre error, how well the boxes fit |
-| Colour labels read | 10 | label colour read from camera pixels on the right object (the reading itself is automatic): accuracy and macro F1 |
-| Changes found | 10 | added / removed / moved matched one-to-one with the reference change list: precision, recall, location |
-| Noise handling | 15 | floating points removed, real points kept, small-object points kept (by provenance) |
-| Safety zones flagged | 5 | zone violations and clearance distances against geometry (educational, not a certified system) |
-| Budget and efficiency | 10 | scaled by how well the system performed, so doing nothing cheaply earns nothing |
+| Completing all the missions | 60 | the share of the six earlier tasks that are finished. Only the final evaluation counts it; practice runs are graded on the measured parts alone |
+| Digital twin | 10 | share of the true surface below 3 m covered (radius 15 cm), median distance to the true surface (exact distance to the geometry), floating points, consistency of the scans with each other |
+| Object detection | 10 | one-to-one (Hungarian) matching by 3D IoU (small objects by centre distance): the share of the objects found, centre error, how well the boxes fit |
+| Colour labels read | 4 | label colour read from camera pixels on the right object (the reading itself is automatic): accuracy and macro F1 |
+| Changes found | 4 | added / removed / moved matched one-to-one with the reference change list: precision, recall, location |
+| Noise handling | 8 | floating points removed, real points kept, small-object points kept (by provenance) |
+| Safety zones flagged | 2 | zone violations and clearance distances against geometry (educational, not a certified system) |
+| Budget and efficiency | 2 | scaled by how well the system performed, so doing nothing cheaply earns nothing |
 
-Every score is a bounded, explicit function of a measured quantity (`lin(x, bad, good)`). Nothing rewards a tool by name. Disabled tasks drop out and the rest are rescaled.
+Every score is a bounded, explicit function of a measured quantity (`lin(x, bad, good)`). Nothing rewards a tool by name. Disabled tasks drop out and the rest are rescaled. Everyone who finishes every task therefore scores well, and the measured parts decide the rest.
 
 ## Why results differ between designs
 

@@ -4,7 +4,6 @@ import { LIDARS, SHOP_LIDARS, CAMERAS, sensorFor } from '../catalogue';
 import { PRICING, usd } from '../pricing';
 import { LidarPreview } from './LidarPreview';
 
-const KIND_LABEL: Record<string, string> = { low: 'Rotating', medium: 'Rotating', high: 'Rotating', multi: 'Rotating', solid: 'Solid-state', tls: 'Terrestrial', mobile: 'Mobile' };
 const SPEC_ROWS = [['range', 'Range'], ['fov', 'Field of view'], ['resolution', 'Resolution'], ['density', 'Density'], ['accuracy', 'Accuracy'], ['use', 'Best for']] as const;
 
 export function EquipmentCatalogue({ cameras, scale, canBuy, buy, owned, removeOne }: { cameras: boolean; scale: number; canBuy: (id: string) => boolean; buy: (id: string) => void; /** how many of this model are already in the project (the same model can be bought as often as the budget and limits allow) */ owned?: (id: string) => number; removeOne?: (id: string) => void }) {

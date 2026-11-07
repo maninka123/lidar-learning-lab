@@ -175,12 +175,11 @@ export function certificateCanvas(name: string, stats: CompletionStats): HTMLCan
 
 const download = (blob: Blob, filename: string) => { const url = URL.createObjectURL(blob), a = document.createElement('a'); a.href = url; a.download = filename; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 4000); };
 const fileName = (name: string, ext: string) => `Digital-Twin-${(name || 'Certificate').replace(/[^\p{L}\p{N}]+/gu, '-').replace(/^-|-$/g, '')}.${ext}`;
-const NAME_KEY = 'lidar-lab-certificate-name';
 
 /** The finishing moment of the challenge: ask for a name, then a celebration with a turning point cloud, a video to keep and a certificate as a picture. */
 export interface SendScore { /** only when the instructor is accepting scores */ accepting: boolean; defaultIndex: string; alreadySent: boolean; send: (name: string, index: string) => Promise<{ ok: boolean; message: string }> }
 export function CompletionExperience({ open, onClose, defaultName, stats, sendScore }: { open: boolean; onClose: () => void; defaultName?: string; stats: CompletionStats; sendScore?: SendScore }) {
-  const [name, setName] = useState(() => { try { return localStorage.getItem(NAME_KEY) ?? defaultName ?? ''; } catch { return defaultName ?? ''; } });
+  const [name, setName] = useState(defaultName ?? '');
   const [stage, setStage] = useState<'ask' | 'show'>('ask'), [busy, setBusy] = useState<string | null>(null), [note, setNote] = useState('');
   const [index, setIndex] = useState(sendScore?.defaultIndex ?? ''), [agree, setAgree] = useState(false), [sentNote, setSentNote] = useState<{ ok: boolean; text: string } | null>(null);
   const canSend = !!sendScore?.accepting && !sendScore.alreadySent, indexOk = /^[A-Za-z0-9]{3,24}$/.test(index.trim()), sendNow = canSend && agree && indexOk;
@@ -188,7 +187,7 @@ export function CompletionExperience({ open, onClose, defaultName, stats, sendSc
   const recorder = useRef<{ rec: MediaRecorder; timer: ReturnType<typeof setInterval>; cancelled: boolean } | null>(null), [progress, setProgress] = useState(0);
   /** Closing always works: a recording in progress is stopped and thrown away. */
   const closeNow = () => { const r = recorder.current; if (r) { r.cancelled = true; clearInterval(r.timer); try { r.rec.stop(); } catch { /* already stopped */ } recorder.current = null; } setBusy(null); setProgress(0); onClose(); };
-  useEffect(() => { if (open) { setStage('ask'); setNote(''); setBusy(null); setSentNote(null); setAgree(false); } }, [open]);
+  useEffect(() => { if (open) { setStage('ask'); setNote(''); setBusy(null); setSentNote(null); setAgree(false); setName((n) => n || defaultName || ''); } }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
   const live = useRef({ name, stats }); live.current = { name, stats }; // the picture reads these when it draws, so a new object from the page never restarts it
   useEffect(() => {
     if (!open || stage !== 'show') return;
@@ -200,7 +199,6 @@ export function CompletionExperience({ open, onClose, defaultName, stats, sendSc
   if (!open) return null;
 
   const begin = () => {
-    try { localStorage.setItem(NAME_KEY, name.trim()); } catch { /* storage unavailable */ }
     setStage('show');
     if (sendNow) void sendScore!.send(name.trim(), index.trim()).then((r) => setSentNote({ ok: r.ok, text: r.message }));
   };
