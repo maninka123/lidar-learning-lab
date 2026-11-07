@@ -1,7 +1,7 @@
 import type { CostReport } from '../catalogue';
 import { usd } from '../pricing';
 
-export function BudgetSummary({ cost, budget, hasLidar }: { cost: CostReport; budget: number; hasLidar: boolean }) {
+export function BudgetSummary({ cost, budget, hasLidar, mandatory }: { cost: CostReport; budget: number; hasLidar: boolean; /** what the required equipment already takes from the budget (the inspection camera and its installation) */ mandatory?: { label: string; amount: number } }) {
   const over = cost.total > budget;
   const errors = cost.errors.filter((error) => hasLidar || !error.includes('at least one LiDAR'));
   return (
@@ -12,6 +12,7 @@ export function BudgetSummary({ cost, budget, hasLidar }: { cost: CostReport; bu
         <span style={{ width: `${budget > 0 ? Math.min(100, cost.total / budget * 100) : 0}%` }} />
       </div>
       <div className="mission-budget-totals"><span>Spent <b>{usd(cost.total)}</b></span><span>Total <b>{usd(budget)}</b></span></div>
+      {mandatory && <p className="mission-budget-note" data-testid="twin-mandatory-note">🔒 Includes {usd(mandatory.amount)} for the mandatory {mandatory.label} (cannot be removed).</p>}
       {errors.map((error) => <p className="mission-budget-error" key={error}>{error}</p>)}
       {cost.warnings.map((warning) => <p className="mission-budget-warning" key={warning}>{warning}</p>)}
     </section>

@@ -42,7 +42,7 @@ export function AlignPanel({ names, rows, active, preview, busy, hasSurvey, onSe
         </div>}
       </div>
       {all && <div className={`align-summary ${ok ? 'ok' : ''}`} role="status" data-testid="align-summary"><b>{ok ? 'Ready to evaluate' : 'All scans tested — review the result'}</b><p>Mean error: {metric(cm)} cm · {metric(deg)}° · {metric(overlap * 100, 0)}% overlap.</p><p className="hint">{ok ? 'Evaluate the mission below to check the complete map.' : 'Review a scan below or tune the settings and try again. The mission check evaluates the complete map.'}</p></div>}
-      <details className="align-settings"><summary>Alignment settings</summary><p className="hint">These settings apply to all scans. Changing one restarts the sequence so the complete map uses the same settings.</p><fieldset disabled={busy}>{settings}</fieldset></details>
+      <details className="align-settings" data-testid="align-settings"><summary>Settings for {names[active]}</summary><p className="hint">Only for this scan. Scans already aligned keep theirs; the next scan starts from these.</p><fieldset disabled={busy}>{settings}</fieldset></details>
       <details className="align-history"><summary>Scan sequence · {names.length} scans</summary><div className="align-list"><div className="align-reference"><b>{names[0]}</b><span>Reference</span></div>{names.slice(1).map((name, i) => {
         const k = i + 1, result = rows[i];
         return <button type="button" key={k} aria-current={active === k ? 'step' : undefined} disabled={busy || k > rows.length + 1} onClick={() => onSelect(k)}><span>{name}</span><small>{result ? withinTarget(result) ? 'Within target' : 'Review' : k === rows.length + 1 ? 'Up next' : 'Waiting'}</small></button>;

@@ -11,9 +11,9 @@ Only the first mission is initially available. Each introduces a specific factor
 | 1. Design the sensing network | ≥70% measured coverage of the critical production, inspection and loading areas, **and** at least 100 / 80 / 80 measured points per m² of surface in production / inspection / loading; within budget |
 | 2. Align measurements | Scans aligned one at a time to within 2 cm and 0.15° of the surveyed scanner positions, overlap ≥20%; a single scanner is judged by its surface accuracy |
 | 3. Clean the cloud | ≥60% outliers removed, ≥80% valid monitoring-height measurements retained, ≥60% small-object measurements retained |
-| 4. Detect objects | Detection F1 ≥55% and small-object recall ≥25% |
-| 5. Add cameras and colour | One calibrated, explicitly paired camera–LiDAR combination covers ≥80% of the critical inspection bay; ≥70% labels correct; marker RMS ≤4 px normalised to 720p |
-| 6. Changes and safety | Change F1 ≥50% and safety-zone accuracy ≥75%, independently |
+| 4. Detect objects | At least 70% of the objects found (the share named correctly is shown for information) |
+| 5. Add cameras and colour | One calibrated camera, registered with the combined LiDAR cloud, covers ≥80% of the critical inspection bay; marker RMS below 3 px normalised to 720p |
+| 6. Changes and safety | Not graded: one click shows what changed between Time A and Time B (changed points in colour, a zoomed look at the colour labels) and which safety zones are affected, using the best settings found for the student's data |
 | 7. Commission the twin | All six validations current; final weighted score ≥60/100 over seeds 101 and 202 |
 
 These are minimum educational thresholds, not industrial performance claims. The initial proposed 5 cm / 65% detection / 65% change thresholds were too restrictive for the simplified geometry, partial surfaces and clustering. The automated strategy validation documents the achieved values. Excellent requires stronger performance than Passed; perfection is not necessary.
@@ -26,9 +26,9 @@ Planning shows geometric line-of-sight coverage. **Test measured coverage** sepa
 
 Registration exposes direct placement, point-to-point/plane ICP, starting pose, match distance, trimming, iterations and preview diagnostics. Mission 2 guides students through Acquire scans → Align scans. Only the current scan (orange) and its reference/earlier scans (blue) are shown. Each alignment has a before/after preview and measured position, angle and overlap feedback; Next scan advances explicitly. Retrying an earlier scan clears its later results, and changing shared settings restarts the sequence. Evaluation becomes available once each scan has been tested. Cleaning and detection reuse the lab's processing algorithms, including selectable planes/clusters and parallel filters. Step previews compare input and output. Classification uses shape rules, not a neural network.
 
-The critical visual inspection bay is outlined in purple in 3D and on the plan. A 720p camera is specified and budgeted in new projects, initially unpaired and uncalibrated. Mission 5 requires one explicitly paired camera–LiDAR combination to cover at least five of its six label stations (≥80%). Coverage checks label readability, viewing direction, occlusion, LiDAR field of view and actual non-outlier LiDAR returns on those objects. The camera must also meet the measured ≤4 px calibration error. The final evaluation repeats this requirement in both unseen scenarios. Older projects retain their cameras; a camera-free project receives the specified camera on entering Mission 5 when the budget allows.
+The critical visual inspection bay is outlined in purple in 3D and on the plan. A 720p camera is specified and budgeted in new projects, initially uncalibrated. By task 5 the LiDAR scans are registered into one cloud, so the camera is registered with that combined cloud (cropped to the bay) rather than with one scanner, and the LiDARs are not moved. Mission 5 requires the camera to cover at least five of the six label stations (≥80%), each also reached by the combined LiDAR cloud. Coverage checks label readability, viewing direction, occlusion, LiDAR field of view and actual non-outlier LiDAR returns on those objects. The camera must also meet the measured calibration error below 3 px. The final evaluation repeats this requirement in both unseen scenarios. Older projects retain their cameras; a camera-free project receives the specified camera on entering Mission 5 when the budget allows.
 
-Camera–LiDAR connections are stored on each camera (`pairedLidarId`) and used by calibration, acquisition, processing and final grading. Legacy unpaired cameras use the nearest installed scanner. A removed explicit partner requires re-pairing. Point provenance includes scan ids, so a camera colours only measurements belonging to its partner. Calibration shows measured/projected markers, initial/current error and manual parameters; assisted optimisation requires inspecting the error and trying a manual correction. Passing depends on measured error, not a “done” flag.
+Each camera stores what it is calibrated with (`pairedLidarId`): `all` (the combined cloud, the default) or, in older saves, one scanner. It is used by calibration, acquisition, processing and final grading. Point provenance includes scan ids, so a camera colours only measurements from the LiDARs it is registered with. Calibration shows measured/projected markers, initial/current error and manual parameters; assisted optimisation requires inspecting the error and trying a manual correction. Passing depends on measured error, not a “done” flag.
 
 Change assessment displays original/updated surveys, findings and safety zones. Final evaluation keeps the current project, runs two unseen deterministic variants, and exposes each variant's interactive 3D result, score and task metrics. Markdown engineering reports and full JSON configurations can be exported. Existing score consent, student identity and instructor collection controls are preserved.
 
@@ -40,7 +40,7 @@ Each result carries a dependency fingerprint. LiDAR placement/resolution or rout
 
 ### Pricing and project budget
 
-Reference prices use USD, checked 2026-11-04, and **one simulation credit = US$5** before the instructor price scale. The default budget is **US$7,000** (1,400 internal credits). The admin budget field uses US dollars. Installation and resolution effort are simulated allowances, not vendor quotations. Existing instructor budgets and grading settings remain authoritative.
+Reference prices use USD, checked 2026-11-04, and **one simulation credit = US$5** before the instructor price scale. The default budget is **US$8,000** (1,600 internal credits). The admin budget field uses US dollars. Installation and resolution effort are simulated allowances, not vendor quotations. Existing instructor budgets and grading settings remain authoritative.
 
 - [Livox manufacturer launch announcement](https://www.livoxtech.com/mobile/de/news/mid360_launch): US$749 sample reference, labelled as a launch price rather than a current binding quote.
 - [Leica BLK360 official shop](https://shop.leica-geosystems.com/reality-capture/blk360/buy): US$26,500 commercial TLS reference; the simulator uses a generic TLS approximation.
@@ -71,12 +71,12 @@ All three passed the measured noise-removal and point-retention gates, retained 
 
 | Task | Points | Measured |
 |---|---|---|
-| Digital twin | 20 | share of the true surface below 3 m covered (radius 15 cm), median distance to the true surface (exact distance to the geometry), floating points, consistency of the scans with each other |
-| Object detection | 20 | one-to-one (Hungarian) matching by 3D IoU (small objects by centre distance), precision, recall, class, centre error |
-| Colour-coded labels | 10 | label colour read from camera pixels on the right object: accuracy and macro F1 |
-| Change detection | 20 | added / removed / moved matched one-to-one with the reference change list: precision, recall, location |
-| Noise handling | 10 | floating points removed, real points kept, small-object points kept (by provenance) |
-| Safety and clearance | 10 | zone violations and clearance distances against geometry (educational, not a certified system) |
+| Digital twin | 25 | share of the true surface below 3 m covered (radius 15 cm), median distance to the true surface (exact distance to the geometry), floating points, consistency of the scans with each other |
+| Object detection | 25 | one-to-one (Hungarian) matching by 3D IoU (small objects by centre distance): the share of the objects found, centre error, how well the boxes fit |
+| Colour labels read | 10 | label colour read from camera pixels on the right object (the reading itself is automatic): accuracy and macro F1 |
+| Changes found | 10 | added / removed / moved matched one-to-one with the reference change list: precision, recall, location |
+| Noise handling | 15 | floating points removed, real points kept, small-object points kept (by provenance) |
+| Safety zones flagged | 5 | zone violations and clearance distances against geometry (educational, not a certified system) |
 | Budget and efficiency | 10 | scaled by how well the system performed, so doing nothing cheaply earns nothing |
 
 Every score is a bounded, explicit function of a measured quantity (`lin(x, bad, good)`). Nothing rewards a tool by name. Disabled tasks drop out and the rest are rescaled.

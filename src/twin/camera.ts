@@ -19,13 +19,21 @@ const WORLD = { x: 0, y: 0, z: 0, yaw: 0 };
 /** The hidden installation error of a camera: where it really points compared with where the team meant it to. Seeded, never shown. */
 export function hiddenCamError(scenarioSeed: number, index: number): { e: Extrinsic; fovScale: number } {
   const r = makeRng(hashSeed('camerr', scenarioSeed, index));
-  return { e: { tx: 0.06 * r.gauss(), ty: 0.06 * r.gauss(), tz: 0.04 * r.gauss(), yawDeg: 2 * r.gauss(), pitchDeg: 1.5 * r.gauss() }, fovScale: 1 + 0.015 * r.gauss() };
+  return { e: { tx: 0.08 * r.gauss(), ty: 0.08 * r.gauss(), tz: 0.05 * r.gauss(), yawDeg: 2.6 * r.gauss(), pitchDeg: 2 * r.gauss(), rollDeg: 1.3 * r.gauss() }, fovScale: 1 }; // the lens is known; what is unknown is where the camera really sits and points (6 numbers)
 }
-export const nominalOf = (c: CameraUnit): Extrinsic => ({ tx: c.x, ty: c.y, tz: c.z, yawDeg: c.yaw / D2R, pitchDeg: c.pitch / D2R });
-/** The pose the camera really has in the world (the hidden truth). */
+export const nominalOf = (c: CameraUnit): Extrinsic => ({ tx: c.x, ty: c.y, tz: c.z, yawDeg: c.yaw / D2R, pitchDeg: c.pitch / D2R, rollDeg: 0 });
+/** How far off a camera starts, in pixels at 720p: wherever it stands, the nominal pose projects a board in front of it about this far from where it really is. */
+export const CAL_START_PX = 25;
+/** The pose the camera really has in the world (the hidden truth). Its error is scaled so that every camera starts about CAL_START_PX off, wherever it is mounted. */
 export function trueExtrinsic(c: CameraUnit, scenarioSeed: number, index: number): { e: Extrinsic; fov: number } {
-  const h = hiddenCamError(scenarioSeed, index), n = nominalOf(c);
-  return { e: { tx: n.tx + h.e.tx, ty: n.ty + h.e.ty, tz: n.tz + h.e.tz, yawDeg: n.yawDeg + h.e.yawDeg, pitchDeg: n.pitchDeg + h.e.pitchDeg }, fov: cameraItem(c.item).fov * h.fovScale };
+  const h = hiddenCamError(scenarioSeed, index), n = nominalOf(c), it = cameraItem(c.item);
+  const at = (k: number): Extrinsic => ({ tx: n.tx + k * h.e.tx, ty: n.ty + k * h.e.ty, tz: n.tz + k * h.e.tz, yawDeg: n.yawDeg + k * h.e.yawDeg, pitchDeg: n.pitchDeg + k * h.e.pitchDeg, rollDeg: (n.rollDeg ?? 0) + k * (h.e.rollDeg ?? 0) });
+  const pn = camPose(n), probe: Vec3[] = [];
+  for (const x of [-1, -0.5, 0, 0.5, 1]) for (const y of [-0.6, -0.2, 0.2, 0.6]) probe.push([pn.pos[0] + 4 * pn.f[0] + x * pn.r[0] + y * pn.u[0], pn.pos[1] + 4 * pn.f[1] + x * pn.r[1] + y * pn.u[1], pn.pos[2] + 4 * pn.f[2] + x * pn.r[2] + y * pn.u[2]]);
+  const pt = camPose(at(1)), fov = it.fov * h.fovScale; let sum = 0, cnt = 0;
+  for (const p of probe) { const a = project(pn, p, it.w, it.h, fov), b = project(pt, p, it.w, it.h, fov); if (a && b) { sum += (a.u - b.u) ** 2 + (a.v - b.v) ** 2; cnt++; } }
+  const off = cnt ? Math.sqrt(sum / cnt) * (1280 / it.w) : CAL_START_PX, k = off > 1e-6 ? clamp(CAL_START_PX / off, 0.3, 3) : 1;
+  return { e: at(k), fov };
 }
 /** Looking straight up or down has no 'right' direction, so the tilt stops a hair short of ±90°. */
 export const camPose = (e: Extrinsic): CamPose => cameraPose(WORLD, { ...e, pitchDeg: clamp(e.pitchDeg, -89.5, 89.5) });
@@ -117,11 +125,15 @@ function solveLin(A: number[][], b: number[]): number[] | null {
   return x;
 }
 
-/** Automatic calibration: least squares (Levenberg–Marquardt) over the camera position, its two angles and its field of view. The same idea as the Fusion tab, plus the focal length. */
+/** The calibration passes when the marker error, as if the picture were 720p, is below this many pixels. */
+export const CAL_MAX_PX = 3;
+/** Assistance opens once the student has the error below this: close enough that the fit has the right answer to refine. */
+export const CAL_ASSIST_PX = 10;
+/** Automatic calibration: least squares (Levenberg–Marquardt) over the six numbers that place the camera: x, y, z, turn, tilt and roll. The lens (field of view) is known. */
 export function autoCalibrate(t: CalTarget, init: Extrinsic, fov0: number): { e: Extrinsic; fov: number; rms: number } {
-  const unpack = (p: number[]): { e: Extrinsic; fov: number } => ({ e: { tx: p[0], ty: p[1], tz: p[2], yawDeg: p[3], pitchDeg: p[4] }, fov: p[5] });
-  let p = [init.tx, init.ty, init.tz, init.yawDeg, init.pitchDeg, fov0], lambda = 1e-2;
-  const eps = [1e-3, 1e-3, 1e-3, 0.02, 0.02, 0.05];
+  const unpack = (p: number[]): { e: Extrinsic; fov: number } => ({ e: { tx: p[0], ty: p[1], tz: p[2], yawDeg: p[3], pitchDeg: p[4], rollDeg: p[5] }, fov: fov0 });
+  let p = [init.tx, init.ty, init.tz, init.yawDeg, init.pitchDeg, init.rollDeg ?? 0], lambda = 1e-2;
+  const eps = [1e-3, 1e-3, 1e-3, 0.02, 0.02, 0.02];
   const res = (q: number[]) => { const u = unpack(q); return residuals(t, u.e, u.fov); };
   let r = res(p), cost = r.reduce((a, v) => a + v * v, 0);
   for (let it = 0; it < 80; it++) {
@@ -142,10 +154,16 @@ export function autoCalibrate(t: CalTarget, init: Extrinsic, fov0: number): { e:
   return { e: u.e, fov: u.fov, rms: rmsOf(r) };
 }
 
+/** Refine: the best fit is found, then the estimate moves most of the way there (not all of it), so the student still did the main work. */
+export function refineCalibration(t: CalTarget, est: Extrinsic, fov: number, share = 0.92): Extrinsic {
+  const fit = autoCalibrate(t, est, fov).e, mix = (a: number, b: number) => a + share * (b - a);
+  return { tx: mix(est.tx, fit.tx), ty: mix(est.ty, fit.ty), tz: mix(est.tz, fit.tz), yawDeg: mix(est.yawDeg, fit.yawDeg), pitchDeg: mix(est.pitchDeg, fit.pitchDeg), rollDeg: mix(est.rollDeg ?? 0, fit.rollDeg ?? 0) };
+}
+
 /** Error of the team's calibration against the hidden truth. */
 export function calibrationError(est: Extrinsic, fov: number, c: CameraUnit, scenarioSeed: number, index: number): { posCm: number; angDeg: number; fovPct: number } {
   const tr = trueExtrinsic(c, scenarioSeed, index);
-  return { posCm: 100 * Math.hypot(est.tx - tr.e.tx, est.ty - tr.e.ty, est.tz - tr.e.tz), angDeg: Math.hypot(est.yawDeg - tr.e.yawDeg, est.pitchDeg - tr.e.pitchDeg), fovPct: (100 * Math.abs(fov - tr.fov)) / tr.fov };
+  return { posCm: 100 * Math.hypot(est.tx - tr.e.tx, est.ty - tr.e.ty, est.tz - tr.e.tz), angDeg: Math.hypot(est.yawDeg - tr.e.yawDeg, est.pitchDeg - tr.e.pitchDeg, (est.rollDeg ?? 0) - (tr.e.rollDeg ?? 0)), fovPct: (100 * Math.abs(fov - tr.fov)) / tr.fov };
 }
 
 // ----------------------------------------------------------------------------- colour from cameras

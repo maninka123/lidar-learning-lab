@@ -5,7 +5,7 @@ import { usd } from './pricing';
 /** Plain-language feedback taken from the measured numbers of a run. Nothing here is generic: every sentence quotes what happened. */
 const pct = (v: number) => `${Math.round(v * 100)} %`;
 export function feedbackFor(r: RunResult): Record<TaskKey, string[]> {
-  const T = r.tasks, out: Record<TaskKey, string[]> = { twin: [], detect: [], colour: [], change: [], quality: [], safety: [], budget: [] };
+  const T = r.tasks, out: Record<TaskKey, string[]> = { completion: [], twin: [], detect: [], colour: [], change: [], quality: [], safety: [], budget: [] };
   const tw = T.twin; out.twin.push(`${pct(tw.coverage)} of the surface below 3 m is covered by your cloud (target 92 %). Median distance to the true surface: ${(tw.medianErr * 100).toFixed(1)} cm.`);
   if (r.registration) out.twin.push(`Registration: scans meet to ${(r.registration.rmse * 100).toFixed(1)} cm RMSE with ${pct(r.registration.overlap)} overlap${r.registration.rmse > 0.05 ? '. Try a smaller match distance or more iterations.' : '.'}`);
   if (Number.isFinite(tw.poseErrCm)) out.twin.push(`Scans agree with each other to ${tw.poseErrCm.toFixed(1)} cm and ${tw.poseErrDeg.toFixed(2)}°.`);

@@ -68,7 +68,7 @@ export function scoreDetection(refs: Target[], preds: DetObject[]): DetectionSco
   const smalls = refs.map((r, i) => (r.small ? i : -1)).filter((i) => i >= 0), smallFound = m.pairs.filter((x) => refs[x.ref].small).length;
   const byClass: DetectionScore['byClass'] = {}; for (const c of TWIN_CLASSES) byClass[c] = { ref: 0, found: 0 };
   refs.forEach((r) => byClass[r.cls].ref++); m.pairs.forEach((x) => { if (preds[x.pred].cls === refs[x.ref].cls) byClass[refs[x.ref].cls].found++; });
-  const score = 0.5 * q.f1 + 0.2 * correctRecall + 0.15 * lin(med, 0.4, 0.05) + 0.15 * lin(meanIoU, 0.1, 0.6);
+  const score = 0.6 * q.r + 0.2 * lin(med, 0.4, 0.05) + 0.2 * lin(meanIoU, 0.1, 0.6); // the share of the objects found, and how well the boxes sit on them
   return { score, precision: q.p, recall: q.r, f1: q.f1, classAcc, correctRecall, meanIoU, medianCentreErr: med, smallRecall: smalls.length ? smallFound / smalls.length : 0, refs: refs.length, preds: preds.length, tp, byClass, match: m };
 }
 
@@ -130,7 +130,7 @@ export function scoreSafety(truth: SafetyTruth[], got: SafetyFound[] | undefined
 }
 
 // ----------------------------------------------------------------------------- digital twin and data quality
-export interface TwinScore { /** reference surface points (z ≤ 3 m) that the twin does not cover, thinned for display */ missing?: Float32Array; score: number; coverage: number; medianErr: number; junk: number; poseErrCm: number; poseErrDeg: number; points: number; covScore: number; accScore: number; alignScore: number }
+export interface TwinScore { /** reference surface points (z ≤ 3 m) that the twin does not cover, thinned for display */ missing?: Float32Array; score: number; coverage: number; medianErr: number; junk: number; poseErrCm: number; poseErrDeg: number; /** the same error for each scan after the first, one entry per scan: which pair is off */ poseEach?: { cm: number; deg: number }[]; points: number; covScore: number; accScore: number; alignScore: number }
 const refCache = new Map<string, { samples: ReturnType<typeof sampleSurfaces>; tree: KDTree }>();
 /** The reference surface of a factory: evenly spread samples on every scannable face that a sensor inside the building could see. Built once per scenario. */
 export function referenceOf(f: Factory, count = 30000) {
@@ -154,8 +154,14 @@ export function poseError(est: Rigid[] | undefined, truth: Rigid[]): { cm: numbe
   return { cm: mean(c), deg: mean(d) };
 }
 
+/** The error of each scan on its own against the surveyed truth, relative to the first scan (entry k is scan k + 1): shows which pair is off. */
+export function poseErrorEach(est: Rigid[] | undefined, truth: Rigid[]): { cm: number; deg: number }[] {
+  if (!est || est.length !== truth.length || est.length < 2) return [];
+  return est.slice(1).map((_, i) => poseError([est[0], est[i + 1]], [truth[0], truth[i + 1]]));
+}
+
 export function scoreTwin(twin: PointCloud | undefined, f: Factory, poses: { est?: Rigid[]; truth: Rigid[] }): TwinScore {
-  const ref = referenceOf(f), pe = poseError(poses.est, poses.truth);
+  const ref = referenceOf(f), pe = poseError(poses.est, poses.truth), poseEach = poseErrorEach(poses.est, poses.truth);
   const empty: TwinScore = { score: 0, coverage: 0, medianErr: NaN, junk: 1, poseErrCm: pe.cm, poseErrDeg: pe.deg, points: 0, covScore: 0, accScore: 0, alignScore: 0 };
   if (!twin || twin.count < 10) return empty;
   const tree = new KDTree(twin.positions, twin.count), r2 = TWIN_RADIUS * TWIN_RADIUS;
@@ -166,7 +172,7 @@ export function scoreTwin(twin: PointCloud | undefined, f: Factory, poses: { est
   for (let i = 0; i < twin.count; i += step) { const e = distToSurface(f.scene, twin.positions[i * 3], twin.positions[i * 3 + 1], twin.positions[i * 3 + 2], 0.5); n++; if (e >= 0.3) { junk++; continue; } d.push(e); }
   const med = median(d), junkShare = n ? junk / n : 1, coverage = tot ? cov / tot : 0;
   const covScore = lin(coverage, 0.25, 0.92), accScore = (Number.isFinite(med) ? lin(med, 0.12, 0.02) : 0) * (1 - junkShare), alignScore = Number.isFinite(pe.cm) ? lin(pe.cm, 20, 2) : 0.5;
-  return { missing: Float32Array.from(missing), score: 0.55 * covScore + 0.25 * accScore + 0.2 * alignScore, coverage, medianErr: med, junk: junkShare, poseErrCm: pe.cm, poseErrDeg: pe.deg, points: twin.count, covScore, accScore, alignScore };
+  return { missing: Float32Array.from(missing), score: 0.55 * covScore + 0.25 * accScore + 0.2 * alignScore, coverage, medianErr: med, junk: junkShare, poseErrCm: pe.cm, poseErrDeg: pe.deg, poseEach, points: twin.count, covScore, accScore, alignScore };
 }
 
 export interface QualityScore { score: number; outlierRemoval: number; retention: number; smallRetention: number; rawOutliers: number; keptOutliers: number }
@@ -194,7 +200,7 @@ export interface Grade { total: number; perTask: { key: TaskKey; weight: number;
 
 /** Weighted total out of 100. Disabled tasks drop out and the rest are rescaled. Budget and efficiency are scaled by how well the system performed, so doing nothing cheaply earns nothing. */
 export function combine(scores: TaskScores, s: ChallengeSettings, costTotal: number, rays: number): Grade {
-  const core = TASK_KEYS.filter((k) => k !== 'budget' && s.enabled[k]);
+  const core = TASK_KEYS.filter((k) => k !== 'budget' && k !== 'completion' && s.enabled[k]);
   const wSum = core.reduce((a, k) => a + s.weights[k], 0), perf = wSum ? core.reduce((a, k) => a + s.weights[k] * (scores[k] ?? 0), 0) / wSum : 0;
   const used = s.budget > 0 ? Math.min(1, costTotal / s.budget) : 1, effort = lin(rays, 5e5, 5e6);
   const budget = Math.max(0, perf * (1 - 0.5 * used - 0.1 * effort));

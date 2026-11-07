@@ -1,6 +1,6 @@
 import { emptyProgress, invalidateProgress, MISSIONS, readyForFinal, type MissionProgress } from './missions';
 import { create } from 'zustand';
-import { TwinDesign, EMPTY_DESIGN, ChallengeSettings, DEFAULT_SETTINGS, LIDARS, CAMERAS, RES_TIERS, inspectionCamera, budgetFor } from './catalogue';
+import { TwinDesign, EMPTY_DESIGN, ChallengeSettings, DEFAULT_SETTINGS, LIDARS, CAMERAS, RES_TIERS, inspectionCamera, budgetFor, ALL_LIDARS } from './catalogue';
 import { Block, BLOCKS } from './pipeline';
 import type { RunResult, FinalResult } from './runner';
 
@@ -16,6 +16,8 @@ const KEY = 'lidar-lab-twin';
 
 export const initialSave = (): TwinSave => ({ version: 2, progress: emptyProgress(), team: '', members: [], settings: DEFAULT_SETTINGS, design: { ...EMPTY_DESIGN, cameras: [inspectionCamera()] }, pipeline: [], saved: [], attempts: [], finalSubmitted: null, stage: 1, student: { name: '', index: '' }, startedAt: Date.now(), sent: [] });
 
+/** Every LiDAR measures at its standard resolution: the choice of coarse or fine was removed, so an older save is brought back to standard. */
+export const standardRes = <D extends { lidars: { res: string }[] }>(d: D): D => (d.lidars.every((u) => u.res === 'standard') ? d : { ...d, lidars: d.lidars.map((u) => ({ ...u, res: 'standard' })) });
 export function migrateSave(value: unknown): TwinSave | null {
   if (!value || typeof value !== 'object') return null;
   const o = value as Partial<TwinSave> & { version?: number };
@@ -26,9 +28,11 @@ export function migrateSave(value: unknown): TwinSave | null {
   const base = initialSave();
   const raw = o.progress, unlocked = Math.max(0, Math.min(6, Math.floor(Number.isFinite(raw?.unlocked) ? raw!.unlocked : 0)));
   const progress: MissionProgress = raw ? { current: Math.max(0, Math.min(unlocked, Math.floor(Number.isFinite(raw.current) ? raw.current : 0))), unlocked, results: Array.from({ length: 7 }, (_, i) => Array.isArray(raw.results) && raw.results[i] && typeof raw.results[i]?.fingerprint === 'string' && Array.isArray(raw.results[i]?.metrics) && Array.isArray(raw.results[i]?.feedback) ? raw.results[i] : null), attempts: Array.from({ length: 7 }, (_, i) => Number.isFinite(raw.attempts?.[i]) ? Math.max(0, raw.attempts[i]) : 0) } : emptyProgress();
-  const settings = { ...DEFAULT_SETTINGS, ...o.settings, budgetVersion: 2 as const, budget: budgetFor(o.settings ?? {}), weights: { ...DEFAULT_SETTINGS.weights, ...o.settings?.weights }, enabled: { ...DEFAULT_SETTINGS.enabled, ...o.settings?.enabled } };
+  const settings = { ...DEFAULT_SETTINGS, ...o.settings, budgetVersion: 4 as const, budget: budgetFor(o.settings ?? {}), weights: { ...DEFAULT_SETTINGS.weights, ...o.settings?.weights }, enabled: { ...DEFAULT_SETTINGS.enabled, ...o.settings?.enabled } };
   // Legacy equipment, pipelines and attempts survive. Old stage visits do not count as measured mission passes.
-  const merged = { ...base, ...o, version: 2 as const, settings, progress, design: { ...EMPTY_DESIGN, ...o.design } };
+  const design = standardRes({ ...EMPTY_DESIGN, ...o.design });
+  design.cameras = design.cameras.map((c) => (c.pairedLidarId === null ? { ...c, pairedLidarId: ALL_LIDARS } : c)); // the clouds are registered into one: a camera that was waiting to be paired uses the combined cloud
+  const merged = { ...base, ...o, version: 2 as const, settings, progress, design };
   merged.progress = invalidateProgress(progress, { design: merged.design, pipeline: merged.pipeline, settings });
   merged.stage = (MISSIONS[progress.current].tools as readonly number[]).includes(o.stage ?? -1) ? o.stage! : MISSIONS[progress.current].tools[0];
   return merged;
@@ -50,6 +54,7 @@ export const useTwin = create<TwinState>((set) => ({
   set: (p) => set((cur) => {
     const next = { ...cur, ...p };
     if (p.progress && p.progress.current > cur.progress.unlocked) next.progress = { ...p.progress, current: cur.progress.current };
+    if (p.design) next.design = standardRes(p.design);
     if (p.design || p.pipeline || p.settings) {
       next.progress = invalidateProgress(next.progress, { design: next.design, pipeline: next.pipeline, settings: next.settings });
       next.practice = null; next.final = null; next.selectedStep = -1;

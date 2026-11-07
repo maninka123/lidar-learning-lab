@@ -12,6 +12,6 @@ export function sampleConfig(type: string) {
   const r=autoCalibrate(calibrationTarget(c, HW_SEED, i, []), nominalOf(c),cameraItem(c.item).fov); c.cal={est:r.e,fov:r.fov,done:true};return c;
  });
  const design: TwinDesign = { ...EMPTY_DESIGN, lidars, cameras: type==='poor'?[]:cameras, lights:[{id:'lamp',x:7,y:5,z:3}] };
- const pipeline = (['icp','crop','voxel','sor','ground','planes','euclid','classify','colour','diff','safety'] as BlockKind[]).filter(k=>type!=='poor'||!['colour','diff','safety'].includes(k)).map(k=>{const b=newBlock(k);if(k==='crop')b.params.zmax=3;if(k==='voxel')b.params.size=.06;if(k==='euclid'){b.params.radius=.24;b.params.min=10;}if(k==='classify')b.params.minpts=10;if(k==='diff'){b.params.thr=type === 'balanced' ? .45 : .3;b.params.min=type === 'balanced' ? 70 : 50;}if(k==='colour'){b.params.votes=2;b.params.share=50;}return b;});
+ const pipeline = (['icp','crop','voxel','sor','ground','planes','euclid','classify','colour','diff','safety'] as BlockKind[]).filter(k=>type!=='poor'||!['colour','diff','safety'].includes(k)).map(k=>{const b=newBlock(k);if(k==='crop')b.params.zmax=3;if(k==='voxel')b.params.size=.06;if(k==='euclid'){b.params.radius=type==='balanced'?.18:.24;b.params.min=type==='balanced'?8:10;}if(k==='classify')b.params.minpts=type==='balanced'?8:10;if(k==='diff'){b.params.thr=type === 'balanced' ? .35 : .3;b.params.min=type === 'balanced' || type === 'high' ? 70 : 50;}if(k==='colour'){b.params.votes=2;b.params.share=50;}return b;});
  return { design, pipeline, settings:{...DEFAULT_SETTINGS,budget:7000} };
 }

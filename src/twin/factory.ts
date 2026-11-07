@@ -150,6 +150,10 @@ export function buildFactory(seed: number, epoch: 'A' | 'B'): Factory {
     for (const a of ADD_SLOTS) if (a.always || a.id === optional) { added.push(a); changes.push({ kind: 'added', id: a.id, cls: a.cls, centre: [a.x, a.y, 0] }); }
     const s = pos.get(SMALL_SHIFT.id)!; changes.push({ kind: 'moved', id: SMALL_SHIFT.id, cls: 'small', centre: [s.x + SMALL_SHIFT.dx, s.y + SMALL_SHIFT.dy, 0], from: [s.x, s.y, 0] });
     pos.set(SMALL_SHIFT.id, { ...s, x: s.x + SMALL_SHIFT.dx, y: s.y + SMALL_SHIFT.dy });
+    // two inspection labels are a different colour at Time B (a container was relabelled). It is geometry-neutral, so the change detection scoring does not see it; a camera does. Drawn last so nothing above changes.
+    const COLS: LabelColour[] = ['red', 'green', 'yellow'], bay = [...labelOf.keys()].filter((id) => id.startsWith('container-i') && !removed.has(id)).sort();
+    for (let i = bay.length - 1; i > 0; i--) { const j = rngChange.int(i + 1); [bay[i], bay[j]] = [bay[j], bay[i]]; }
+    for (const id of bay.slice(0, 2)) { const old = labelOf.get(id)!, at = COLS.indexOf(old); labelOf.set(id, COLS[(at + 1 + rngChange.int(2)) % 3]); }
   }
 
   const defs: Def[] = structure();

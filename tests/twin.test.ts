@@ -3,7 +3,7 @@ import { buildFactory, ZONES, SAFETY_ZONES, illuminationAt, distToSurface, TWIN_
 import { LIDARS, CAMERAS, DEFAULT_SETTINGS, EMPTY_DESIGN, TwinDesign, LidarUnit, CameraUnit, costOf, sensorFor, lidarItem, RES_TIERS, ChallengeSettings } from '../src/twin/catalogue';
 import { acquireSurvey, routePoses, raysFor } from '../src/twin/acquire';
 import { evaluate } from '../src/occlusion/coverage';
-import { makeSampler, renderPreview, calibrationTarget, residuals, rmsOf, autoCalibrate, calibrationError, trueExtrinsic, nominalOf, colourPoints, labelVote, sensitivity } from '../src/twin/camera';
+import { makeSampler, renderPreview, calibrationTarget, residuals, rmsOf, autoCalibrate, refineCalibration, CAL_MAX_PX, calibrationError, trueExtrinsic, nominalOf, colourPoints, labelVote, sensitivity } from '../src/twin/camera';
 import { newBlock, checkPipeline, runPipeline, Block, classifyShape, PHASES, BLOCKS, phaseIndex, insertBlock, parallelGroups, canRunParallel, BlockKind } from '../src/twin/pipeline';
 import { registerScans, DEFAULT_REG } from '../src/twin/register';
 import { assign, iou3, matchObjects, scoreDetection, scoreColour, scoreChange, scoreSafety, safetyTruth, lin, combine, poseError, referenceOf } from '../src/twin/grade';
@@ -48,7 +48,7 @@ describe('equipment shop and budget', () => {
 
 describe('fixed units', () => {
   const f = buildFactory(11, 'A');
-  it('the default budget is 1400 internal credits ($7,000)', () => { expect(DEFAULT_SETTINGS.budget).toBe(1400); });
+  it('the default budget is 1600 internal credits ($8,000)', () => { expect(DEFAULT_SETTINGS.budget).toBe(1600); });
   it('the same model can be bought twice, each unit costs and scans on its own', () => {
     const one = lidar('rot32', -6, -0.3), two = lidar('rot32', 6, -0.3);
     const a = costOf(design({ lidars: [one] }), DEFAULT_SETTINGS), b = costOf(design({ lidars: [one, two] }), DEFAULT_SETTINGS);
@@ -156,6 +156,13 @@ describe('cameras, lighting and calibration', () => {
     expect(ll).toBeGreaterThan(1.3 * dark); expect(lamp).toBeGreaterThan(1.3 * dark);
     expect(sensitivity(cam('cam-mid', 0, 0, 1, 0, true)).gain).toBeGreaterThan(sensitivity(cam('cam-mid', 0, 0, 1, 0)).gain);
   });
+  it('calibration has six numbers to set (roll included); refining corrects most of what is left, and it passes below 3 px', () => {
+    const c = cam('cam-mid', -9, -4, 1.8, 0), t = calibrationTarget(c, HW_SEED, 0, []), e = c.cal.est;
+    const rolled = rmsOf(residuals(t, { ...e, rollDeg: 4 }, c.cal.fov)), flat = rmsOf(residuals(t, e, c.cal.fov)); expect(Math.abs(rolled - flat)).toBeGreaterThan(0.5); // roll moves the markers
+    const fit = autoCalibrate(t, e, c.cal.fov).e, almost = { ...fit, tx: fit.tx + 0.05, yawDeg: fit.yawDeg + 0.3, rollDeg: (fit.rollDeg ?? 0) + 0.4 };
+    const before = rmsOf(residuals(t, almost, c.cal.fov)), refined = refineCalibration(t, almost, c.cal.fov), after = rmsOf(residuals(t, refined, c.cal.fov));
+    expect(after).toBeLessThan(before); expect(CAL_MAX_PX).toBe(3);
+  });
   it('a calibration board is seen with pixel noise; the nominal pose has real reprojection error; automatic calibration removes it', () => {
     const c = cam('cam-mid', -9, -4, 1.8, 0), t = calibrationTarget(c, HW_SEED, 0, []);
     expect(t.X.length).toBeGreaterThan(15);
@@ -202,6 +209,18 @@ describe('pipeline blocks', () => {
     const c = out.A.cloud!; expect(c.instances).toBeDefined(); const total = s.hidden.truth.obj.length; for (let i = 0; i < c.count; i += 53) expect(c.instances![i]).toBeLessThan(total);
     expect(out.steps[3].error).toMatch(/camera/); expect(c.count).toBeLessThan(s.visible.stats.points);
   });
+  it('filters report the points they removed, so they can be shown in red', () => {
+    const f = buildFactory(11, 'A'), s = acquireSurvey(f, design({ lidars: [lidar('rot32', -5, -0.3)] }), 11);
+    const out = runPipeline(pipe(['icp', 'crop', 'sor', 'voxel']), { A: s.visible, camerasA: [] });
+    for (const i of [1, 2]) { const st = out.steps[i]; if (st.after < st.before) { expect(st.removed).toBeDefined(); expect(st.removed!.count).toBe(st.before - st.after); } }
+    expect(out.steps.some((x) => x.removed)).toBe(true); expect(out.steps[3].removed).toBeUndefined(); expect(out.steps[0].removed).toBeUndefined();
+  }, 60000);
+  it('ground removal takes out the floor, and naming blocks report coloured clusters and boxes', () => {
+    const f = buildFactory(11, 'A'), s = acquireSurvey(f, design({ lidars: [lidar('rot32', -5, -0.3)] }), 11);
+    const out = runPipeline(pipe(['icp', 'ground', 'planes', 'euclid', 'classify']), { A: s.visible, camerasA: [] });
+    const g = out.steps[1]; expect(g.note).not.toMatch(/No floor/); expect(g.after).toBeLessThan(g.before); expect(g.removed?.count).toBe(g.before - g.after);
+    expect(out.steps[3].segPreview?.colors).toBeDefined(); expect(out.steps[4].objects?.length).toBeGreaterThan(0); expect(out.steps[4].objects![0]).not.toHaveProperty('idx');
+  }, 60000);
   it('over-filtering removes small objects that were measured', () => {
     const f = buildFactory(11, 'A'), s = acquireSurvey(f, design({ lidars: [lidar('rot128', -1, -1.5, 'standard', 1.8)] }), 11);
     const count = (size: number) => { const out = runPipeline(pipe(['merge', 'voxel'], { voxel: { size } }), { A: s.visible, camerasA: [] }); return out.A.cloud!.count; };
@@ -240,7 +259,7 @@ describe('registration and the pipeline builder', () => {
     const all = PHASES.flatMap((p) => p.kinds).sort(), kinds = (Object.keys(BLOCKS) as BlockKind[]).sort(); expect(all).toEqual(kinds);
     let p: Block[] = []; for (const k of ['classify', 'crop', 'icp', 'euclid'] as BlockKind[]) p = insertBlock(p, newBlock(k));
     expect(p.map((b) => b.kind)).toEqual(['icp', 'crop', 'euclid', 'classify'].map((k) => k)); // sorted by phase
-    expect(phaseIndex('icp')).toBe(0); expect(phaseIndex('safety')).toBe(4);
+    expect(phaseIndex('icp')).toBe(0); expect(phaseIndex('safety')).toBe(6);
   });
   it('blocks set to parallel form a side-by-side group, and their results are joined', () => {
     const p = pipe(['icp', 'crop', 'sor', 'ror', 'euclid']); p[2].parallel = true; p[3].parallel = true;
@@ -294,7 +313,7 @@ describe('grading', () => {
   });
   it('scores are bounded and the grade is rescaled when tasks are switched off', () => {
     expect(lin(5, 0, 10)).toBe(0.5); expect(lin(-1, 0, 10)).toBe(0); expect(lin(99, 0, 10)).toBe(1); expect(lin(0.02, 0.12, 0.02)).toBe(1);
-    const all = { twin: 1, detect: 1, colour: 1, change: 1, quality: 1, safety: 1 }, g = combine(all, DEFAULT_SETTINGS, 0, 0); expect(g.total).toBeCloseTo(100, 6);
+    const all = { completion: 1, twin: 1, detect: 1, colour: 1, change: 1, quality: 1, safety: 1 }, g = combine(all, DEFAULT_SETTINGS, 0, 0); expect(g.total).toBeCloseTo(100, 6);
     const noColour: ChallengeSettings = { ...DEFAULT_SETTINGS, enabled: { ...DEFAULT_SETTINGS.enabled, colour: false } }; expect(combine(all, noColour, 0, 0).total).toBeCloseTo(100, 6);
     const w2 = { ...DEFAULT_SETTINGS, weights: { ...DEFAULT_SETTINGS.weights, twin: 40 } }; expect(combine({ ...all, twin: 0 }, w2, 0, 0).perTask.find((t) => t.key === 'twin')!.points).toBe(0);
     expect(combine({}, DEFAULT_SETTINGS, 0, 0).total).toBe(0); // doing nothing cheaply earns nothing, not even the efficiency points
@@ -367,4 +386,85 @@ describe('persistent camera associations and hired survey limits',()=>{
   const d=design({lidars:[lidar('tls-hire',-6,-1),lidar('tls-hire',6,-1),lidar('tls-hire',6,4)]});
   expect(costOf(d,{...DEFAULT_SETTINGS,budget:99999}).errors.join()).toContain('two hired TLS');
  });
+});
+
+describe('resolution is always standard', () => {
+  it('an older save with coarse or fine scanners comes back at standard', async () => {
+    const { migrateSave, initialSave, standardRes } = await import('../src/twin/store');
+    const save = initialSave(); save.design = { ...save.design, lidars: [lidar('rot32', 0, 0, 'fine'), lidar('rot16', 3, 0, 'coarse')] };
+    expect(migrateSave(JSON.parse(JSON.stringify(save)))!.design.lidars.map((u) => u.res)).toEqual(['standard', 'standard']);
+    const d = standardRes(save.design); expect(d.lidars.every((u) => u.res === 'standard')).toBe(true);
+  });
+});
+
+describe('each scanner on its own', () => {
+  it('per-scanner density adds up to the whole, and no scanner reaches more than all of them together', async () => {
+    const { runScenario } = await import('../src/twin/runner');
+    const { sampleConfig } = await import('./helpers/twinStrategies');
+    const cfg = sampleConfig('low'), r = runScenario({ ...cfg, settings: { ...cfg.settings, budget: 99999 } }, 11), c = r.coverage!;
+    expect(c.perScanner).toHaveLength(cfg.design.lidars.length);
+    for (const zone of ['production', 'inspection', 'loading']) {
+      expect(c.perScanner.reduce((a, s) => a + s.density[zone], 0)).toBeCloseTo(c.zoneDensity[zone], 6);
+      for (const s of c.perScanner) expect(s.coverage[zone]).toBeLessThanOrEqual(c.zones[zone] + 1e-9);
+    }
+  }, 120000);
+});
+
+describe('registration settings belong to each scan', () => {
+  it('a scan uses its own settings and the scans before it are untouched', async () => {
+    const { buildFactory } = await import('../src/twin/factory');
+    const { acquireSurvey } = await import('../src/twin/acquire');
+    const { registerScans, DEFAULT_REG } = await import('../src/twin/register');
+    const { sampleConfig } = await import('./helpers/twinStrategies');
+    const sv = acquireSurvey(buildFactory(11, 'A'), sampleConfig('balanced').design, 11), scans = sv.visible.scans;
+    const base = registerScans(scans, DEFAULT_REG), tweaked = registerScans(scans, { ...DEFAULT_REG, perScan: { 3: { method: 0, trim: 20, dist: 0.15 } } });
+    expect(tweaked.report.scans[0].rmseAfter).toBeCloseTo(base.report.scans[0].rmseAfter, 9);   // scan 1: same settings, same result
+    expect(tweaked.report.scans[1].rmseAfter).toBeCloseTo(base.report.scans[1].rmseAfter, 9);   // scan 2: same
+    expect(tweaked.report.scans[2].rmseAfter).not.toBeCloseTo(base.report.scans[2].rmseAfter, 6); // scan 3: its own settings
+    expect(registerScans(scans, { ...DEFAULT_REG, perScan: {} }).report.rmse).toBeCloseTo(base.report.rmse, 9);
+  }, 120000);
+  it('the graded pipeline uses the same per-scan settings as the alignment panel', async () => {
+    const { runScenario } = await import('../src/twin/runner');
+    const { newBlock } = await import('../src/twin/pipeline');
+    const { sampleConfig } = await import('./helpers/twinStrategies');
+    const cfg = sampleConfig('balanced'), plain = newBlock('icp'), tuned = { ...newBlock('icp'), perScan: { '3': { method: 0, trim: 20, dist: 0.15 } } };
+    const a = runScenario({ ...cfg, settings: { ...cfg.settings, budget: 99999 }, pipeline: [plain] }, 11), b = runScenario({ ...cfg, settings: { ...cfg.settings, budget: 99999 }, pipeline: [tuned] }, 11);
+    expect(b.tasks.twin.poseErrCm).not.toBeCloseTo(a.tasks.twin.poseErrCm, 6);
+  }, 120000);
+});
+
+describe('the error of each pair', () => {
+  it('the per-scan errors average to the number the mission is judged on', async () => {
+    const { runScenario } = await import('../src/twin/runner');
+    const { newBlock } = await import('../src/twin/pipeline');
+    const { sampleConfig } = await import('./helpers/twinStrategies');
+    const cfg = sampleConfig('balanced'), r = runScenario({ ...cfg, settings: { ...cfg.settings, budget: 99999 }, pipeline: [newBlock('icp')] }, 11), t = r.tasks.twin;
+    expect(t.poseEach).toHaveLength(cfg.design.lidars.length - 1);
+    expect(t.poseEach!.reduce((a, e) => a + e.cm, 0) / t.poseEach!.length).toBeCloseTo(t.poseErrCm, 9);
+    expect(t.poseEach!.reduce((a, e) => a + e.deg, 0) / t.poseEach!.length).toBeCloseTo(t.poseErrDeg, 9);
+    expect(r.registration!.scans).toHaveLength(t.poseEach!.length);                  // one row of overlap and acceptance per pair, to go with it
+  }, 120000);
+});
+
+describe('one pipeline: the same cloud passes from mission to mission', () => {
+  it('each mission runs the blocks of the earlier missions first, in order', async () => {
+    const { pipelineForMission } = await import('../src/twin/missions');
+    const { newBlock } = await import('../src/twin/pipeline');
+    const all = (['icp', 'voxel', 'sor', 'ground', 'euclid', 'classify', 'colour'] as const).map((k) => newBlock(k));
+    const kinds = (m: number) => pipelineForMission(all, m).map((b) => b.kind);
+    expect(kinds(1)).toEqual(['icp']);                                                  // alignment
+    expect(kinds(2)).toEqual(['icp', 'voxel', 'sor']);                                  // cleaning starts from the aligned map
+    expect(kinds(3)).toEqual(['icp', 'voxel', 'sor', 'ground', 'euclid', 'classify']);  // detection starts from the cleaned map
+  });
+  it('the output of each block is the input of the next', async () => {
+    const { runScenario } = await import('../src/twin/runner');
+    const { pipelineForMission } = await import('../src/twin/missions');
+    const { newBlock } = await import('../src/twin/pipeline');
+    const { sampleConfig } = await import('./helpers/twinStrategies');
+    const base = sampleConfig('balanced'), aligned = { ...newBlock('icp'), perScan: { '1': { method: 1, dist: 0.5, iters: 40, trim: 60, voxel: 0.1 } } };
+    const blocks = [aligned, newBlock('voxel'), newBlock('sor'), newBlock('ground'), newBlock('euclid'), newBlock('classify')];
+    const r = runScenario({ ...base, settings: { ...base.settings, budget: 99999 }, pipeline: pipelineForMission(blocks, 3) }, 11);
+    expect(r.steps.map((s) => s.kind).slice(0, 3)).toEqual(['icp', 'voxel', 'sor']);    // the aligned map is what the cleaning starts from
+    for (let i = 0; i + 1 < r.steps.length; i++) if (!r.steps[i].error && !r.steps[i + 1].error && !r.steps[i + 1].bypassed) expect(r.steps[i + 1].before).toBe(r.steps[i].after);
+  }, 120000);
 });

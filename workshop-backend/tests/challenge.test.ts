@@ -20,9 +20,9 @@ const status = (ctx: ReturnType<typeof setup>) => publicHandler(ctx.deps)(mk('GE
 describe('challenge score submissions', () => {
   it('corrects legacy default budgets and preserves explicitly saved instructor budgets', async () => {
     const ctx = setup();
-    for (const budget of [3000, 7000]) {
+    for (const budget of [3000, 7000, 1400, 1500]) {
       await ctx.store.set(CH.settings, JSON.stringify({ ...DEFAULT_SETTINGS, budgetVersion: undefined, budget }));
-      expect((await loadSettings(ctx.store)).budget).toBe(1400);
+      expect((await loadSettings(ctx.store)).budget).toBe(1600);
       await saveSettings(ctx.store, { ...DEFAULT_SETTINGS, budget });
       expect((await loadSettings(ctx.store)).budget).toBe(budget);
     }
@@ -133,8 +133,8 @@ describe('challenge score submissions', () => {
   it('grading settings: set in the dashboard, read by the student app, validated, and unchanged by students', async () => {
     const ctx = setup(); const a = admin(ctx); await a.login();
     const def = (await status(ctx)).body as { settings: { budget: number; weights: Record<string, number>; maxSubmissions: number } };
-    expect(def.settings.budget).toBe(1400); expect(def.settings.maxSubmissions).toBe(0); expect(Object.values(def.settings.weights).reduce((x, y) => x + y, 0)).toBe(100);
-    const next = { budgetVersion: 2 as const, budget: 9000, priceScale: 1.5, maxSubmissions: 3, weights: { twin: 30, detect: 30, colour: 0, change: 20, quality: 10, safety: 10, budget: 0 }, enabled: { twin: true, detect: true, colour: false, change: true, quality: true, safety: true, budget: false } };
+    expect(def.settings.budget).toBe(1600); expect(def.settings.maxSubmissions).toBe(0); expect(Object.values(def.settings.weights).reduce((x, y) => x + y, 0)).toBe(100);
+    const next = { budgetVersion: 4 as const, budget: 9000, priceScale: 1.5, maxSubmissions: 3, weights: { completion: 40, twin: 30, detect: 30, colour: 0, change: 20, quality: 10, safety: 10, budget: 0 }, enabled: { completion: true, twin: true, detect: true, colour: false, change: true, quality: true, safety: true, budget: false } };
     expect((await a.call('POST', 'challenge-settings', next)).status).toBe(200);
     const pub = ((await status(ctx)).body as { settings: typeof next }).settings; expect(pub).toEqual(next);
     expect(((await a.call('GET', 'challenge')).body as { settings: typeof next }).settings).toEqual(next);
@@ -178,7 +178,7 @@ describe('score consistency checks', () => {
     expect(scoreFlags({ ...good, total: 100 }, DEFAULT_SETTINGS).join(' ')).toMatch(/not the sum/);
     expect(scoreFlags({ ...good, cost: DEFAULT_SETTINGS.budget + 1000 }, DEFAULT_SETTINGS).join(' ')).toMatch(/above the budget/);
     expect(scoreFlags({ ...good, budget: 99999 }, DEFAULT_SETTINGS).join(' ')).toMatch(/budget differs/);
-    expect(scoreFlags({ ...good, points: { ...points, twin: 20 }, total: total - points.twin + 20 }, DEFAULT_SETTINGS).join(' ')).toMatch(/do not match/);
+    expect(scoreFlags({ ...good, points: { ...points, twin: 7 }, total: total - points.twin + 7 }, DEFAULT_SETTINGS).join(' ')).toMatch(/do not match/);
     expect(scoreFlags({ ...good, missions: good.missions.map((m, i) => (i === 2 ? { ...m, status: 'needs-improvement' } : m)) }, DEFAULT_SETTINGS).join(' ')).toMatch(/before missions/);
   });
 });

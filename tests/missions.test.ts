@@ -1,27 +1,43 @@
 import { describe, it, expect } from 'vitest';
 import { DEFAULT_SETTINGS, EMPTY_DESIGN } from '../src/twin/catalogue';
-import { pipelineForMission, emptyProgress, recordMission, invalidateProgress, missionFingerprint, currentMissionMetrics, currentPass, readyForFinal, type MissionResult } from '../src/twin/missions';
+import { pipelineForMission, emptyProgress, recordMission, invalidateProgress, missionFingerprint, currentMissionMetrics, currentPass, readyForFinal, evaluateMission, type MissionResult } from '../src/twin/missions';
 import { initialSave, parseSave, snapshot, useTwin } from '../src/twin/store';
 import { newBlock } from '../src/twin/pipeline';
+import { runScenario } from '../src/twin/runner';
+import { sampleConfig } from './helpers/twinStrategies';
 import { usd } from '../src/twin/pricing';
 const cfg = { design: { ...EMPTY_DESIGN, lidars: [{id:'l1',item:'rot32',res:'standard' as const,x:0,y:0,z:1.8,yaw:0,pitch:0}] }, pipeline: ['icp','voxel','euclid','classify','colour','diff','safety'].map(k=>newBlock(k as never)), settings:DEFAULT_SETTINGS };
 const pass = (mission: number): MissionResult => ({at:1,fingerprint:missionFingerprint(cfg,mission),level:'passed',score:80,metrics:[],feedback:[]});
 const completed = () => {let p=emptyProgress();for(let i=0;i<6;i++)p=recordMission(p,i,pass(i));return p;};
 describe('engineering mission progression',()=>{
+ it('a task 4 result saved with the earlier detection scoring is dropped so it is measured again',()=>{
+  const cfg={design:EMPTY_DESIGN,pipeline:[],settings:DEFAULT_SETTINGS},old:MissionResult={at:1,fingerprint:missionFingerprint(cfg,3),level:'needs-improvement',score:10,metrics:[{label:'Detection F1',value:49,target:55,unit:'%'},{label:'Small-object recall',value:14,target:25,unit:'%'}],feedback:[]};
+  const p=emptyProgress();p.results[3]=old;p.results[1]={...old,metrics:[{label:'Detection F1',value:1,target:2,unit:'%'}]};
+  const out=invalidateProgress(p,cfg);expect(out.results[3]).toBeNull();expect(out.results[1]).not.toBeNull();
+ });
+
+ it('object detection is shown as not measured, not 0%, until clustering and naming blocks are in the pipeline',()=>{
+  const cfg=sampleConfig('low'),keep=(kinds:string[])=>({...cfg,pipeline:cfg.pipeline.filter(b=>kinds.includes(b.kind))});
+  const bare=keep(['icp','ground','planes']),a=evaluateMission(3,runScenario(bare,11),bare);
+  expect(a.metrics.every(m=>Number.isNaN(m.value))).toBe(true);expect(a.level).toBe('needs-improvement');expect(a.feedback[0]).toMatch(/add a clustering block/i);
+  const half=keep(['icp','ground','planes','euclid']),b=evaluateMission(3,runScenario(half,11),half);expect(b.feedback[0]).toMatch(/Classify/);
+  const full=keep(['icp','ground','planes','euclid','classify']),c=evaluateMission(3,runScenario(full,11),full);expect(c.metrics.every(m=>Number.isFinite(m.value)&&m.value>0)).toBe(true);
+ },120000);
+
  it('displays the current budget and equipment cost instead of financial values from an old test',()=>{
   const saved:MissionResult={...pass(0),stale:true,metrics:[{label:'Coverage',value:61.9,target:70,unit:'%'},{label:'Equipment cost',value:2480,target:3000,unit:'credits',lower:true}]};
-  for(const budget of [1400,1000]){
+  for(const budget of [1600,1000]){
    const metrics=currentMissionMetrics(saved,200,budget);
    expect(metrics[0]).toEqual(saved.metrics[0]);expect(metrics[1]).toMatchObject({value:200,target:budget});
   }
   expect(saved.metrics[1]).toMatchObject({value:2480,target:3000});
  });
- it('shows a $7,000 default and migrates old defaults without overwriting new custom budgets',()=>{
-  expect(usd(initialSave().settings.budget)).toBe('$7,000');
-  for(const budget of [3000,7000]){
+ it('shows a $8,000 default and migrates old defaults without overwriting new custom budgets',()=>{
+  expect(usd(initialSave().settings.budget)).toBe('$8,000');
+  for(const budget of [3000,7000,1400,1500]){
    const save=initialSave();save.settings={...save.settings,budget,budgetVersion:undefined};
-   expect(usd(parseSave(JSON.stringify(save))!.settings.budget)).toBe('$7,000');
-   save.settings.budgetVersion=2;
+   expect(usd(parseSave(JSON.stringify(save))!.settings.budget)).toBe('$8,000');
+   save.settings.budgetVersion=4;
    expect(parseSave(JSON.stringify(save))!.settings.budget).toBe(budget);
   }
  });

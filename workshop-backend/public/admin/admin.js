@@ -224,9 +224,9 @@ boot();
 
 // ---- Challenge scores: what students sent from the Industrial Digital Twin Challenge
 let ch = { subs: [], labels: {}, accept: { accepting: false, until: null }, settings: null }, chUnit = 'unlimited';
-const TASK_NAMES = { twin: 'Digital twin', detect: 'Object detection', colour: 'Colour-coded objects', change: 'Change detection', quality: 'Noise handling', safety: 'Safety and clearance', budget: 'Budget and efficiency' };
-const DEFAULT_SET = { budgetVersion: 2, budget: 1400, priceScale: 1, maxSubmissions: 0, weights: { twin: 20, detect: 20, colour: 10, change: 20, quality: 10, safety: 10, budget: 10 }, enabled: { twin: true, detect: true, colour: true, change: true, quality: true, safety: true, budget: true } };
-const TASK_SHORT = { twin: 'Twin', detect: 'Objects', colour: 'Colour', change: 'Change', quality: 'Noise', safety: 'Safety', budget: 'Budget' };
+const TASK_NAMES = { completion: 'Completing all the missions', twin: 'Digital twin', detect: 'Object detection', colour: 'Colour labels read', change: 'Changes found', quality: 'Noise handling', safety: 'Safety zones flagged', budget: 'Budget and efficiency' };
+const DEFAULT_SET = { budgetVersion: 4, budget: 1600, priceScale: 1, maxSubmissions: 0, weights: { completion: 60, twin: 10, detect: 10, colour: 4, change: 4, quality: 8, safety: 2, budget: 2 }, enabled: { completion: true, twin: true, detect: true, colour: true, change: true, quality: true, safety: true, budget: true } };
+const TASK_SHORT = { completion: 'Finished', twin: 'Twin', detect: 'Objects', colour: 'Colour', change: 'Change', quality: 'Noise', safety: 'Safety', budget: 'Budget' };
 const openRows = new Set();
 function setView(v) {
   document.querySelectorAll('[data-view]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.view === v)));
@@ -263,7 +263,7 @@ function readSettings() {
   const f = $('chSetForm'), weights = {}, enabled = {};
   document.querySelectorAll('[data-w]').forEach((i) => { weights[i.dataset.w] = Number(i.value); });
   document.querySelectorAll('[data-en]').forEach((i) => { enabled[i.dataset.en] = i.checked; });
-  return { budgetVersion: 2, budget: Number(f.budget.value) / 5, priceScale: Number(f.priceScale.value), maxSubmissions: Number(f.maxSubmissions.value), weights, enabled };
+  return { budgetVersion: 4, budget: Number(f.budget.value) / 5, priceScale: Number(f.priceScale.value), maxSubmissions: Number(f.maxSubmissions.value), weights, enabled };
 }
 function updateShares() {
   const s = readSettings(), total = Object.keys(TASK_NAMES).reduce((a, k) => a + (s.enabled[k] ? s.weights[k] || 0 : 0), 0);
@@ -275,7 +275,8 @@ $('chSetSave').addEventListener('click', () => run(async () => { const r = await
 $('chSetReset').addEventListener('click', () => { renderSettings(DEFAULT_SET); $('chSetMsg').textContent = 'Defaults loaded: press Save to keep them'; });
 function renderAccept() {
   const a = ch.accept, on = !!a.accepting, left = a.until ? a.until - (Date.now() + skew) : null;
-  $('chDot').className = 'dot ' + (on ? 'active' : 'off'); $('chStatus').textContent = on ? 'Accepting scores' : 'Closed';
+  $('chDot').className = 'dot ' + (on ? 'active' : 'off'); $('chStatus').textContent = on ? 'Accepting scores' : 'Not accepting';
+  document.querySelectorAll('#chMode button').forEach((b) => b.setAttribute('aria-pressed', String((b.dataset.mode === 'on') === on)));
   $('chOpenView').classList.toggle('hidden', !on); $('chClosedView').classList.toggle('hidden', on);
   $('chCountdown').textContent = !on ? '' : left === null ? 'Open until you stop it' : 'Closes in ' + fmtDuration(left) + ' (' + fmtSydney(a.until) + ')';
 }
@@ -286,8 +287,9 @@ $('chDur').addEventListener('click', (e) => {
   $('chLenBox').classList.toggle('hidden', chUnit === 'unlimited');
   if (chUnit !== 'unlimited') { $('chLenLabel').textContent = 'Open for (' + chUnit + ')'; $('chLen').value = chUnit === 'hours' ? 3 : 1; }
 });
-$('chStart').addEventListener('click', () => run(async () => { const n = Number($('chLen').value), mins = chUnit === 'hours' ? n * 60 : chUnit === 'days' ? n * 1440 : null; if (mins !== null && !(n >= 1)) throw new Error('Enter how many ' + chUnit + '.'); await api('POST', 'challenge-start', mins === null ? {} : { durationMinutes: Math.round(mins) }); await loadChallenge(); toast(chUnit === 'unlimited' ? 'Now accepting scores until you stop it' : 'Now accepting scores'); }));
-$('chStop').addEventListener('click', () => { if (confirm('Stop accepting scores? Students can still use the challenge and see their grade, but sending will be refused until you start it again.')) run(async () => { await api('POST', 'challenge-stop', {}); await loadChallenge(); toast('Stopped: no more scores are accepted'); }); });
+const startAccepting = () => run(async () => { const n = Number($('chLen').value), mins = chUnit === 'hours' ? n * 60 : chUnit === 'days' ? n * 1440 : null; if (mins !== null && !(n >= 1)) throw new Error('Enter how many ' + chUnit + '.'); await api('POST', 'challenge-start', mins === null ? {} : { durationMinutes: Math.round(mins) }); await loadChallenge(); toast(chUnit === 'unlimited' ? 'Now accepting scores until you stop it' : 'Now accepting scores'); }));
+const stopAccepting = () => { if (confirm('Stop accepting scores? Students can still use the challenge and see their grade, but sending will be refused until you start it again.')) run(async () => { await api('POST', 'challenge-stop', {}); await loadChallenge(); toast('Stopped: no more scores are accepted'); }); };
+$('chMode').addEventListener('click', (e) => { const b = e.target.closest('[data-mode]'); if (!b) return; const on = !!ch.accept.accepting; if (b.dataset.mode === 'on' && !on) startAccepting(); else if (b.dataset.mode === 'off' && on) stopAccepting(); });
 function renderChallenge() {
   renderAccept();
   const all = ch.subs, students = new Set(all.map((s) => s.index.toLowerCase())), sh = sharing();

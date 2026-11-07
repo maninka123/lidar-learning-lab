@@ -103,12 +103,13 @@
   <section id="chView" class="hidden stack" aria-label="Challenge scores">
     <section class="card" id="chAccept">
       <div class="card-head"><div class="status"><span class="dot off" id="chDot"></span><div><span class="kicker">Receiving scores</span><h2 id="chStatus">Closed</h2></div></div></div>
-      <p class="muted" id="chAcceptText">Students can always use the challenge and see their grade. They can only <b>send</b> a score while this is open.</p>
-      <div id="chOpenView" class="hidden stack"><div class="big" id="chCountdown">Open</div><div class="row"><button id="chStop" class="btn danger">Stop accepting scores</button></div></div>
+      <div class="seg" role="group" aria-label="Accept submissions" id="chMode"><button type="button" data-mode="on" aria-pressed="false">Accept submissions</button><button type="button" data-mode="off" aria-pressed="true">Don’t accept</button></div>
+      <p class="muted" id="chAcceptText"><b>Accept submissions:</b> students see the <b>Send my score</b> section and can send their result to you. <b>Don’t accept:</b> that section is hidden from the student portal. Students can still do the challenge and see their grade.</p>
+      <div id="chOpenView" class="hidden stack"><div class="big" id="chCountdown">Open</div><p class="muted">Switch to “Don’t accept” above to stop.</p></div>
       <div id="chClosedView" class="stack">
         <div class="seg" role="group" aria-label="Open for" id="chDur"><button data-unit="unlimited" aria-pressed="true">Unlimited</button><button data-unit="hours" aria-pressed="false">Hours</button><button data-unit="days" aria-pressed="false">Days</button></div>
         <label id="chLenBox" class="hidden" style="max-width:220px"><span id="chLenLabel">Open for (hours)</span><input id="chLen" type="number" min="1" max="8760" step="1" value="3"></label>
-        <div class="row"><button id="chStart" class="btn primary">Start accepting scores</button></div>
+        <p class="muted">Choose for how long (or unlimited), then press “Accept submissions” above.</p>
       </div>
     </section>
     <section class="card" id="chSettings">

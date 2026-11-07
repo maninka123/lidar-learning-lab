@@ -1,7 +1,7 @@
 import { Vec3 } from '../core/math';
 
 /** Camera mounted on a LiDAR. Frame of the LiDAR: x forward, y left, z up. Angles in degrees; the camera is not rolled. */
-export interface Extrinsic { tx: number; ty: number; tz: number; yawDeg: number; pitchDeg: number }
+export interface Extrinsic { tx: number; ty: number; tz: number; yawDeg: number; pitchDeg: number; /** turn about the viewing direction; 0 when left out */ rollDeg?: number }
 export interface Rig { x: number; y: number; z: number; yaw: number }
 export interface CamPose { pos: Vec3; f: Vec3; r: Vec3; u: Vec3 }
 export interface Image { w: number; h: number; fovDeg: number; rgb: Uint8ClampedArray; depth: Float32Array; hitMask: Uint8Array }
@@ -16,7 +16,8 @@ export function cameraPose(rig: Rig, e: Extrinsic): CamPose {
   const ps = e.yawDeg * D, th = e.pitchDeg * D;
   const f = norm(rot([Math.cos(th) * Math.cos(ps), Math.cos(th) * Math.sin(ps), Math.sin(th)]));
   const pos = rot([e.tx, e.ty, e.tz]);
-  const r = norm(cross(f, [0, 0, 1])), u = cross(r, f);
+  const r0 = norm(cross(f, [0, 0, 1])), u0 = cross(r0, f), ro = (e.rollDeg ?? 0) * D, cr = Math.cos(ro), sr = Math.sin(ro);
+  const r: Vec3 = [r0[0] * cr + u0[0] * sr, r0[1] * cr + u0[1] * sr, r0[2] * cr + u0[2] * sr], u: Vec3 = [u0[0] * cr - r0[0] * sr, u0[1] * cr - r0[1] * sr, u0[2] * cr - r0[2] * sr];
   return { pos: [rig.x + pos[0], rig.y + pos[1], rig.z + pos[2]], f, r, u };
 }
 

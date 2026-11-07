@@ -15,19 +15,19 @@ export const STATUS_LABELS = ['Visible: the laser can reach it', 'Hidden: someth
 const col = (hex: string) => new THREE.Color(hex);
 
 /** The surface samples as coloured dots: the colour says what the scanner(s) can see there. */
-export function SamplePoints({ samples, colours, size = 4, onlySeenHidden }: { samples: SurfaceSamples; colours: Float32Array; size?: number; onlySeenHidden?: Uint8Array /* per-sample status: keep only the visible and hidden ones */ }) {
+export function SamplePoints({ samples, colours, size = 4, onlySeenHidden, maxZ, keep }: { samples: SurfaceSamples; colours: Float32Array; size?: number; /** drop every sample above this height (roof off) */ maxZ?: number; /** keep only the samples whose entry here is non-zero */ keep?: Uint8Array; onlySeenHidden?: Uint8Array /* per-sample status: keep only the visible and hidden ones */ }) {
   const geom = useMemo(() => {
     let pos = samples.pos, colr = colours;
-    if (onlySeenHidden) {
+    if (onlySeenHidden || maxZ !== undefined || keep) {
       const idx: number[] = [];
-      for (let i = 0; i < samples.count; i++) if (onlySeenHidden[i] <= 1) idx.push(i);
+      for (let i = 0; i < samples.count; i++) if ((!onlySeenHidden || onlySeenHidden[i] <= 1) && (!keep || keep[i]) && (maxZ === undefined || samples.pos[i * 3 + 2] <= maxZ)) idx.push(i);
       pos = new Float32Array(idx.length * 3); colr = new Float32Array(idx.length * 3);
       idx.forEach((i, k) => { for (let c = 0; c < 3; c++) { pos[k * 3 + c] = samples.pos[i * 3 + c]; colr[k * 3 + c] = colours[i * 3 + c]; } });
     }
     const g = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setAttribute('color', new THREE.BufferAttribute(colr, 3));
     return g;
-  }, [samples, colours, onlySeenHidden]);
+  }, [samples, colours, onlySeenHidden, maxZ, keep]);
   useEffect(() => () => geom.dispose(), [geom]);
   return <points geometry={geom} frustumCulled={false} raycast={() => null}><pointsMaterial vertexColors size={size} sizeAttenuation={false} /></points>;
 }
@@ -91,15 +91,15 @@ export function RaySweep({ origin, ends, hit, animate, color = '#0a84ff' }: { or
 }
 
 /** A scanner standing in the scene: marker, ring when selected, a line down to the floor. */
-export function ScannerMarkers({ scanners, selected, sensorOf, labels = true, onSelect }: { scanners: Scanner[]; selected: number | null; sensorOf: (s: Scanner) => SensorConfig; labels?: boolean; onSelect?: (index: number) => void }) {
+export function ScannerMarkers({ scanners, selected, sensorOf, labels = true, labelPrefix = 'Scanner', colours = STATION_COLOURS, colourLabels = false, onSelect }: { scanners: Scanner[]; selected: number | null; sensorOf: (s: Scanner) => SensorConfig; labels?: boolean; labelPrefix?: string; colours?: readonly string[]; colourLabels?: boolean; onSelect?: (index: number) => void }) {
   return (
     <>
       {scanners.map((s, i) => {
-        const c = STATION_COLOURS[i % 4], sel = s.id === selected;
+        const c = colours[i % colours.length] ?? STATION_COLOURS[i % STATION_COLOURS.length], sel = s.id === selected;
         return (
           <group key={s.id} onClick={onSelect ? (e) => { e.stopPropagation(); onSelect(i); } : undefined}>
             {onSelect && <mesh position={[s.x, s.y, s.z]}><sphereGeometry args={[0.3, 10, 8]} /><meshBasicMaterial transparent opacity={0} depthWrite={false} /></mesh>}
-            <SensorMarker x={s.x} y={s.y} z={s.z} yaw={s.yaw} pitch={-s.pitch} sensor={sensorOf(s)} color={c} label={labels ? `Scanner ${i + 1}` : undefined} showFov={false} scale={sel ? 1.5 : 1} />
+            <SensorMarker x={s.x} y={s.y} z={s.z} yaw={s.yaw} pitch={-s.pitch} sensor={sensorOf(s)} color={c} label={labels ? `${labelPrefix} ${i + 1}` : undefined} labelAccent={colourLabels ? c : undefined} showFov={false} scale={sel ? 1.5 : 1} />
             {sel && <Line points={Array.from({ length: 33 }, (_, k) => [s.x + 0.5 * Math.cos((k / 32) * 2 * Math.PI), s.y + 0.5 * Math.sin((k / 32) * 2 * Math.PI), 0.03] as Vec3)} color={c} lineWidth={3} />}
           </group>
         );

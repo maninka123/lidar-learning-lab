@@ -31,6 +31,17 @@ export function ToolbarSlider({ label, value, min, max, step = 1, onChange, form
   );
 }
 
+/** An on/off switch for toolbars: the label, a small switch, and the word On or Off, styled like the buttons beside it. */
+export function ToolbarSwitch({ label, checked, onChange, title, testId }: { label: string; checked: boolean; onChange: (v: boolean) => void; title?: string; testId?: string }) {
+  return (
+    <button type="button" role="switch" aria-checked={checked} className={`tb-switch${checked ? ' on' : ''}`} title={title} data-testid={testId} onClick={() => onChange(!checked)}>
+      <span className="tb-switch-label">{label}</span>
+      <span className="tb-switch-track" aria-hidden="true"><i /></span>
+      <span className="tb-switch-state">{checked ? 'On' : 'Off'}</span>
+    </button>
+  );
+}
+
 export function Slider({ label, value, min, max, step = 1, unit = '', onChange, format, hint, disabled }: {
   label: string; value: number; min: number; max: number; step?: number; unit?: string; onChange: (v: number) => void; format?: (v: number) => string; hint?: string; disabled?: boolean;
 }) {

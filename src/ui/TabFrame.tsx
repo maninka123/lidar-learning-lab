@@ -13,8 +13,12 @@ export interface TabFrameProps {
   stats?: { k: string; v: ReactNode; s?: string }[];
   overlays?: ReactNode;
   hideViewControls?: boolean;
+  hideGuideControls?: boolean;
   viewExtras?: ReactNode;
   statsRow?: boolean;
+  statsWide?: boolean;
+  /** room kept free on the left of the view toolbar */
+  viewInset?: number;
   hideExercise?: boolean;
   noPanelTabs?: boolean;
   topExtras?: ReactNode;
@@ -24,7 +28,7 @@ export interface TabFrameProps {
   noPanel?: boolean; // no side panel at all: the stage gets the whole width
 }
 
-export function TabFrame({ title, tab, viewport, controls, learn, stats, overlays, hideViewControls, simple, viewExtras, statsRow, hideExercise, noPanelTabs, topExtras, noEnv, envIds, noPanel }: TabFrameProps) {
+export function TabFrame({ title, tab, viewport, controls, learn, stats, overlays, hideViewControls, hideGuideControls, simple, viewExtras, statsRow, statsWide, viewInset, hideExercise, noPanelTabs, topExtras, noEnv, envIds, noPanel }: TabFrameProps) {
   const open = useLab((s) => s.rightOpen);
   const [pane, setPane] = useState<'controls' | 'learn'>('controls');
   return (
@@ -33,8 +37,8 @@ export function TabFrame({ title, tab, viewport, controls, learn, stats, overlay
       <div className="tab-body">
         <div className="stage" data-testid="stage">
           {viewport}
-          {!hideViewControls && <ViewControls simple={simple} extra={viewExtras} />}
-          {stats && <StatsCard items={stats} row={statsRow} />}
+          {!hideViewControls && <ViewControls simple={simple} extra={viewExtras} hideGuides={hideGuideControls} inset={viewInset} />}
+          {stats && <StatsCard items={stats} row={statsRow} wide={statsWide} />}
           {overlays}
         </div>
         {!noPanel && <aside className={`right glass ${open ? '' : 'closed'}`} aria-label="Experiment controls" data-testid="right-panel">

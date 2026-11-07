@@ -56,18 +56,18 @@ export const MOBILE_PLATFORM = { cost: 300 };
 export const INSTALL = { lidar: 20, camera: 8, light: 5 };
 export const LIMITS = { lidars: 6, cameras: 4, lights: 4 };
 
-export type TaskKey = 'twin' | 'detect' | 'colour' | 'change' | 'quality' | 'safety' | 'budget';
-export const TASK_KEYS: TaskKey[] = ['twin', 'detect', 'colour', 'change', 'quality', 'safety', 'budget'];
-export const TASK_NAMES: Record<TaskKey, string> = { twin: 'Digital twin', detect: 'Object detection', colour: 'Colour-coded objects', change: 'Change detection', quality: 'Noise handling', safety: 'Safety and clearance', budget: 'Budget and efficiency' };
-export interface ChallengeSettings { budgetVersion?: 2; budget: number; priceScale: number; maxSubmissions: number; weights: Record<TaskKey, number>; enabled: Record<TaskKey, boolean> }
+export type TaskKey = 'completion' | 'twin' | 'detect' | 'colour' | 'change' | 'quality' | 'safety' | 'budget';
+export const TASK_KEYS: TaskKey[] = ['completion', 'twin', 'detect', 'colour', 'change', 'quality', 'safety', 'budget'];
+export const TASK_NAMES: Record<TaskKey, string> = { completion: 'Completing all the missions', twin: 'Digital twin', detect: 'Object detection', colour: 'Colour labels read', change: 'Changes found', quality: 'Noise handling', safety: 'Safety zones flagged', budget: 'Budget and efficiency' };
+export interface ChallengeSettings { budgetVersion?: 4; budget: number; priceScale: number; maxSubmissions: number; weights: Record<TaskKey, number>; enabled: Record<TaskKey, boolean> }
 export const DEFAULT_SETTINGS: ChallengeSettings = {
-  budgetVersion: 2, budget: 1400, priceScale: 1, maxSubmissions: 0, // 0 = grade as many times as you like
-  weights: { twin: 20, detect: 20, colour: 10, change: 20, quality: 10, safety: 10, budget: 10 },
-  enabled: { twin: true, detect: true, colour: true, change: true, quality: true, safety: true, budget: true },
+  budgetVersion: 4, budget: 1600, priceScale: 1, maxSubmissions: 0, // 0 = grade as many times as you like
+  weights: { completion: 60, twin: 10, detect: 10, colour: 4, change: 4, quality: 8, safety: 2, budget: 2 },
+  enabled: { completion: true, twin: true, detect: true, colour: true, change: true, quality: true, safety: true, budget: true },
 };
 
 /** Correct the two previously shipped defaults while retaining newly saved instructor budgets. */
-export const budgetFor = (settings: { budget?: number; budgetVersion?: number }): number => settings.budgetVersion !== 2 && (settings.budget === 3000 || settings.budget === 7000) ? DEFAULT_SETTINGS.budget : settings.budget ?? DEFAULT_SETTINGS.budget;
+export const budgetFor = (settings: { budget?: number; budgetVersion?: number }): number => settings.budgetVersion !== 4 && [3000, 7000, 1400, 1500].includes(settings.budget as number) ? DEFAULT_SETTINGS.budget : settings.budget ?? DEFAULT_SETTINGS.budget;
 
 // ----------------------------------------------------------------------------- what the team has bought and placed
 export interface LidarUnit { id: string; item: string; res: ResTier; x: number; y: number; z: number; yaw: number; pitch: number }
@@ -78,11 +78,15 @@ export interface TwinDesign { lidars: LidarUnit[]; cameras: CameraUnit[]; lights
 export const EMPTY_DESIGN: TwinDesign = { lidars: [], cameras: [], lights: [], platform: false, route: [[-9, -0.3], [9, -0.3]], routeSteps: 10, distortion: true };
 export const INSPECTION_CAMERA_ID = 'inspection-camera';
 /** The specified camera is budgeted from the start, but students must mount, pair and calibrate it. */
-export const inspectionCamera = (): CameraUnit => ({ id: INSPECTION_CAMERA_ID, item: 'cam-mid', x: -9, y: -4, z: 1.8, yaw: Math.PI / 2, pitch: 0, kit: false, pairedLidarId: null, cal: { est: { tx: -9, ty: -4, tz: 1.8, yawDeg: 90, pitchDeg: 0 }, fov: 70, done: false } });
+/** The LiDAR clouds are registered into one before cameras are added, so a camera is calibrated against the combined cloud (all LiDARs), not one scanner. */
+export const ALL_LIDARS = 'all';
+export const inspectionCamera = (): CameraUnit => ({ id: INSPECTION_CAMERA_ID, item: 'cam-mid', x: -9, y: -4, z: 1.8, yaw: Math.PI / 2, pitch: 0, kit: false, pairedLidarId: ALL_LIDARS, cal: { est: { tx: -9, ty: -4, tz: 1.8, yawDeg: 90, pitchDeg: 0 }, fov: 70, done: false } });
 
 export const lidarItem = (id: string) => LIDARS.find((l) => l.id === id) ?? LIDARS[0];
 export const cameraItem = (id: string) => CAMERAS.find((c) => c.id === id) ?? CAMERAS[0];
 export const isMobile = (u: LidarUnit) => !!lidarItem(u.item).mobile;
+/** The LiDARs a camera is calibrated with: all of them (the combined cloud), or the one it was paired with in an older save. */
+export const pairedLidarsOf = (c: CameraUnit, d: TwinDesign): LidarUnit[] => c.pairedLidarId === ALL_LIDARS ? d.lidars : c.pairedLidarId ? d.lidars.filter((u) => u.id === c.pairedLidarId) : c.pairedLidarId === undefined ? [pairedLidarOf(c, d)].filter((u): u is LidarUnit => !!u) : [];
 /** Legacy cameras use their nearest scanner until the student explicitly pairs them. */
 export const pairedLidarOf = (c: CameraUnit, d: TwinDesign): LidarUnit | undefined => c.pairedLidarId !== undefined ? d.lidars.find((u) => u.id === c.pairedLidarId) : d.lidars.reduce<LidarUnit | undefined>((best, u) => !best || Math.hypot(u.x - c.x, u.y - c.y) < Math.hypot(best.x - c.x, best.y - c.y) ? u : best, undefined);
 

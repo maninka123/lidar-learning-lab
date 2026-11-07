@@ -106,23 +106,23 @@ export function TopBar({ title, minimal, extra, noEnv, envIds, noPanelToggle }: 
 }
 
 // ------------------------------------------------------------------ overlays
-export function ViewControls({ simple, extra }: { simple?: boolean; extra?: ReactNode }) {
+export function ViewControls({ simple, extra, hideGuides, inset = 0 }: { simple?: boolean; extra?: ReactNode; hideGuides?: boolean; /** room kept free on the left (for a card in the corner): the toolbar wraps onto a second row instead of covering it */ inset?: number }) {
   const v = useLab((s) => s.view);
   const setView = useLab((s) => s.setView);
   const interaction = useLab((s) => s.interaction);
   return (
-    <div className="overlay glass card" style={{ top: 12, right: 12, maxWidth: 'calc(100% - 24px)', display: 'flex', flexWrap: 'wrap', justifyContent: 'flex-end', gap: 6, padding: '0.35rem', alignItems: 'center' }} role="toolbar" aria-label="View controls">
+    <div className="overlay glass card" style={{ top: 12, right: 12, maxWidth: `calc(100% - ${24 + inset}px)`, display: 'flex', flexWrap: 'wrap', justifyContent: 'flex-end', gap: 6, padding: '0.35rem', alignItems: 'center' }} role="toolbar" aria-label="View controls">
       {extra}
       <Btn sm icon={<Home size={15} />} onClick={() => viewBus.emit('home')} testId="view-home">Home</Btn>
       <Btn sm variant={v.panMode ? 'primary' : ''} icon={<Move size={15} />} onClick={() => setView({ panMode: !v.panMode })} title={v.panMode ? 'Pan is on: drag to move the view, right-drag to rotate' : 'Pan: drag to move the point cloud (or right-drag / Shift + drag)'} testId="view-pan">Pan</Btn>
-      {!simple && <Btn sm icon={v.showGrid ? <Eye size={15} /> : <EyeOff size={15} />} onClick={() => setView({ showGrid: !v.showGrid })} title="Toggle grid">Grid</Btn>}
-      <Btn sm icon={v.showAxes ? <Eye size={15} /> : <EyeOff size={15} />} onClick={() => setView({ showAxes: !v.showAxes })} title="Toggle axes">Axes</Btn>
+      {!hideGuides && !simple && <Btn sm icon={v.showGrid ? <Eye size={15} /> : <EyeOff size={15} />} onClick={() => setView({ showGrid: !v.showGrid })} title="Toggle grid">Grid</Btn>}
+      {!hideGuides && <Btn sm icon={v.showAxes ? <Eye size={15} /> : <EyeOff size={15} />} onClick={() => setView({ showAxes: !v.showAxes })} title="Toggle axes">Axes</Btn>}
       {interaction !== 'select' && <Btn sm variant="primary" onClick={() => useLab.getState().patch({ interaction: 'select' })}>Done · {interaction.replace('-', ' ')}</Btn>}
     </div>
   );
 }
 
-export function StatsCard({ items, title = 'Live statistics', row }: { items: { k: string; v: ReactNode; s?: string; group?: string }[]; title?: string; row?: boolean }) {
+export function StatsCard({ items, title = 'Live statistics', row, wide }: { items: { k: string; v: ReactNode; s?: string; group?: string }[]; title?: string; row?: boolean; /** lay the tiles out in one row instead of two columns */ wide?: boolean }) {
   const fps = useLab((s) => s.fps);
   const [open, setOpen] = useState(true);
   const [folded, setFolded] = useState<Record<string, boolean>>({}); // group titles that are collapsed
@@ -133,9 +133,9 @@ export function StatsCard({ items, title = 'Live statistics', row }: { items: { 
     </div>
   );
   return (
-    <div className="overlay glass card" style={{ left: 12, bottom: 12, width: 'max-content', minWidth: open ? '11rem' : undefined, maxWidth: 'min(26rem, calc(100% - 24px))', padding: '0.6rem 0.75rem' }} data-testid="stats-card">
-      <button className="section-head" onClick={() => setOpen(!open)} style={{ marginBottom: open ? 6 : 0, width: '100%', gap: 14 }}>
-        <h3>{title}</h3><span className="spacer" /><span className="caption mono">{fps} fps</span>
+    <div className="overlay glass card" style={{ left: 12, bottom: 12, width: 'max-content', minWidth: open ? '11rem' : undefined, maxWidth: wide ? 'min(60rem, calc(100% - 24px))' : 'min(26rem, calc(100% - 24px))', padding: '0.6rem 0.75rem' }} data-testid="stats-card">
+      <button className="section-head" onClick={() => setOpen(!open)} aria-expanded={open} title={open ? 'Hide the statistics' : 'Show the statistics'} data-testid="stats-toggle" style={{ marginBottom: open ? 6 : 0, width: '100%', gap: 14 }}>
+        <h3>{title}</h3><span className="spacer" />{open && <span className="caption mono">{fps} fps</span>}<span className="stats-toggle">{open ? 'Hide' : 'Show'}</span>
       </button>
       {open && (items.some((it) => it.group)
         ? <div className="stats-groups">{groups.map((g) => (
@@ -145,17 +145,20 @@ export function StatsCard({ items, title = 'Live statistics', row }: { items: { 
             </button>
             {!folded[g.name] && <div className="stats-row" style={{ gridTemplateColumns: `repeat(${g.items.length}, minmax(0, 1fr))` }}>{g.items.map((it) => <Stat key={it.k} k={it.k} v={it.v} s={it.s} />)}</div>}
           </div>))}</div>
-        : <div className="stats-grid" style={{ gridTemplateColumns: `repeat(${Math.min(2, items.length)}, minmax(0, 1fr))` }}>{items.map((it) => <Stat key={it.k} k={it.k} v={it.v} s={it.s} />)}</div>)}
+        : <div className="stats-grid" role={wide ? 'group' : undefined} aria-label={wide ? 'Statistics, scroll horizontally if needed' : undefined} tabIndex={wide ? 0 : undefined} style={{ gridTemplateColumns: `repeat(${Math.min(wide ? 5 : 2, items.length)}, minmax(${wide ? '7.5rem' : '0'}, 1fr))`, overflowX: wide ? 'auto' : undefined }}>{items.map((it) => <Stat key={it.k} k={it.k} v={it.v} s={it.s} />)}</div>)}
     </div>
   );
 }
 
-export function KindLegend({ items, top = 66, side = 'left' }: { items: { color: string; label: string; style?: 'dot' | 'wire' | 'dash' }[]; top?: number; side?: 'left' | 'right' }) {
+export function KindLegend({ items, top = 66, side = 'left', active = null, onPick }: { items: { color: string; label: string; style?: 'dot' | 'wire' | 'dash' }[]; top?: number; side?: 'left' | 'right'; /** the item shown on its own (the others are hidden); null shows everything */ active?: number | null; onPick?: (i: number) => void }) {
   return (
     <div className="overlay glass card legend" style={{ [side]: 12, top, padding: '0.45rem 0.8rem' }} aria-label="Legend">
-      {items.map((it) => (
-        <span key={it.label}><i style={{ background: it.style === 'wire' ? 'transparent' : it.color, border: it.style ? `2px ${it.style === 'dash' ? 'dashed' : 'solid'} ${it.color}` : undefined, borderRadius: it.style ? 4 : 99 }} />{it.label}</span>
-      ))}
+      {items.map((it, i) => {
+        const dot = <i style={{ background: it.style === 'wire' ? 'transparent' : it.color, border: it.style ? `2px ${it.style === 'dash' ? 'dashed' : 'solid'} ${it.color}` : undefined, borderRadius: it.style ? 4 : 99 }} />;
+        return onPick
+          ? <button type="button" key={it.label} className={`legend-item${active === i ? ' on' : active !== null ? ' dim' : ''}`} aria-pressed={active === i} onClick={() => onPick(i)} title={active === i ? 'Click again to show everything' : 'Click to show only this'} data-testid={`legend-item-${i}`}>{dot}{it.label}</button>
+          : <span key={it.label}>{dot}{it.label}</span>;
+      })}
     </div>
   );
 }

@@ -2,8 +2,8 @@ import { project } from '../apps/fusion';
 import { D2R, type Vec3 } from '../core/math';
 import { inFov, raySceneFor, toSensorAngles } from '../occlusion/coverage';
 import { newHit } from '../scenes/geometry';
-import { camPose, nominalOf, trueExtrinsic } from './camera';
-import { cameraItem, HW_SEED, pairedLidarOf, sensorFor, type TwinDesign } from './catalogue';
+import { camPose, nominalOf, trueExtrinsic, CAL_MAX_PX } from './camera';
+import { cameraItem, HW_SEED, pairedLidarsOf, sensorFor, type TwinDesign } from './catalogue';
 import type { Survey } from './acquire';
 import type { Factory } from './factory';
 
@@ -31,8 +31,7 @@ export function inspectionCoverage(f: Factory, design: TwinDesign, survey?: Surv
     const item = cameraItem(c.item), actual = survey ? trueExtrinsic(c, HW_SEED, index) : null;
     const pose = camPose(actual?.e ?? nominalOf(c)), fov = actual?.fov ?? item.fov;
     // Undefined is reserved for old saves' nearest-scanner fallback. This mission requires a deliberate pairing.
-    const lidar = c.pairedLidarId ? pairedLidarOf(c, design) : undefined;
-    const sensor = lidar ? sensorFor(lidar) : null;
+    const lidars = c.pairedLidarId ? pairedLidarsOf(c, design) : []; // an older camera with no explicit connection has no partner; // the combined cloud: any of the LiDARs may be the one that reaches a label
     let visible = 0, shared = 0;
     for (const t of targets) {
       const p: Vec3 = [t.centre[0], t.max[1] + .002, t.min[2] + .75];
@@ -41,15 +40,17 @@ export function inspectionCoverage(f: Factory, design: TwinDesign, survey?: Surv
       const labelPixels = .3 * item.w / (2 * q.z * Math.tan(fov * D2R / 2));
       if (labelPixels < 8 || !clear(pose.pos, p)) continue;
       visible++;
-      if (!lidar || !sensor || lidar.y <= p[1]) continue;
-      const origin: Vec3 = [lidar.x, lidar.y, lidar.z], angles = toSensorAngles(lidar, ...p), distance = Math.hypot(...p.map((v, i) => v - origin[i]));
-      if (distance < sensor.minRange || distance > sensor.maxRange || !inFov(sensor, angles.az, angles.el) || !clear(origin, p)) continue;
-      if (survey && !measured.get(lidar.id)?.has(t.instanceId)) continue;
-      shared++;
+      const reached = lidars.some((lidar) => {
+        const sensor = sensorFor(lidar); if (lidar.y <= p[1]) return false;
+        const origin: Vec3 = [lidar.x, lidar.y, lidar.z], angles = toSensorAngles(lidar, ...p), distance = Math.hypot(...p.map((v, i) => v - origin[i]));
+        if (distance < sensor.minRange || distance > sensor.maxRange || !inFov(sensor, angles.az, angles.el) || !clear(origin, p)) return false;
+        return !survey || !!measured.get(lidar.id)?.has(t.instanceId);
+      });
+      if (reached) shared++;
     }
     const error = errors?.[index];
-    return { id: c.id, paired: !!lidar, visible, shared, rms: error !== undefined && Number.isFinite(error) ? error : null };
+    return { id: c.id, paired: lidars.length > 0, visible, shared, rms: error !== undefined && Number.isFinite(error) ? error : null };
   });
   const fraction = (select: (c: InspectionCoverage['cameras'][number]) => number) => targets.length ? Math.max(0, ...cameras.map(select)) / targets.length : 0;
-  return { total: targets.length, coverage: fraction((c) => c.visible), sharedCoverage: fraction((c) => c.shared), calibratedCoverage: fraction((c) => c.rms !== null && c.rms <= 4 ? c.shared : 0), cameras };
+  return { total: targets.length, coverage: fraction((c) => c.visible), sharedCoverage: fraction((c) => c.shared), calibratedCoverage: fraction((c) => c.rms !== null && c.rms < CAL_MAX_PX ? c.shared : 0), cameras };
 }

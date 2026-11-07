@@ -88,9 +88,10 @@ export interface ViewportProps {
   gridSize?: number;
   hideGrid?: boolean;
   hideAxes?: boolean;
+  alwaysShowGuides?: boolean;
 }
 
-export function Viewport({ children, home = [8, -9, 6.5], target = [0, 0, 1], group, id = 'main', primary = true, threshold = 0.05, label, labelPos = 'br', labelTop = 66, bgOverride, gridSize = 1, hideGrid, hideAxes }: ViewportProps) {
+export function Viewport({ children, home = [8, -9, 6.5], target = [0, 0, 1], group, id = 'main', primary = true, threshold = 0.05, label, labelPos = 'br', labelTop = 66, bgOverride, gridSize = 1, hideGrid, hideAxes, alwaysShowGuides }: ViewportProps) {
   const bg = useLab((s) => s.view.background);
   const showGrid = useLab((s) => s.view.showGrid);
   const showAxes = useLab((s) => s.view.showAxes);
@@ -115,10 +116,10 @@ export function Viewport({ children, home = [8, -9, 6.5], target = [0, 0, 1], gr
           mouseButtons={{ LEFT: panMode ? THREE.MOUSE.PAN : THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: panMode ? THREE.MOUSE.ROTATE : THREE.MOUSE.PAN }}
           touches={{ ONE: panMode ? THREE.TOUCH.PAN : THREE.TOUCH.ROTATE, TWO: THREE.TOUCH.DOLLY_PAN }} />
         <Rig home={home} target={target} group={group} id={id} primary={primary} />
-        {showGrid && !hideGrid && (
+        {(alwaysShowGuides || showGrid) && !hideGrid && (
           <Grid rotation={[Math.PI / 2, 0, 0]} position={[0, 0, -0.002]} args={[40, 40]} cellSize={gridSize} sectionSize={gridSize * 5} cellColor={light ? '#b9bcc4' : '#2c2f38'} sectionColor={light ? '#8d919c' : '#4a4f5c'} fadeDistance={60} fadeStrength={1.5} infiniteGrid raycast={() => null} />
         )}
-        {showAxes && !hideAxes && <axesHelper args={[1.2 * gridSize]} raycast={() => null} />}
+        {(alwaysShowGuides || showAxes) && !hideAxes && <axesHelper args={[1.2 * gridSize]} raycast={() => null} />}
         {children}
       </Canvas>
       {label && <div className="overlay card glass" style={{ ...(labelPos === 'tl' ? { top: labelTop } : { bottom: 12 }), [labelPos === 'br' ? 'right' : 'left']: 12, padding: '0.3rem 0.7rem', fontSize: '0.875rem', fontWeight: 600 }}>{label}</div>}

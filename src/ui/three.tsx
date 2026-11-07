@@ -10,7 +10,7 @@ import { SensorConfig } from '../sensor/presets';
 import { Vec3 } from '../core/math';
 
 /** Constant-screen-size text label (canvas sprite). Avoids DOM portals inside the WebGL canvas. */
-export function TextSprite({ text, position, height = 0.034, bg = 'rgba(0,0,0,0.72)', color = '#fff', offset = [0, 0.0] }: { text: string; position: Vec3; height?: number; bg?: string; color?: string; offset?: [number, number] }) {
+export function TextSprite({ text, position, height = 0.034, bg = 'rgba(0,0,0,0.72)', color = '#fff', borderColor, offset = [0, 0.0] }: { text: string; position: Vec3; height?: number; bg?: string; color?: string; borderColor?: string; offset?: [number, number] }) {
   const { tex, aspect } = useMemo(() => {
     const dpr = 2, fs = 26 * dpr, padX = 14 * dpr, h = 44 * dpr;
     const c = document.createElement('canvas');
@@ -20,13 +20,14 @@ export function TextSprite({ text, position, height = 0.034, bg = 'rgba(0,0,0,0.
     c.width = w; c.height = h;
     g.font = `600 ${fs}px -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif`;
     g.fillStyle = bg;
-    const r = h / 2;
-    g.beginPath(); g.moveTo(r, 0); g.arcTo(w, 0, w, h, r); g.arcTo(w, h, 0, h, r); g.arcTo(0, h, 0, 0, r); g.arcTo(0, 0, w, 0, r); g.closePath(); g.fill();
+    const inset = borderColor ? 2 * dpr : 0, r = h / 2 - inset;
+    g.beginPath(); g.moveTo(h / 2, inset); g.arcTo(w - inset, inset, w - inset, h - inset, r); g.arcTo(w - inset, h - inset, inset, h - inset, r); g.arcTo(inset, h - inset, inset, inset, r); g.arcTo(inset, inset, w - inset, inset, r); g.closePath(); g.fill();
+    if (borderColor) { g.strokeStyle = borderColor; g.lineWidth = 3 * dpr; g.stroke(); }
     g.fillStyle = color; g.textBaseline = 'middle'; g.fillText(text, padX, h / 2 + 1);
     const t = new THREE.CanvasTexture(c);
     t.colorSpace = THREE.SRGBColorSpace;
     return { tex: t, aspect: w / h };
-  }, [text, bg, color]);
+  }, [text, bg, color, borderColor]);
   useEffect(() => () => tex.dispose(), [tex]);
   return (
     <sprite position={position} scale={[height * aspect, height, 1]} center={new THREE.Vector2(0.5 - offset[0], 0.5 - offset[1])} renderOrder={50} raycast={() => null}>
@@ -102,6 +103,7 @@ function handleSceneClick(e: { stopPropagation: () => void; point: THREE.Vector3
     s.setPose({ x: pt.x, y: pt.y });
     pushUndo('move scanner', () => useLab.getState().setPose(prev));
   } else if (s.interaction === 'add-station') {
+    if (o.hideFlag === 'ceiling') return; // the roof deck is above everything: let the click fall through to the floor and objects below
     e.stopPropagation();
     s.patch({ pendingStation: [pt.x, pt.y] });
   } else if (s.interaction === 'add-waypoint') {
@@ -245,7 +247,7 @@ export function PickLayer({ radius = 0.05 }: { radius?: number }) {
 }
 
 // ------------------------------------------------------------------ sensor
-export function SensorMarker({ x, y, z, yaw, pitch = 0, scale = 1, sensor, color = '#0a84ff', label, showFov = true }: { x: number; y: number; z: number; yaw: number; pitch?: number; scale?: number; sensor?: SensorConfig; color?: string; label?: string; showFov?: boolean }) {
+export function SensorMarker({ x, y, z, yaw, pitch = 0, scale = 1, sensor, color = '#0a84ff', label, labelAccent, showFov = true }: { x: number; y: number; z: number; yaw: number; pitch?: number; scale?: number; sensor?: SensorConfig; color?: string; label?: string; labelAccent?: string; showFov?: boolean }) {
   const fov = useMemo(() => {
     if (!sensor || !showFov) return null;
     const R = Math.min(sensor.maxRange, 3.5);
@@ -270,7 +272,7 @@ export function SensorMarker({ x, y, z, yaw, pitch = 0, scale = 1, sensor, color
       <Line points={[[0.2, 0, 0], [1.6, 0, 0]]} color="#000000" lineWidth={3} depthTest={false} />
       <mesh position={[1.7, 0, 0]} rotation={[0, 0, -Math.PI / 2]} raycast={() => null}><coneGeometry args={[0.1, 0.24, 14]} /><meshBasicMaterial color="#000000" depthTest={false} /></mesh>
       <Line points={[[0, 0, 0], [0, 0, -z]]} color={color} lineWidth={1} dashed dashSize={0.08} gapSize={0.06} />
-      {label && <TextSprite text={label} position={[0, 0, 0.35]} />}
+      {label && <TextSprite text={label} position={[0, 0, 0.35]} borderColor={labelAccent} bg={labelAccent ? 'rgba(255,255,255,0.96)' : undefined} color={labelAccent ? '#1d1d1f' : undefined} />}
     </group>
   );
 }

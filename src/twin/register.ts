@@ -16,6 +16,8 @@ export interface RegParams {
   voxel: number; // registration works on a thinned copy of the scans (m)
   /** start from the positions the scanners were placed at (with their small installation error); without it every scan starts at the origin of its own frame */
   guess: boolean;
+  /** settings of one scan on its own, by scan number (the first scan is 0): they replace the settings above for that scan only */
+  perScan?: Record<number, Partial<Pick<RegParams, 'method' | 'dist' | 'iters' | 'trim' | 'voxel'>>>;
 }
 export const DEFAULT_REG: RegParams = { mode: 'first', method: 1, dist: 0.5, iters: 40, trim: 60, voxel: 0.1, guess: true };
 export const defaultRegFor = (mobile: boolean): RegParams => ({ ...DEFAULT_REG, mode: mobile ? 'sequential' : 'first' });
@@ -32,17 +34,17 @@ const vox = (c: PointCloud, s: number) => (s > 0 ? voxelDownsample(c, s) : c);
 export function registerScans(scans: ScanData[], p: RegParams): RegResult {
   const base = scans.map((s) => (p.guess ? s.cloud : s.local)), basePose = scans.map((s) => (p.guess ? s.pose : identity()));
   const poses: Rigid[] = [], clouds: PointCloud[] = [], rep: ScanReg[] = [];
-  const method = p.method === 1 ? 'plane' : 'point', trim = p.trim / 100;
   if (!scans.length) return { cloud: concatClouds([], 'Merged survey'), clouds, poses, report: { mode: p.mode, rmse: NaN, overlap: 0, scans: [], note: 'no scans' } };
   let ref = vox(base[0], p.voxel), prev = ref;
   poses.push(basePose[0]); clouds.push(base[0]);
   let used = 0, rejected = 0;
   for (let k = 1; k < scans.length; k++) {
-    const src = vox(base[k], p.voxel), dst = p.mode === 'sequential' ? prev : ref;
+    const q = { ...p, ...(p.perScan?.[k] ?? {}) }, method = q.method === 1 ? 'plane' as const : 'point' as const, trim = q.trim / 100; // this scan's own settings, if it has any
+    const src = vox(base[k], q.voxel), dst = p.mode === 'sequential' ? prev : ref;
     const before = evaluateAlignment(src.positions, src.count, dst.positions, dst.count, identity(), EVAL_GATE, 4000);
     let T: Rigid = identity(), ok = false;
     if (p.mode !== 'merge') {
-      const r = icp(src.positions, src.count, dst.positions, dst.count, { maxIterations: p.iters, tolerance: 1e-5, maxCorrDist: p.dist, sampleMax: 6000, method, trim: trim < 1 ? trim : undefined });
+      const r = icp(src.positions, src.count, dst.positions, dst.count, { maxIterations: q.iters, tolerance: 1e-5, maxCorrDist: q.dist, sampleMax: 6000, method, trim: trim < 1 ? trim : undefined });
       const big = Math.hypot(...r.T.t) > (p.guess ? 1.5 : 60) || rotationAngle(r.T.R) > (p.guess ? 0.14 : 4); // a small fix is plausible when the scanner position is known; without it anything goes
       ok = r.history.length > 0 && Number.isFinite(r.finalRmse) && !big; if (ok) T = r.T;
     }

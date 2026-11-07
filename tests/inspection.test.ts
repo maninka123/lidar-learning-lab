@@ -12,10 +12,10 @@ const design = { ...config.design, cameras: [config.design.cameras[0]] };
 const survey = acquireSurvey(factory, design, 11);
 
 describe('critical camera inspection bay', () => {
-  it('starts with a specified camera that still needs placement, explicit pairing and calibration', () => {
+  it('starts with a specified camera that still needs placement and calibration against the combined cloud', () => {
     const camera = initialSave().design.cameras[0];
-    expect(camera).toMatchObject({ id: INSPECTION_CAMERA_ID, item: 'cam-mid', pairedLidarId: null, cal: { done: false } });
-    expect(pairedLidarOf(camera, design)).toBeUndefined();
+    expect(camera).toMatchObject({ id: INSPECTION_CAMERA_ID, item: 'cam-mid', pairedLidarId: 'all', cal: { done: false } });
+    expect(pairedLidarOf(camera, design)).toBeUndefined(); // the combined cloud is not one scanner
     expect(inspectionCoverage(factory, { ...design, cameras: [camera] }).coverage).toBeLessThan(.8);
   });
   it('accepts a real scan with a calibrated camera and overlapping views on the inspection labels', () => {

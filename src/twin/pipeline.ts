@@ -18,7 +18,7 @@ export type BlockKind = 'merge' | 'icp' | 'mobileicp' | 'crop' | 'voxel' | 'rand
 
 export interface ParamDef { key: string; label: string; min: number; max: number; step: number; def: number; unit?: string; hint?: string; options?: { value: number; label: string }[] }
 export interface BlockInfo { kind: BlockKind; name: string; group: 'Registration' | 'Cleaning' | 'Planes' | 'Objects' | 'Change' | 'Safety'; in: DataType; out: DataType; params: ParamDef[]; help: string; needsCameras?: boolean; needsB?: boolean }
-export interface Block { id: string; kind: BlockKind; params: Record<string, number>; bypass?: boolean; /** keys of the planes or clusters the team switched off in this block (planes: left in; clusters: dropped), so they choose what is removed and what is kept */ off?: string[]; /** runs at the same time as the neighbouring parallel blocks of its phase instead of one after the other */ parallel?: boolean }
+export interface Block { id: string; kind: BlockKind; params: Record<string, number>; /** registration only: the settings used for each scan on its own (by scan number), kept as the scans are aligned one at a time */ perScan?: Record<string, Record<string, number>>; bypass?: boolean; /** keys of the planes or clusters the team switched off in this block (planes: left in; clusters: dropped), so they choose what is removed and what is kept */ off?: string[]; /** runs at the same time as the neighbouring parallel blocks of its phase instead of one after the other */ parallel?: boolean }
 
 const P = (key: string, label: string, min: number, max: number, step: number, def: number, unit = '', hint = '', options?: ParamDef['options']): ParamDef => ({ key, label, min, max, step, def, unit, hint, options });
 const METHOD = [{ value: 0, label: 'Point-to-point' }, { value: 1, label: 'Point-to-plane' }];
@@ -32,7 +32,7 @@ export const BLOCK_TAB: Record<BlockKind, string> = {
 };
 export const BLOCKS: Record<BlockKind, BlockInfo> = {
   merge: { kind: 'merge', name: 'No registration (scanner positions only)', group: 'Registration', in: 'scans', out: 'cloud', params: [], help: 'Place each scan where its scanner stands. No fitting.' },
-  icp: { kind: 'icp', name: 'ICP registration', group: 'Registration', in: 'scans', out: 'cloud', params: [P('method', 'Method', 0, 1, 1, 1, '', 'Point-to-plane converges faster on walls and floors.', METHOD), P('dist', 'Match distance', 0.1, 3, 0.1, 0.5, ' m', 'Bigger than the installation error, small enough to avoid wrong pairs.'), P('iters', 'Iterations', 5, 80, 5, 40), P('trim', 'Keep best pairs', 40, 100, 5, 60, ' %', 'Ignore the worst pairs: helps when scans overlap only partly.'), P('voxel', 'Thinning for speed', 0.03, 0.4, 0.01, 0.1, ' m', 'Registration uses a thinned copy of each scan. Too coarse loses detail.'), P('guess', 'Start from', 0, 1, 1, 1, '', 'Without a starting guess every scan begins at the origin of its own frame and ICP usually gets lost.', [{ value: 1, label: 'The positions I placed' }, { value: 0, label: 'Nothing (own frame)' }])], help: 'Fit each scan to the first one, then merge. Aim for a small error against the surveyed positions.' },
+  icp: { kind: 'icp', name: 'ICP registration', group: 'Registration', in: 'scans', out: 'cloud', params: [P('method', 'Method', 0, 1, 1, 1, '', 'Point-to-plane converges faster on walls and floors.', METHOD), P('dist', 'Match distance', 0.1, 3, 0.1, 0.5, ' m', 'Bigger than the installation error, small enough to avoid wrong pairs.'), P('iters', 'Iterations', 5, 80, 5, 40), P('trim', 'Keep best pairs', 40, 100, 5, 60, ' %', 'Ignore the worst pairs: helps when scans overlap only partly.'), P('voxel', 'Thinning for speed', 0.03, 0.4, 0.01, 0.1, ' m', 'Registration uses a thinned copy of each scan. Too coarse loses detail.')], help: 'Fit each scan to the first one, starting from where you placed the scanners. Aim for a small error.' },
   mobileicp: { kind: 'mobileicp', name: 'Scan-to-scan registration (SLAM)', group: 'Registration', in: 'scans', out: 'cloud', params: [P('method', 'Method', 0, 1, 1, 1, '', '', METHOD), P('dist', 'Match distance', 0.1, 3, 0.1, 0.6, ' m', 'Bigger than the drift between steps, or ICP cannot find its way back.'), P('iters', 'Iterations', 5, 80, 5, 30), P('voxel', 'Thinning for speed', 0.03, 0.4, 0.01, 0.1, ' m'), P('guess', 'Start from', 0, 1, 1, 1, '', '', [{ value: 1, label: 'The positions I placed' }, { value: 0, label: 'Nothing (own frame)' }])], help: 'Fit each scan to the one before it (no loop closure).' },
   crop: { kind: 'crop', name: 'Crop box (height range)', group: 'Cleaning', in: 'cloud', out: 'cloud', params: [P('zmin', 'Lowest height', -1, 3, 0.1, -0.5, ' m'), P('zmax', 'Highest height', 0.5, 7, 0.1, 6.2, ' m', 'Cutting at 3 m removes the ceiling, the pipes and the lamps.'), P('margin', 'Margin from walls', 0, 2, 0.1, 0, ' m')], help: 'Keep only a height range.' },
   voxel: { kind: 'voxel', name: 'Voxel downsample', group: 'Cleaning', in: 'cloud', out: 'cloud', params: [P('size', 'Voxel size', 0.02, 0.5, 0.01, 0.08, ' m', 'Bigger voxels are faster but wipe out small objects.')], help: 'One point per small cube.' },
@@ -45,7 +45,7 @@ export const BLOCKS: Record<BlockKind, BlockInfo> = {
   euclid: { kind: 'euclid', name: 'Euclidean clustering', group: 'Objects', in: 'cloud', out: 'segments', params: [P('radius', 'Link distance', 0.05, 1, 0.01, 0.2, ' m', 'Points closer than this join one object.'), P('min', 'Smallest cluster', 3, 300, 1, 25, ' pts')], help: 'Group nearby points into objects.' },
   dbscan: { kind: 'dbscan', name: 'DBSCAN clustering', group: 'Objects', in: 'cloud', out: 'segments', params: [P('eps', 'Radius', 0.05, 1, 0.01, 0.2, ' m'), P('min', 'Min points', 2, 40, 1, 6)], help: 'Group dense points into objects; leave noise out.' },
   classify: { kind: 'classify', name: 'Classify objects (by shape)', group: 'Objects', in: 'segments', out: 'objects', params: [P('minpts', 'Ignore clusters under', 5, 200, 1, 30, ' pts'), P('small', 'Small-object size', 0.1, 0.8, 0.01, 0.45, ' m', 'Objects with all sides under this are "small".')], help: 'Name each object by its size and shape.' },
-  colour: { kind: 'colour', name: 'Read label colours (camera)', group: 'Objects', in: 'objects', out: 'objects', params: [P('votes', 'Votes needed', 1, 30, 1, 4, ' px'), P('share', 'Agreement', 40, 100, 5, 60, ' %')], help: 'Read the red, green or yellow labels with your camera calibration.', needsCameras: true },
+  colour: { kind: 'colour', name: 'Read label colours (camera)', group: 'Objects', in: 'objects', out: 'objects', params: [], help: 'Read the red, green or yellow labels with your camera calibration.', needsCameras: true },
   diff: { kind: 'diff', name: 'Change detection (points, A vs B)', group: 'Change', in: 'cloud', out: 'changes', needsB: true, params: [P('align', 'Align B to A first', 0, 1, 1, 1, '', 'Fit the two surveys together before comparing.', [{ value: 0, label: 'No' }, { value: 1, label: 'ICP' }]), P('thr', 'Change threshold', 0.03, 0.6, 0.01, 0.18, ' m', 'Points farther than this from the other survey count as changed.'), P('min', 'Smallest change', 5, 200, 1, 25, ' pts'), P('pair', 'Pair removed + added as moved', 0, 1, 1, 1, '', '', [{ value: 0, label: 'No' }, { value: 1, label: 'Yes' }])], help: 'Find points that changed between survey A and B.' },
   objmatch: { kind: 'objmatch', name: 'Change detection (objects, A vs B)', group: 'Change', in: 'objects', out: 'changes', needsB: true, params: [P('dist', 'Match distance', 0.2, 4, 0.1, 1.2, ' m'), P('move', 'Moved if shifted by', 0.1, 2, 0.05, 0.4, ' m')], help: 'Compare objects between survey A and B.' },
   safety: { kind: 'safety', name: 'Safety zone check', group: 'Safety', in: 'objects', out: 'safety', params: [P('margin', 'Safety margin', 0, 1, 0.05, 0, ' m')], help: 'Flag objects that overlap a safety zone (a learning check only).' },
@@ -55,8 +55,10 @@ export const PHASES: { id: string; title: string; why: string; kinds: BlockKind[
   { id: 'register', title: '1 · Join the scans', why: 'Put every scan in one common frame.', kinds: ['icp', 'mobileicp', 'merge'], required: true },
   { id: 'clean', title: '2 · Clean the points', why: 'Thin the points and remove noise. Too much removes small objects.', kinds: ['crop', 'voxel', 'random', 'sor', 'ror', 'normals'] },
   { id: 'structure', title: '3 · Remove the building', why: 'Remove the floor, walls and ceiling.', kinds: ['ground', 'planes'] },
-  { id: 'objects', title: '4 · Find the objects', why: 'Group points, name the objects, read label colours.', kinds: ['euclid', 'dbscan', 'classify', 'colour'] },
-  { id: 'compare', title: '5 · Changes and safety', why: 'Find changes and check safety zones (optional).', kinds: ['diff', 'objmatch', 'safety'] },
+  { id: 'objects', title: '4 · Group the points', why: 'Group nearby points into separate objects.', kinds: ['euclid', 'dbscan'] },
+  { id: 'naming', title: '5 · Name the objects', why: 'Name each object by its size and shape, and read its label colour.', kinds: ['classify', 'colour'] },
+  { id: 'compare', title: '6 · Find the changes', why: 'Compare Time A with Time B: what moved, appeared or disappeared.', kinds: ['diff', 'objmatch'] },
+  { id: 'safety', title: '7 · Check the safety zones', why: 'Flag the objects that overlap a safety zone.', kinds: ['safety'] },
 ];
 export const phaseIndex = (k: BlockKind) => PHASES.findIndex((ph) => ph.kinds.includes(k));
 /** Put a new block at the end of its own phase, so the pipeline stays in a sensible order. */
@@ -121,7 +123,7 @@ function pickClusters(pos: Float32Array, labels: Int32Array, count: number, off:
   if (dropped.size) for (let i = 0; i < labels.length; i++) if (dropped.has(labels[i])) labels[i] = -1;
   return { mode: 'keep', items: rows.slice(0, maxList).map((r) => ({ key: r.key, label: r.label, pts: r.pts, on: !off.includes(r.key) })), hidden: Math.max(0, rows.length - maxList) };
 }
-export interface StepInfo { id: string; kind: BlockKind; bypassed: boolean; ms: number; before: number; after: number; note: string; error?: string; preview?: PointCloud; /** blocks that ran side by side share a number */ group?: number; /** for a registration block: how well the scans fit afterwards */ reg?: RegReport; /** planes or clusters this block found, for the team to switch on or off */ pick?: PickList }
+export interface StepInfo { id: string; kind: BlockKind; bypassed: boolean; ms: number; before: number; after: number; note: string; error?: string; preview?: PointCloud; /** the points this block took out (filters only), so they can be shown in red */ removed?: PointCloud; /** clustering and naming blocks: the points, each cluster in its own colour */ segPreview?: PointCloud; /** the naming block: the objects it found (boxes, classes) */ objects?: Omit<DetObject, 'idx'>[]; /** blocks that ran side by side share a number */ group?: number; /** for a registration block: how well the scans fit afterwards */ reg?: RegReport; /** planes or clusters this block found, for the team to switch on or off */ pick?: PickList }
 export interface PipelineOutput { A: Workspace; B?: Workspace; /** registration quality of survey A (the RMSE the team tuned) */ registration?: RegReport; changes?: ChangeFound[]; safety?: SafetyFound[]; steps: StepInfo[]; ms: number }
 
 const now = () => (typeof performance !== 'undefined' ? performance.now() : Date.now());
@@ -130,8 +132,9 @@ const thin = (c: PointCloud, max: number): PointCloud => { if (c.count <= max) r
 function vox(c: PointCloud, size: number): PointCloud { return ops.voxelDownsample(c, size); }
 
 /** Block settings → registration settings. Registration works on the scans as delivered: each in its own scanner's coordinate system. */
-export function regParamsOf(kind: BlockKind, p: Record<string, number>): RegParams {
-  return { mode: kind === 'merge' ? 'merge' : kind === 'mobileicp' ? 'sequential' : 'first', method: p.method === 0 ? 0 : 1, dist: p.dist ?? 0.5, iters: p.iters ?? 40, trim: p.trim ?? 60, voxel: p.voxel ?? 0.1, guess: kind === 'merge' ? true : p.guess !== 0 };
+export function regParamsOf(kind: BlockKind, p: Record<string, number>, perScan?: Record<string, Record<string, number>>): RegParams {
+  return { mode: kind === 'merge' ? 'merge' : kind === 'mobileicp' ? 'sequential' : 'first', method: p.method === 0 ? 0 : 1, dist: p.dist ?? 0.5, iters: p.iters ?? 40, trim: p.trim ?? 60, voxel: p.voxel ?? 0.1, guess: kind === 'icp' || kind === 'merge' ? true : p.guess !== 0,
+    perScan: kind === 'icp' && perScan ? Object.fromEntries(Object.entries(perScan).map(([k, v]) => [Number(k), { method: v.method === 0 ? 0 : 1, ...(Number.isFinite(v.dist) ? { dist: v.dist } : {}), ...(Number.isFinite(v.iters) ? { iters: v.iters } : {}), ...(Number.isFinite(v.trim) ? { trim: v.trim } : {}), ...(Number.isFinite(v.voxel) ? { voxel: v.voxel } : {}) }])) : undefined }; // the scans always arrive in their own frames; aligning starts from where the scanners were put, which is how a real survey is done (ICP cannot find its own way from the scanner origins)
 }
 
 const boxOf = (pos: Float32Array, ids: ArrayLike<number>): { min: Vec3; max: Vec3; c: Vec3 } => {
@@ -195,7 +198,19 @@ export interface PipelineInput { A: VisibleSurvey; B?: VisibleSurvey; camerasA: 
 
 /** Blocks that can run side by side: filters that only REMOVE points (the results are combined by keeping what every branch kept), and independent checks (their findings are combined). */
 export const PARALLEL_KINDS: BlockKind[] = ['crop', 'sor', 'ror', 'ground', 'planes', 'diff', 'objmatch', 'safety'];
+/** Reading a label colour has no settings: it always uses the most generous reading that still needs a majority. Any object with a coloured point is read when the winning colour has at least half the votes, so the camera reads as many labels as it can. (Stricter readings found fewer labels and were no more accurate.) */
+const LABEL_MIN_VOTES = 1, LABEL_MIN_SHARE = 0.5;
+const SEG_COLOURS: [number, number, number][] = [[230, 57, 70], [42, 157, 143], [244, 162, 97], [69, 123, 157], [168, 85, 247], [233, 196, 106], [38, 166, 91], [236, 72, 153], [14, 165, 233], [132, 204, 22], [249, 115, 22], [99, 102, 241]];
+const SEG_NOISE: [number, number, number] = [150, 150, 156];
 const SUBSET_KINDS: BlockKind[] = ['crop', 'sor', 'ror', 'ground', 'planes'];
+/** The points of `before` that are not in `after`. These blocks only keep or drop points, in their original order, so one pass over both lists finds what went. */
+function removedPoints(before: PointCloud, after: PointCloud): PointCloud | undefined {
+  const a = before.positions, b = after.positions, gone: number[] = []; let j = 0;
+  for (let i = 0; i < before.count; i++) { if (j < after.count && a[i * 3] === b[j * 3] && a[i * 3 + 1] === b[j * 3 + 1] && a[i * 3 + 2] === b[j * 3 + 2]) j++; else gone.push(i); }
+  if (j !== after.count || !gone.length) return undefined; // not a plain subset, or nothing was removed
+  const keep = gone.length > 40000 ? gone.filter((_, k) => k % Math.ceil(gone.length / 40000) === 0) : gone;
+  return selectPoints(before, keep, 'removed');
+}
 export const canRunParallel = (k: BlockKind) => PARALLEL_KINDS.includes(k);
 /** Which blocks form a side-by-side group: neighbours, same phase, all flagged parallel and able to. Returns a group number per block (or -1). */
 export function parallelGroups(blocks: Block[]): number[] {
@@ -226,15 +241,16 @@ export function runPipeline(blocks: Block[], input: PipelineInput, seed = 1): Pi
     if (chk.perBlock[bi]) { steps.push({ ...base, error: chk.perBlock[bi]!, note: 'Skipped' }); return; }
     const p = { ...defaultParams(b.kind), ...b.params };
     const epochs: ('A' | 'B')[] = info.in === 'cloud' && info.out === 'changes' ? [] : input.B && b.kind !== 'colour' ? ['A', 'B'] : ['A'];
-    let note = '', reg: RegReport | undefined, pick: PickList | undefined;
+    let note = '', reg: RegReport | undefined, pick: PickList | undefined, removed: PointCloud | undefined;
     const surveyOf = (e: 'A' | 'B') => (e === 'A' ? input.A : input.B!);
     for (const e of epochs) {
       const w = ws[e]!;
       if (!w.twin && w.cloud && (info.group === 'Planes' || info.out === 'segments')) w.twin = w.cloud;
       if (grp >= 0 && subset && gBase[e]) w.cloud = gBase[e]; // every branch starts from the same points
+      const prevCloud = w.cloud;
       switch (b.kind) {
         case 'merge': case 'icp': case 'mobileicp': {
-          const r = registerScans(surveyOf(e).scans, regParamsOf(b.kind, p)); w.cloud = r.cloud; w.scanPoses = r.poses; note = r.report.note + (Number.isFinite(r.report.rmse) ? ` · RMSE ${(r.report.rmse * 100).toFixed(1)} cm` : '');
+          const r = registerScans(surveyOf(e).scans, regParamsOf(b.kind, p, b.perScan)); w.cloud = r.cloud; w.scanPoses = r.poses; note = r.report.note + (Number.isFinite(r.report.rmse) ? ` · RMSE ${(r.report.rmse * 100).toFixed(1)} cm` : '');
           if (e === 'A') { reg = r.report; }
           break;
         }
@@ -246,7 +262,7 @@ export function runPipeline(blocks: Block[], input: PipelineInput, seed = 1): Pi
         case 'normals': w.cloud = ops.estimateNormals(w.cloud!, p.k); break;
         case 'ground': {
           const c = w.cloud!, run = detectPlanes(c.positions, c.count, null, { mode: 'adaptive', threshold: p.tol, iterations: 100, confidence: 0.99, minFraction: 0.02, maxPlanes: 3, seed: seed + bi });
-          const fl = run.planes.find((q) => q.kind === 'floor'); if (!fl) { note = 'No floor plane found'; break; }
+          const fl = run.planes.find((q) => q.kind === 'floor') ?? run.planes.filter((q) => Math.abs(q.normal[2]) > 0.9 && q.meanZ < 0.6).sort((x, y) => x.meanZ - y.meanZ)[0]; /* a flat plane near z = 0 is the floor, even when no ceiling was found to compare it with */ if (!fl) { note = 'No floor plane found'; break; }
           const drop = new Uint8Array(c.count); for (const i of fl.inliers) { const d = Math.abs(fl.normal[0] * c.positions[i * 3] + fl.normal[1] * c.positions[i * 3 + 1] + fl.normal[2] * c.positions[i * 3 + 2] + fl.d); if (d <= Math.max(p.tol, 0.01)) drop[i] = 1; }
           const keep: number[] = []; for (let i = 0; i < c.count; i++) if (!drop[i]) keep.push(i);
           w.cloud = selectPoints(c, keep, c.name); break;
@@ -275,12 +291,13 @@ export function runPipeline(blocks: Block[], input: PipelineInput, seed = 1): Pi
             const votes = { red: 0, green: 0, yellow: 0 }; let tot = 0;
             for (const i of o.idx) { if (!col.valid[i]) continue; const v = labelVote(col.colors[i * 3], col.colors[i * 3 + 1], col.colors[i * 3 + 2]); if (v) { votes[v]++; tot++; } }
             const top = (Object.keys(votes) as (keyof typeof votes)[]).sort((x, y) => votes[y] - votes[x])[0];
-            o.votes = tot; o.colour = tot >= p.votes && votes[top] / tot >= p.share / 100 ? top : 'unknown'; if (o.colour !== 'unknown') named++;
+            o.votes = tot; o.colour = tot >= LABEL_MIN_VOTES && votes[top] / tot >= LABEL_MIN_SHARE ? top : 'unknown'; if (o.colour !== 'unknown') named++;
           }
           note = `${named} of ${objs.length} objects got a label colour (${col.count.toLocaleString()} points coloured)`; break;
         }
         default: break;
       }
+      if (e === 'A' && prevCloud && w.cloud && w.cloud !== prevCloud && (subset || b.kind === 'random')) removed = removedPoints(prevCloud, w.cloud);
     }
     if (grp >= 0 && subset) { for (const e of epochs) if (ws[e]?.cloud) gOuts[e].push(ws[e]!.cloud!); }
     if (last && gOuts.A.length >= 2) {
@@ -290,6 +307,7 @@ export function runPipeline(blocks: Block[], input: PipelineInput, seed = 1): Pi
         const sets = outs.map((o) => new Set(Array.from(o.instances!))), keep: number[] = [];
         for (let i = 0; i < bs.count; i++) if (sets.every((s2) => s2.has(bs.instances![i]))) keep.push(i);
         w.cloud = selectPoints(bs, keep, bs.name);
+        if (e === 'A') removed = removedPoints(bs, w.cloud);
       }
       note = `${note ? note + ' · ' : ''}joined: kept the points every parallel block kept`;
     }
@@ -334,7 +352,14 @@ export function runPipeline(blocks: Block[], input: PipelineInput, seed = 1): Pi
     }
     const after = ws.A.cloud?.count ?? cur;
     if (reg) registration = reg;
-    steps.push({ ...base, ms: now() - s0, after, note, reg, pick, preview: ws.A.cloud && (info.out === 'cloud' || info.out === 'segments' || info.out === 'objects') ? thin(ws.A.cloud, 40000) : undefined });
+    let segPreview: PointCloud | undefined, objects: StepInfo['objects'];
+    if ((b.kind === 'euclid' || b.kind === 'dbscan' || b.kind === 'classify') && ws.A.cloud && ws.A.segLabels && ws.A.segLabels.length === ws.A.cloud.count) {
+      const c = ws.A.cloud, lab = ws.A.segLabels, col = new Uint8Array(c.count * 3);
+      for (let i = 0; i < c.count; i++) { const rgb = lab[i] < 0 ? SEG_NOISE : SEG_COLOURS[lab[i] % SEG_COLOURS.length]; col[i * 3] = rgb[0]; col[i * 3 + 1] = rgb[1]; col[i * 3 + 2] = rgb[2]; }
+      segPreview = thin({ ...c, colors: col }, 40000);
+    }
+    if (b.kind === 'classify' && ws.A.objects) objects = ws.A.objects.map(({ idx, ...o }) => o);
+    steps.push({ ...base, ms: now() - s0, after, note, reg, pick, removed, segPreview, objects, preview: ws.A.cloud && (info.out === 'cloud' || info.out === 'segments' || info.out === 'objects') ? thin(ws.A.cloud, 40000) : undefined });
   });
   for (const w of [ws.A, ws.B]) if (w && !w.twin) w.twin = w.cloud;
   return { A: ws.A, B: ws.B, registration, changes, safety, steps, ms: now() - t0 };

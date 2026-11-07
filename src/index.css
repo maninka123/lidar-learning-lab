@@ -164,6 +164,15 @@ input[type="range"]:focus { outline: none; }
 input[type="range"]:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 35%, transparent), 0 2px 8px rgba(0,0,0,.4); }
 .tb-slider { display: inline-flex; align-items: center; gap: 0.5rem; height: 2rem; padding: 0 0.75rem; border-radius: 0.65rem; background: var(--fill); font-size: 0.8125rem; font-weight: 500; color: var(--text); white-space: nowrap; cursor: pointer; }
 .tb-slider:hover { background: var(--fill-hover); }
+.tb-switch { display: inline-flex; align-items: center; gap: 0.5rem; height: 2rem; padding: 0 0.7rem; border: 0; border-radius: 0.65rem; background: var(--fill); font: inherit; font-size: 0.8125rem; font-weight: 600; color: var(--text); white-space: nowrap; cursor: pointer; }
+.tb-switch:hover { background: var(--fill-hover); }
+.tb-switch-track { position: relative; width: 2rem; height: 1.15rem; border-radius: 1rem; background: rgba(120, 120, 128, .36); transition: background .2s var(--ease); flex: none; }
+.tb-switch-track i { position: absolute; top: 0.125rem; left: 0.125rem; width: 0.9rem; height: 0.9rem; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0, 0, 0, .35); transition: transform .2s var(--ease); }
+.tb-switch.on .tb-switch-track { background: var(--green, #30d158); }
+.tb-switch.on .tb-switch-track i { transform: translateX(0.85rem); }
+.tb-switch-state { min-width: 1.6rem; font-family: var(--mono); font-weight: 500; color: var(--text2); }
+.tb-switch:focus-visible { outline: 2px solid var(--accent, #0a84ff); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) { .tb-switch-track, .tb-switch-track i { transition: none; } }
 .tb-slider input[type="range"] { width: 6.5rem; height: 1.25rem; }
 .tb-slider-val { min-width: 2.4rem; text-align: right; font-family: var(--mono); font-variant-numeric: tabular-nums; color: var(--text2); }
 input[type="range"]:active::-webkit-slider-thumb { transform: scale(1.15); }
@@ -442,3 +451,11 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 .picklist ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 1px; max-height: 9.5rem; overflow: auto; }
 .picklist label { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 8px; align-items: center; padding: 3px 2px; font-size: .78rem; cursor: pointer; border-radius: 6px; } .picklist label:hover { background: rgba(120, 120, 128, .12); }
 .picklist .pk-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .picklist small { color: var(--text3); font-variant-numeric: tabular-nums; }
+
+/* a legend whose items can be clicked to show only that kind */
+.legend-item { display: flex; align-items: center; gap: 0.5rem; width: 100%; padding: 3px 6px; margin: 0 -6px; border: 0; border-radius: 8px; background: transparent; font: inherit; color: inherit; text-align: left; cursor: pointer; transition: opacity .15s, background .15s; }
+.legend-item:hover { background: var(--fill); }
+.legend-item.on { background: var(--fill-hover); font-weight: 650; }
+.legend-item.dim { opacity: .45; }
+.legend-item i { margin-right: 0; }
+.legend-item:focus-visible { outline: 2px solid var(--accent, #0a84ff); outline-offset: 1px; }
